@@ -1,0 +1,188 @@
+/**
+ * CASWHOIS Light Theme - ReadTheDocs Documentation
+ * 
+ * This file customizes MkDocs Material light theme for ReadTheDocs.
+ * Default theme: DARK (this is optional alternative)
+ * WCAG 2.1 AA compliant (minimum 4.5:1 contrast ratio)
+ */
+
+:root[data-md-color-scheme="default"] {
+  /* Primary colors */
+  --md-primary-fg-color: #1e40af;
+  --md-primary-fg-color--light: #3b82f6;
+  --md-primary-fg-color--dark: #1e3a8a;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #f8fafc;
+  
+  /* Accent colors */
+  --md-accent-fg-color: #2563eb;
+  --md-accent-fg-color--transparent: rgba(37, 99, 235, 0.1);
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #f8fafc;
+  
+  /* Text colors - WCAG AA compliant */
+  --md-default-fg-color: #1e293b;
+  --md-default-fg-color--light: #334155;
+  --md-default-fg-color--lighter: #64748b;
+  --md-default-fg-color--lightest: #94a3b8;
+  
+  /* Background colors */
+  --md-default-bg-color: #ffffff;
+  --md-default-bg-color--light: #f8fafc;
+  --md-default-bg-color--lighter: #f1f5f9;
+  --md-default-bg-color--lightest: #e2e8f0;
+  
+  /* Code block colors */
+  --md-code-fg-color: #1e293b;
+  --md-code-bg-color: #f8fafc;
+  --md-code-hl-color: rgba(37, 99, 235, 0.1);
+  --md-code-hl-number-color: #ea580c;
+  --md-code-hl-special-color: #d97706;
+  --md-code-hl-function-color: #2563eb;
+  --md-code-hl-constant-color: #7c3aed;
+  --md-code-hl-keyword-color: #db2777;
+  --md-code-hl-string-color: #059669;
+  --md-code-hl-name-color: #1e293b;
+  --md-code-hl-operator-color: #64748b;
+  --md-code-hl-punctuation-color: #334155;
+  --md-code-hl-comment-color: #94a3b8;
+  --md-code-hl-generic-color: #64748b;
+  --md-code-hl-variable-color: #ea580c;
+  
+  /* Links */
+  --md-typeset-a-color: #2563eb;
+  
+  /* Admonitions */
+  --md-admonition-fg-color: #1e293b;
+  --md-admonition-bg-color: #f8fafc;
+  
+  /* Footer */
+  --md-footer-fg-color: #1e293b;
+  --md-footer-fg-color--light: #334155;
+  --md-footer-fg-color--lighter: #64748b;
+  --md-footer-bg-color: #f8fafc;
+  --md-footer-bg-color--dark: #f1f5f9;
+}
+
+/* Ensure good contrast for all text */
+.md-typeset {
+  color: var(--md-default-fg-color);
+}
+
+/* Code blocks */
+.md-typeset code {
+  background-color: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  border: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-typeset pre code {
+  background-color: transparent;
+}
+
+/* Tables */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-default-bg-color--light);
+  color: var(--md-default-fg-color);
+  font-weight: 600;
+}
+
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background-color: var(--md-default-bg-color--light);
+}
+
+/* Navigation */
+.md-nav__link--active {
+  color: var(--md-accent-fg-color);
+  font-weight: 600;
+}
+
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color);
+}
+
+/* Search */
+.md-search__input {
+  background-color: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  border: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-search__input::placeholder {
+  color: var(--md-default-fg-color--lighter);
+}
+
+/* Buttons */
+.md-button {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-primary-bg-color);
+  border: none;
+}
+
+.md-button:hover {
+  background-color: var(--md-accent-fg-color--transparent);
+  opacity: 0.8;
+}
+
+.md-button--primary {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+/* Admonitions styling */
+.md-typeset .admonition {
+  border-left: 4px solid var(--md-accent-fg-color);
+  background-color: var(--md-default-bg-color--light);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--md-default-bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--md-default-bg-color--lighter);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-default-bg-color--lightest);
+}
+
+/* Ensure links have sufficient contrast */
+.md-typeset a {
+  color: var(--md-typeset-a-color);
+}
+
+.md-typeset a:hover {
+  color: var(--md-accent-fg-color);
+  text-decoration: underline;
+}
+
+/* Focus indicators for accessibility */
+.md-typeset a:focus,
+.md-button:focus,
+.md-search__input:focus {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
+
+/* Shadows for elevation */
+.md-typeset .admonition,
+.md-nav__item--nested > .md-nav__link {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}

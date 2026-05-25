@@ -1,0 +1,499 @@
+//go:build !windows
+// +build !windows
+
+package service
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+// installSystemService installs service as system service (requires root)
+func (sm *ServiceManager) installSystemService() error {
+	// Detect service manager
+	manager := DetectServiceManager()
+
+	switch manager {
+	case "systemd":
+		return sm.installSystemd()
+	case "runit":
+		return sm.installRunit()
+	case "rcd":
+		return sm.installRCD()
+	case "launchd":
+		return sm.installLaunchd()
+	case "container":
+		return fmt.Errorf("cannot install service in container environment")
+	default:
+		return fmt.Errorf("unsupported service manager: %s", manager)
+	}
+}
+
+// installUserService installs service as user service (no root)
+func (sm *ServiceManager) installUserService() error {
+	manager := DetectServiceManager()
+
+	switch manager {
+	case "systemd":
+		return sm.installSystemdUser()
+	case "launchd":
+		return sm.installLaunchdUser()
+	default:
+		return fmt.Errorf("user service not supported on this system")
+	}
+}
+
+// installSystemd installs systemd system service
+func (sm *ServiceManager) installSystemd() error {
+	servicePath := "/etc/systemd/system/" + sm.Name + ".service"
+
+	content := fmt.Sprintf(`[Unit]
+Description=%s
+Documentation=https://casapps.github.io/%s
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%s
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/etc/casapps/%s
+ReadWritePaths=/var/lib/casapps/%s
+ReadWritePaths=/var/cache/casapps/%s
+ReadWritePaths=/var/log/casapps/%s
+
+[Install]
+WantedBy=multi-user.target
+`, sm.DisplayName, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name)
+
+	if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing service file: %w", err)
+	}
+
+	// Reload systemd
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		return fmt.Errorf("reloading systemd: %w", err)
+	}
+
+	// Enable service
+	if err := exec.Command("systemctl", "enable", sm.Name).Run(); err != nil {
+		return fmt.Errorf("enabling service: %w", err)
+	}
+
+	// Start service
+	if err := exec.Command("systemctl", "start", sm.Name).Run(); err != nil {
+		return fmt.Errorf("starting service: %w", err)
+	}
+
+	fmt.Printf("Service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: systemctl status %s\n", sm.Name)
+	fmt.Printf("Logs: journalctl -u %s -f\n", sm.Name)
+	return nil
+}
+
+// installSystemdUser installs systemd user service
+func (sm *ServiceManager) installSystemdUser() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("getting home directory: %w", err)
+	}
+
+	serviceDir := home + "/.config/systemd/user"
+	if err := os.MkdirAll(serviceDir, 0755); err != nil {
+		return fmt.Errorf("creating service directory: %w", err)
+	}
+
+	servicePath := serviceDir + "/" + sm.Name + ".service"
+
+	content := fmt.Sprintf(`[Unit]
+Description=%s (user service)
+Documentation=https://casapps.github.io/%s
+
+[Service]
+Type=simple
+ExecStart=%s
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`, sm.DisplayName, sm.Name, sm.BinaryPath)
+
+	if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing service file: %w", err)
+	}
+
+	// Reload systemd user
+	exec.Command("systemctl", "--user", "daemon-reload").Run()
+
+	// Enable service
+	if err := exec.Command("systemctl", "--user", "enable", sm.Name).Run(); err != nil {
+		return fmt.Errorf("enabling service: %w", err)
+	}
+
+	// Start service
+	if err := exec.Command("systemctl", "--user", "start", sm.Name).Run(); err != nil {
+		return fmt.Errorf("starting service: %w", err)
+	}
+
+	fmt.Printf("User service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: systemctl --user status %s\n", sm.Name)
+	fmt.Printf("Logs: journalctl --user -u %s -f\n", sm.Name)
+	return nil
+}
+
+// installLaunchd installs launchd system daemon (macOS)
+func (sm *ServiceManager) installLaunchd() error {
+	plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"
+
+	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>casapps.%s</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>%s</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/var/log/casapps/%s/stdout.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/casapps/%s/stderr.log</string>
+</dict>
+</plist>
+`, sm.Name, sm.BinaryPath, sm.Name, sm.Name)
+
+	// Create log directory
+	logDir := "/var/log/casapps/" + sm.Name
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("creating log directory: %w", err)
+	}
+
+	if err := os.WriteFile(plistPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing plist file: %w", err)
+	}
+
+	// Load and start service
+	if err := exec.Command("launchctl", "load", plistPath).Run(); err != nil {
+		return fmt.Errorf("loading service: %w", err)
+	}
+
+	fmt.Printf("Service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: launchctl list | grep %s\n", sm.Name)
+	fmt.Printf("Logs: tail -f %s\n", logDir+"/stdout.log")
+	return nil
+}
+
+// installLaunchdUser installs launchd user agent (macOS)
+func (sm *ServiceManager) installLaunchdUser() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("getting home directory: %w", err)
+	}
+
+	agentDir := home + "/Library/LaunchAgents"
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		return fmt.Errorf("creating agent directory: %w", err)
+	}
+
+	plistPath := agentDir + "/casapps." + sm.Name + ".plist"
+
+	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>casapps.%s</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>%s</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+</dict>
+</plist>
+`, sm.Name, sm.BinaryPath)
+
+	if err := os.WriteFile(plistPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing plist file: %w", err)
+	}
+
+	// Load and start service
+	if err := exec.Command("launchctl", "load", plistPath).Run(); err != nil {
+		return fmt.Errorf("loading service: %w", err)
+	}
+
+	fmt.Printf("User service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: launchctl list | grep %s\n", sm.Name)
+	return nil
+}
+
+// installRunit installs runit service
+func (sm *ServiceManager) installRunit() error {
+	serviceDir := "/etc/sv/" + sm.Name
+	if err := os.MkdirAll(serviceDir, 0755); err != nil {
+		return fmt.Errorf("creating service directory: %w", err)
+	}
+
+	logDir := serviceDir + "/log"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("creating log directory: %w", err)
+	}
+
+	// Main run script
+	runScript := fmt.Sprintf("#!/bin/sh\nexec %s 2>&1\n", sm.BinaryPath)
+	runPath := serviceDir + "/run"
+	if err := os.WriteFile(runPath, []byte(runScript), 0755); err != nil {
+		return fmt.Errorf("writing run script: %w", err)
+	}
+
+	// Log run script
+	logRunScript := fmt.Sprintf("#!/bin/sh\nexec svlogd -tt /var/log/casapps/%s\n", sm.Name)
+	logRunPath := logDir + "/run"
+	if err := os.WriteFile(logRunPath, []byte(logRunScript), 0755); err != nil {
+		return fmt.Errorf("writing log run script: %w", err)
+	}
+
+	// Create log directory
+	if err := os.MkdirAll("/var/log/casapps/"+sm.Name, 0755); err != nil {
+		return fmt.Errorf("creating log directory: %w", err)
+	}
+
+	// Enable service
+	linkPath := "/etc/service/" + sm.Name
+	if err := os.Symlink(serviceDir, linkPath); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("enabling service: %w", err)
+	}
+
+	fmt.Printf("Service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: sv status %s\n", sm.Name)
+	fmt.Printf("Logs: tail -f /var/log/casapps/%s/current\n", sm.Name)
+	return nil
+}
+
+// installRCD installs rc.d service (BSD)
+func (sm *ServiceManager) installRCD() error {
+	scriptPath := "/usr/local/etc/rc.d/" + sm.Name
+
+	content := fmt.Sprintf(`#!/bin/sh
+
+# PROVIDE: %s
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="%s"
+rcvar="%s_enable"
+command="%s"
+
+load_rc_config $name
+run_rc_command "$1"
+`, sm.Name, sm.Name, sm.Name, sm.BinaryPath)
+
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+		return fmt.Errorf("writing rc.d script: %w", err)
+	}
+
+	// Enable service
+	rcConf := "/etc/rc.conf"
+	enableLine := fmt.Sprintf("%s_enable=\"YES\"\n", sm.Name)
+
+	// Check if already enabled
+	data, err := os.ReadFile(rcConf)
+	if err == nil && !strings.Contains(string(data), enableLine) {
+		f, err := os.OpenFile(rcConf, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("opening rc.conf: %w", err)
+		}
+		defer f.Close()
+		if _, err := f.WriteString(enableLine); err != nil {
+			return fmt.Errorf("writing rc.conf: %w", err)
+		}
+	}
+
+	// Start service
+	if err := exec.Command("service", sm.Name, "start").Run(); err != nil {
+		return fmt.Errorf("starting service: %w", err)
+	}
+
+	fmt.Printf("Service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: service %s status\n", sm.Name)
+	return nil
+}
+
+// uninstall removes the service
+func (sm *ServiceManager) uninstall() error {
+	manager := DetectServiceManager()
+
+	// Stop service first
+	sm.stop()
+
+	switch manager {
+	case "systemd":
+		return sm.uninstallSystemd()
+	case "launchd":
+		return sm.uninstallLaunchd()
+	case "runit":
+		return sm.uninstallRunit()
+	case "rcd":
+		return sm.uninstallRCD()
+	default:
+		return fmt.Errorf("unsupported service manager: %s", manager)
+	}
+}
+
+// uninstallSystemd removes systemd service
+func (sm *ServiceManager) uninstallSystemd() error {
+	// Try system service first
+	servicePath := "/etc/systemd/system/" + sm.Name + ".service"
+	if _, err := os.Stat(servicePath); err == nil {
+		exec.Command("systemctl", "disable", sm.Name).Run()
+		os.Remove(servicePath)
+		exec.Command("systemctl", "daemon-reload").Run()
+	} else {
+		// Try user service
+		home, _ := os.UserHomeDir()
+		servicePath = home + "/.config/systemd/user/" + sm.Name + ".service"
+		if _, err := os.Stat(servicePath); err == nil {
+			exec.Command("systemctl", "--user", "disable", sm.Name).Run()
+			os.Remove(servicePath)
+			exec.Command("systemctl", "--user", "daemon-reload").Run()
+		}
+	}
+
+	fmt.Printf("Service uninstalled: %s\n", sm.Name)
+	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
+	return nil
+}
+
+// uninstallLaunchd removes launchd service
+func (sm *ServiceManager) uninstallLaunchd() error {
+	// Try system daemon first
+	plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"
+	if _, err := os.Stat(plistPath); err == nil {
+		exec.Command("launchctl", "unload", plistPath).Run()
+		os.Remove(plistPath)
+	} else {
+		// Try user agent
+		home, _ := os.UserHomeDir()
+		plistPath = home + "/Library/LaunchAgents/casapps." + sm.Name + ".plist"
+		if _, err := os.Stat(plistPath); err == nil {
+			exec.Command("launchctl", "unload", plistPath).Run()
+			os.Remove(plistPath)
+		}
+	}
+
+	fmt.Printf("Service uninstalled: %s\n", sm.Name)
+	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
+	return nil
+}
+
+// uninstallRunit removes runit service
+func (sm *ServiceManager) uninstallRunit() error {
+	linkPath := "/etc/service/" + sm.Name
+	serviceDir := "/etc/sv/" + sm.Name
+
+	// Remove link
+	os.Remove(linkPath)
+
+	// Remove service directory
+	os.RemoveAll(serviceDir)
+
+	fmt.Printf("Service uninstalled: %s\n", sm.Name)
+	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
+	return nil
+}
+
+// uninstallRCD removes rc.d service
+func (sm *ServiceManager) uninstallRCD() error {
+	scriptPath := "/usr/local/etc/rc.d/" + sm.Name
+	os.Remove(scriptPath)
+
+	// Remove from rc.conf
+	rcConf := "/etc/rc.conf"
+	enableLine := fmt.Sprintf("%s_enable=\"YES\"", sm.Name)
+	data, err := os.ReadFile(rcConf)
+	if err == nil {
+		lines := strings.Split(string(data), "\n")
+		var newLines []string
+		for _, line := range lines {
+			if !strings.Contains(line, enableLine) {
+				newLines = append(newLines, line)
+			}
+		}
+		os.WriteFile(rcConf, []byte(strings.Join(newLines, "\n")), 0644)
+	}
+
+	fmt.Printf("Service uninstalled: %s\n", sm.Name)
+	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
+	return nil
+}
+
+// disable stops and disables the service
+func (sm *ServiceManager) disable() error {
+	manager := DetectServiceManager()
+
+	// Stop service first
+	sm.stop()
+
+	switch manager {
+	case "systemd":
+		if sm.isSystemServiceInstalled() {
+			return exec.Command("systemctl", "disable", sm.Name).Run()
+		}
+		return exec.Command("systemctl", "--user", "disable", sm.Name).Run()
+	case "launchd":
+		// Launchd unload
+		plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"
+		if _, err := os.Stat(plistPath); err == nil {
+			return exec.Command("launchctl", "unload", plistPath).Run()
+		}
+		home, _ := os.UserHomeDir()
+		plistPath = home + "/Library/LaunchAgents/casapps." + sm.Name + ".plist"
+		return exec.Command("launchctl", "unload", plistPath).Run()
+	case "runit":
+		// Remove symlink
+		return os.Remove("/etc/service/" + sm.Name)
+	case "rcd":
+		// Remove from rc.conf
+		rcConf := "/etc/rc.conf"
+		enableLine := fmt.Sprintf("%s_enable=\"YES\"", sm.Name)
+		data, err := os.ReadFile(rcConf)
+		if err != nil {
+			return err
+		}
+		lines := strings.Split(string(data), "\n")
+		var newLines []string
+		for _, line := range lines {
+			if !strings.Contains(line, enableLine) {
+				newLines = append(newLines, line)
+			}
+		}
+		return os.WriteFile(rcConf, []byte(strings.Join(newLines, "\n")), 0644)
+	default:
+		return fmt.Errorf("unsupported service manager: %s", manager)
+	}
+}
+
+// isWindowsServiceInstalled is a stub for Unix
+func (sm *ServiceManager) isWindowsServiceInstalled() bool {
+	return false
+}

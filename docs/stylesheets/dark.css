@@ -1,0 +1,182 @@
+/**
+ * CASWHOIS Dark Theme - ReadTheDocs Documentation
+ * 
+ * This file customizes MkDocs Material dark theme for ReadTheDocs.
+ * Default theme: DARK
+ * WCAG 2.1 AA compliant (minimum 4.5:1 contrast ratio)
+ */
+
+:root[data-md-color-scheme="slate"] {
+  /* Primary colors */
+  --md-primary-fg-color: #1e293b;
+  --md-primary-fg-color--light: #334155;
+  --md-primary-fg-color--dark: #0f172a;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #f8fafc;
+  
+  /* Accent colors */
+  --md-accent-fg-color: #60a5fa;
+  --md-accent-fg-color--transparent: rgba(96, 165, 250, 0.1);
+  --md-accent-bg-color: #1e293b;
+  --md-accent-bg-color--light: #334155;
+  
+  /* Text colors - WCAG AA compliant */
+  --md-default-fg-color: #e2e8f0;
+  --md-default-fg-color--light: #cbd5e1;
+  --md-default-fg-color--lighter: #94a3b8;
+  --md-default-fg-color--lightest: #64748b;
+  
+  /* Background colors */
+  --md-default-bg-color: #0f172a;
+  --md-default-bg-color--light: #1e293b;
+  --md-default-bg-color--lighter: #334155;
+  --md-default-bg-color--lightest: #475569;
+  
+  /* Code block colors */
+  --md-code-fg-color: #f1f5f9;
+  --md-code-bg-color: #1e293b;
+  --md-code-hl-color: rgba(96, 165, 250, 0.15);
+  --md-code-hl-number-color: #fbbf24;
+  --md-code-hl-special-color: #f59e0b;
+  --md-code-hl-function-color: #60a5fa;
+  --md-code-hl-constant-color: #a78bfa;
+  --md-code-hl-keyword-color: #ec4899;
+  --md-code-hl-string-color: #34d399;
+  --md-code-hl-name-color: #e2e8f0;
+  --md-code-hl-operator-color: #94a3b8;
+  --md-code-hl-punctuation-color: #cbd5e1;
+  --md-code-hl-comment-color: #64748b;
+  --md-code-hl-generic-color: #94a3b8;
+  --md-code-hl-variable-color: #fbbf24;
+  
+  /* Links */
+  --md-typeset-a-color: #60a5fa;
+  
+  /* Admonitions */
+  --md-admonition-fg-color: #e2e8f0;
+  --md-admonition-bg-color: #1e293b;
+  
+  /* Footer */
+  --md-footer-fg-color: #e2e8f0;
+  --md-footer-fg-color--light: #cbd5e1;
+  --md-footer-fg-color--lighter: #94a3b8;
+  --md-footer-bg-color: #0f172a;
+  --md-footer-bg-color--dark: #020617;
+}
+
+/* Ensure good contrast for all text */
+.md-typeset {
+  color: var(--md-default-fg-color);
+}
+
+/* Code blocks */
+.md-typeset code {
+  background-color: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  border: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-typeset pre code {
+  background-color: transparent;
+}
+
+/* Tables */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-default-bg-color--light);
+  color: var(--md-default-fg-color);
+  font-weight: 600;
+}
+
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background-color: var(--md-default-bg-color--light);
+}
+
+/* Navigation */
+.md-nav__link--active {
+  color: var(--md-accent-fg-color);
+  font-weight: 600;
+}
+
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color);
+}
+
+/* Search */
+.md-search__input {
+  background-color: var(--md-default-bg-color--light);
+  color: var(--md-default-fg-color);
+  border: 1px solid var(--md-default-bg-color--lighter);
+}
+
+.md-search__input::placeholder {
+  color: var(--md-default-fg-color--lighter);
+}
+
+/* Buttons */
+.md-button {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-primary-bg-color);
+  border: none;
+}
+
+.md-button:hover {
+  background-color: var(--md-accent-fg-color--transparent);
+  opacity: 0.8;
+}
+
+.md-button--primary {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+/* Admonitions styling */
+.md-typeset .admonition {
+  border-left: 4px solid var(--md-accent-fg-color);
+  background-color: var(--md-default-bg-color--light);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--md-default-bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--md-default-bg-color--lighter);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-default-bg-color--lightest);
+}
+
+/* Ensure links have sufficient contrast */
+.md-typeset a {
+  color: var(--md-typeset-a-color);
+}
+
+.md-typeset a:hover {
+  color: var(--md-accent-fg-color);
+  text-decoration: underline;
+}
+
+/* Focus indicators for accessibility */
+.md-typeset a:focus,
+.md-button:focus,
+.md-search__input:focus {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}

@@ -1,0 +1,166 @@
+package server
+
+import (
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/casapps/caswhois/src/config"
+	"github.com/casapps/caswhois/src/ratelimit"
+)
+
+// URLNormalizeMiddleware normalizes URLs for consistent routing
+// - Removes trailing slashes (except for root "/")
+// - Redirects to canonical URL with 301 if normalization changed path
+// MUST be FIRST in middleware chain
+func URLNormalizeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Root path "/" stays as-is
+		if path == "/" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Remove trailing slash (canonical form: no trailing slash)
+		if strings.HasSuffix(path, "/") {
+			// Exception: explicit file requests (e.g., /dir/index.html)
+			if !strings.Contains(path[strings.LastIndex(path, "/"):], ".") {
+				canonical := strings.TrimSuffix(path, "/")
+				// Preserve query string
+				if r.URL.RawQuery != "" {
+					canonical += "?" + r.URL.RawQuery
+				}
+				http.Redirect(w, r, canonical, http.StatusMovedPermanently)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// PathSecurityMiddleware normalizes paths and blocks traversal attempts
+// MUST be SECOND in middleware chain (after URL normalization)
+func PathSecurityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Validate path using SafePath
+		safe, err := config.SafePath(r.URL.Path)
+		if err != nil {
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			log.Printf("Path security violation: %s (%v)", r.URL.Path, err)
+			return
+		}
+
+		// Update request with normalized path
+		r.URL.Path = "/" + safe
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SecurityHeadersMiddleware adds security headers to all responses
+// MUST be THIRD in middleware chain
+func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent MIME type sniffing
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		// Prevent clickjacking
+		w.Header().Set("X-Frame-Options", "DENY")
+
+		// XSS protection
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+		// Referrer policy
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// Content Security Policy
+		csp := "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+		w.Header().Set("Content-Security-Policy", csp)
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RateLimitMiddleware implements rate limiting per IP
+// MUST be FOURTH in middleware chain
+func RateLimitMiddleware(limiter *ratelimit.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			key := limiter.GetKey(r)
+			if !limiter.Allow(key) {
+				w.Header().Set("X-RateLimit-Limit", "60")
+				w.Header().Set("X-RateLimit-Window", "60")
+				w.Header().Set("Retry-After", "60")
+				SendError(w, ErrRateLimited, MsgRateLimited)
+				log.Printf("Rate limit exceeded for %s", key)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// AuthMiddleware checks API tokens and authentication
+// MUST be FIFTH in middleware chain
+// TODO: Implement API token validation
+func AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Basic implementation - no auth required yet
+		// TODO: Check API tokens, validate sessions
+		next.ServeHTTP(w, r)
+	})
+}
+
+// LoggingMiddleware logs HTTP requests
+// MUST be LAST in middleware chain (logs final request state)
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Wrap ResponseWriter to capture status code
+		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		// Process request
+		next.ServeHTTP(wrapped, r)
+
+		// Log request
+		duration := time.Since(start)
+		log.Printf("%s %s %d %s %s",
+			r.Method,
+			r.URL.Path,
+			wrapped.statusCode,
+			duration,
+			r.RemoteAddr,
+		)
+	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// WriteHeader captures the status code
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Write ensures status code is captured even if WriteHeader not called
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if rw.statusCode == 0 {
+		rw.statusCode = http.StatusOK
+	}
+	return rw.ResponseWriter.Write(b)
+}

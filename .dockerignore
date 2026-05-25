@@ -1,0 +1,43 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Build artifacts
+binaries/
+releases/
+
+# Runtime data
+rootfs/
+
+# Documentation
+docs/
+*.md
+!docker/*.md
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# AI configs
+.claude/
+.cursor/
+.aider/
+.ai/
+.windsurf/
+
+# Tests
+tests/
+
+# Temporary
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+.gitea/
+Jenkinsfile

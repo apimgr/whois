@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  caswhois:
+    # Production: Pull from registry
+    image: ghcr.io/casapps/caswhois:latest
+    container_name: caswhois
+    restart: unless-stopped
+    
+    # Random port 64xxx mapped to internal 80
+    ports:
+      - "64580:80"
+    
+    # Volumes for persistent data
+    volumes:
+      - ./rootfs/config:/config
+      - ./rootfs/data:/data
+      - ./rootfs/logs:/logs
+    
+    # Environment variables
+    environment:
+      # Timezone (override as needed)
+      TZ: America/New_York
+      
+      # Internal port (matches container port above)
+      PORT: 80
+      
+      # Application mode
+      MODE: production
+      
+      # Optional: Database connection (for cluster mode)
+      # DATABASE_TYPE: postgres
+      # DATABASE_HOST: postgres
+      # DATABASE_PORT: 5432
+      # DATABASE_NAME: caswhois
+      # DATABASE_USER: caswhois
+      # DATABASE_PASSWORD: your_password_here
+      
+      # Optional: Redis/Valkey for caching (cluster mode)
+      # CACHE_TYPE: redis
+      # CACHE_HOST: redis
+      # CACHE_PORT: 6379
+      # CACHE_PASSWORD: your_password_here
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Network
+    networks:
+      - caswhois-network
+
+  # Optional: PostgreSQL for cluster mode
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: caswhois-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: caswhois
+  #     POSTGRES_USER: caswhois
+  #     POSTGRES_PASSWORD: your_password_here
+  #   volumes:
+  #     - ./rootfs/postgres:/var/lib/postgresql/data
+  #   networks:
+  #     - caswhois-network
+
+  # Optional: Redis/Valkey for caching (cluster mode)
+  # redis:
+  #   image: valkey/valkey:latest
+  #   container_name: caswhois-redis
+  #   restart: unless-stopped
+  #   command: valkey-server --requirepass your_password_here
+  #   volumes:
+  #     - ./rootfs/redis:/data
+  #   networks:
+  #     - caswhois-network
+
+networks:
+  caswhois-network:
+    driver: bridge

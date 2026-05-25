@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  caswhois:
+    # Development: Build from local source
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: dev
+        COMMIT_ID: dev
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        OFFICIAL_SITE: https://github.com/casapps/caswhois
+    container_name: caswhois-dev
+    restart: unless-stopped
+    
+    # Random port 64xxx mapped to internal 80
+    ports:
+      - "64580:80"
+    
+    # Volumes for persistent data + source code mounting
+    volumes:
+      - ./rootfs/config:/config
+      - ./rootfs/data:/data
+      - ./rootfs/logs:/logs
+      # Mount source code for hot reload (if implementing watch mode)
+      # - ../src:/app/src:ro
+    
+    # Environment variables
+    environment:
+      # Timezone
+      TZ: America/New_York
+      
+      # Internal port
+      PORT: 80
+      
+      # Development mode
+      MODE: development
+      
+      # Debug logging
+      DEBUG: 1
+      
+      # Optional: PostgreSQL
+      # DATABASE_TYPE: postgres
+      # DATABASE_HOST: postgres
+      # DATABASE_PORT: 5432
+      # DATABASE_NAME: caswhois
+      # DATABASE_USER: caswhois
+      # DATABASE_PASSWORD: dev_password
+      
+      # Optional: Redis/Valkey
+      # CACHE_TYPE: redis
+      # CACHE_HOST: redis
+      # CACHE_PORT: 6379
+      # CACHE_PASSWORD: dev_password
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Network
+    networks:
+      - caswhois-dev-network
+    
+    # Depend on optional services
+    depends_on:
+      - postgres
+      - redis
+
+  # PostgreSQL for development
+  postgres:
+    image: postgres:16-alpine
+    container_name: caswhois-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: caswhois
+      POSTGRES_USER: caswhois
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./rootfs/postgres:/var/lib/postgresql/data
+    networks:
+      - caswhois-dev-network
+
+  # Redis/Valkey for development
+  redis:
+    image: valkey/valkey:latest
+    container_name: caswhois-redis-dev
+    restart: unless-stopped
+    command: valkey-server --requirepass dev_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./rootfs/redis:/data
+    networks:
+      - caswhois-dev-network
+
+networks:
+  caswhois-dev-network:
+    driver: bridge

@@ -1,0 +1,18 @@
+Subject: Test Email - {app_name}
+---
+TEST EMAIL
+
+This test email was sent to: {recipient_email}
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+If you can read this, your SMTP configuration is working correctly.
+
+SMTP Details:
+  Host: {smtp_host}
+  Port: {smtp_port}
+  TLS:  {smtp_tls}
+
+--
+{app_name}
+{app_url}

@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  caswhois:
+    # Testing: Build from source
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: test
+        COMMIT_ID: test
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        OFFICIAL_SITE: https://github.com/casapps/caswhois
+    container_name: caswhois-test
+    
+    # Random test port
+    ports:
+      - "64581:80"
+    
+    # No persistent volumes (ephemeral)
+    tmpfs:
+      - /config
+      - /data
+      - /logs
+    
+    # Environment variables
+    environment:
+      TZ: America/New_York
+      PORT: 80
+      MODE: development
+      DEBUG: 1
+      
+      # Use in-memory database for testing
+      DATABASE_TYPE: sqlite
+      DATABASE_PATH: :memory:
+      
+      # Use in-memory cache
+      CACHE_TYPE: memory
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    # Network
+    networks:
+      - caswhois-test-network
+
+networks:
+  caswhois-test-network:
+    driver: bridge
