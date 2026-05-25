@@ -28,9 +28,6 @@ type ServerConfig struct {
 	DatabaseDriver string `yaml:"database_driver"` // sqlite, postgres, mysql
 	DatabaseURL    string `yaml:"database_url"`    // Connection string for remote DB
 
-	// Admin path
-	AdminPath string `yaml:"admin_path"`
-
 	// Branding settings
 	BrandingTitle       string `yaml:"branding_title"`
 	BrandingTagline     string `yaml:"branding_tagline"`
@@ -77,7 +74,11 @@ type ServerConfig struct {
 	Debug bool `yaml:"debug"`
 
 	// Security
-	APITokens []string `yaml:"api_tokens"`
+	// ServerToken is the global operator token (auto-generated on first run if empty).
+	// Stored as-is in server.yml; validated by SHA-256-hashing the inbound bearer
+	// token and comparing with subtle.ConstantTimeCompare — never written to the DB.
+	ServerToken string   `yaml:"server_token"`
+	APITokens   []string `yaml:"api_tokens"`
 }
 
 // Default returns a ServerConfig with sane defaults
@@ -93,9 +94,8 @@ func Default() *ServerConfig {
 		DataDir:             "", // Will be determined by OS
 		LogDir:              "", // Will be determined by OS
 		DatabaseDir:         "", // Will be determined by OS
-		DatabaseDriver:      "", // Auto-detect: sqlite or postgres from DATABASE_URL
+		DatabaseDriver:      "", // Auto-detect: sqlite or libsql from DATABASE_URL
 		DatabaseURL:         "", // From DATABASE_URL env var
-		AdminPath:           "admin",
 		BrandingTitle:       "caswhois",
 		BrandingTagline:     "",
 		BrandingDescription: "",
@@ -125,6 +125,7 @@ func Default() *ServerConfig {
 		ComplianceEnabled:     false, // HIPAA, SOC2, etc. - requires encrypted backups
 		UpdateChannel:         "stable", // stable, beta, daily (default per spec)
 		Debug:               false,
+		ServerToken:         "", // auto-generated on first run
 		APITokens:           []string{},
 	}
 }
@@ -161,6 +162,20 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 		cfg.ConfigDir = configDir
 	}
 
+	// Auto-generate server token on first run if absent
+	if cfg.ServerToken == "" {
+		tok, err := GenerateToken()
+		if err != nil {
+			return nil, fmt.Errorf("generate server token: %w", err)
+		}
+		cfg.ServerToken = tok
+		// Persist token back to server.yml so it survives restarts
+		if saveErr := cfg.Save(configDir); saveErr != nil {
+			// Non-fatal: token still works this session but won't persist
+			fmt.Printf("WARNING: could not persist server token: %v\n", saveErr)
+		}
+	}
+
 	// Validate paths
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -171,15 +186,6 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 
 // Validate validates the configuration
 func (c *ServerConfig) Validate() error {
-	// Validate admin path
-	if c.AdminPath != "" {
-		safe, err := SafePath(c.AdminPath)
-		if err != nil {
-			return fmt.Errorf("invalid admin_path: %w", err)
-		}
-		c.AdminPath = safe
-	}
-
 	// Port range
 	if c.Port < 0 || c.Port > 65535 {
 		return fmt.Errorf("port must be between 0 and 65535")
@@ -270,22 +276,11 @@ func (c *ServerConfig) GetBackupDir() string {
 
 // GetDatabaseConfig returns database configuration from environment and config
 func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
-	// Check DATABASE_URL first (for PostgreSQL/MySQL)
+	// Check DATABASE_URL first (for libsql/Turso remote)
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
-		// Parse driver from URL or use DATABASE_DRIVER env
 		driver = os.Getenv("DATABASE_DRIVER")
 		if driver == "" {
-			// Auto-detect from URL prefix
-			if len(dbURL) > 10 {
-				if dbURL[:8] == "postgres" || dbURL[:4] == "pg://" {
-					driver = "postgres"
-				} else if dbURL[:5] == "mysql" {
-					driver = "mysql"
-				}
-			}
-			if driver == "" {
-				driver = "postgres" // Default to postgres for remote
-			}
+			driver = "sqlite" // libsql-compatible
 		}
 		return driver, dbURL, ""
 	}
@@ -294,7 +289,7 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	if c.DatabaseURL != "" {
 		driver = c.DatabaseDriver
 		if driver == "" {
-			driver = "postgres"
+			driver = "sqlite"
 		}
 		return driver, c.DatabaseURL, ""
 	}

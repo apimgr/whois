@@ -110,13 +110,16 @@ func RateLimitMiddleware(limiter *ratelimit.Limiter) func(http.Handler) http.Han
 	}
 }
 
-// AuthMiddleware checks API tokens and authentication
+// AuthMiddleware annotates the request context with auth status.
+// Token validation for protected routes is handled by requireToken() at the
+// route level (see token_auth.go). This middleware is a pass-through that
+// sets a context key so downstream handlers can check authenticated status
+// without re-parsing the header.
 // MUST be FIFTH in middleware chain
-// TODO: Implement API token validation
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Basic implementation - no auth required yet
-		// TODO: Check API tokens, validate sessions
+		// Pass-through: protected routes use requireToken() at registration time.
+		// No sessions, no cookies — bearer token only (AI.md PART 1).
 		next.ServeHTTP(w, r)
 	})
 }

@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/crypto/argon2"
 )
 
 // RestoreOptions configures restore behavior

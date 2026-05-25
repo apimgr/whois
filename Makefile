@@ -24,9 +24,9 @@ LDFLAGS := -s -w \
 BINDIR := binaries
 RELDIR := releases
 
-# Go directories (persistent across builds)
-GODIR := $(HOME)/.local/share/go
-GOCACHE := $(HOME)/.local/share/go/build
+# Go directories (persistent across builds, overridable via env)
+GODIR ?= $(HOME)/.local/share/go
+GOCACHE ?= $(HOME)/.local/share/go/build
 
 # Build targets
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64

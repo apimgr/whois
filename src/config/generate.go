@@ -9,6 +9,21 @@ import (
 	"strings"
 )
 
+const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+// GenerateToken generates a spec-compliant token: "tok_" + 32 base62 chars.
+func GenerateToken() (string, error) {
+	b := make([]byte, 32)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(tokenAlphabet))))
+		if err != nil {
+			return "", err
+		}
+		b[i] = tokenAlphabet[n.Int64()]
+	}
+	return "tok_" + string(b), nil
+}
+
 // defaultConfigTemplate returns the default server.yml template
 func defaultConfigTemplate() string {
 	return `# =============================================================================
@@ -28,10 +43,6 @@ server:
   # Mode: production or development
   # Development mode enables debug features (pprof, verbose logging)
   mode: production
-
-  # Admin panel path (default: admin)
-  # Access at http://localhost:{{PORT}}/admin
-  admin_path: admin
 
   # API version prefix (default: v1)
   # Used in /api/v1/ routes
@@ -58,11 +69,6 @@ server:
   # Default: false (systemd/launchd prefer foreground)
   daemonize: false
 
-  # Admin account
-  admin:
-    email: "admin@localhost"
-    # Note: Password set on first run or via --admin-setup flag
-
   # SSL/TLS
   ssl:
     enabled: false
@@ -78,12 +84,13 @@ server:
 
   # Scheduler - background tasks
   scheduler:
-    enabled: true
+    timezone: America/New_York
+    catch_up_window: 1h
     tasks:
-      # Session cleanup
-      session_cleanup:
+      # Token cleanup (every 15 minutes)
+      token_cleanup:
         enabled: true
-        schedule: "@hourly"
+        schedule: "@every 15m"
 
       # Log rotation
       log_rotation:

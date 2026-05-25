@@ -173,7 +173,7 @@ func (em *EmailManager) testSMTPConnection(host string, port int, quick bool) bo
 		timeout = 2 * time.Second
 	}
 
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	// Try to connect
 	conn, err := net.DialTimeout("tcp", addr, timeout)
@@ -357,7 +357,7 @@ func (em *EmailManager) sendSMTP(to, subject, body string) error {
 	msg.WriteString(body)
 
 	// Determine TLS strategy
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	// Try connection based on TLS mode
 	switch tlsMode {
@@ -399,7 +399,7 @@ func (em *EmailManager) sendWithTLS(addr, username, password, from, to string, m
 	}
 	defer client.Close()
 
-	return em.sendWithClient(client, username, password, from, to, msg)
+	return em.sendWithClient(client, tlsConfig.ServerName, username, password, from, to, msg)
 }
 
 // sendWithSTARTTLS sends email using STARTTLS (typically ports 587 or 25)
@@ -420,7 +420,7 @@ func (em *EmailManager) sendWithSTARTTLS(addr, host, username, password, from, t
 		}
 	}
 
-	return em.sendWithClient(client, username, password, from, to, msg)
+	return em.sendWithClient(client, host, username, password, from, to, msg)
 }
 
 // sendPlain sends email without TLS (typically port 25, local/trusted network)
@@ -431,14 +431,15 @@ func (em *EmailManager) sendPlain(addr, username, password, from, to string, msg
 	}
 	defer client.Close()
 
-	return em.sendWithClient(client, username, password, from, to, msg)
+	host := strings.Split(addr, ":")[0]
+	return em.sendWithClient(client, host, username, password, from, to, msg)
 }
 
 // sendWithClient sends email using an established SMTP client
-func (em *EmailManager) sendWithClient(client *smtp.Client, username, password, from, to string, msg []byte) error {
+func (em *EmailManager) sendWithClient(client *smtp.Client, host, username, password, from, to string, msg []byte) error {
 	// Authenticate if credentials provided
 	if username != "" && password != "" {
-		auth := smtp.PlainAuth("", username, password, strings.Split(client.Text, " ")[0])
+		auth := smtp.PlainAuth("", username, password, host)
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("SMTP auth failed: %w", err)
 		}

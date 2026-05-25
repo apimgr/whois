@@ -11,9 +11,8 @@ import (
 
 // DB represents a database connection with common operations
 type DB struct {
-	Server *sql.DB // Server database (srv_* tables or server.db)
-	Users  *sql.DB // Users database (usr_* tables or users.db)
-	Driver string  // "sqlite", "postgres", "mysql"
+	Server *sql.DB // Server database (server.db)
+	Driver string  // "sqlite"
 }
 
 // DatabaseConfig holds database configuration
@@ -64,10 +63,8 @@ func New(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 	switch cfg.Driver {
 	case "sqlite":
 		return NewSQLite(ctx, cfg)
-	case "postgres":
-		return NewPostgres(ctx, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
+		return nil, fmt.Errorf("unsupported database driver: %s (only sqlite is supported)", cfg.Driver)
 	}
 }
 
@@ -77,10 +74,6 @@ func NormalizeDriver(driver string) string {
 	switch driver {
 	case "sqlite", "sqlite3", "sqlite2", "file":
 		return "sqlite"
-	case "postgres", "postgresql", "pgsql":
-		return "postgres"
-	case "mysql", "mariadb":
-		return "mysql"
 	default:
 		return driver
 	}
@@ -103,24 +96,11 @@ func Ping(ctx context.Context, db *sql.DB) error {
 
 // Close closes all database connections
 func (db *DB) Close() error {
-	var errs []error
-
 	if db.Server != nil {
 		if err := db.Server.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close server db: %w", err))
+			return fmt.Errorf("close server db: %w", err)
 		}
 	}
-
-	if db.Users != nil {
-		if err := db.Users.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close users db: %w", err))
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("database close errors: %v", errs)
-	}
-
 	return nil
 }
 

@@ -113,11 +113,24 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	cacheStats, _ := s.cache.Stats(ctx)
 	
 	// Build response
+	name := s.config.BrandingTitle
+	if name == "" {
+		name = "caswhois"
+	}
+	tagline := s.config.BrandingTagline
+	if tagline == "" {
+		tagline = "WHOIS Lookup Service"
+	}
+	description := s.config.BrandingDescription
+	if description == "" {
+		description = "Domain, IP, and ASN WHOIS lookup service"
+	}
+
 	return HealthResponse{
 		Project: ProjectInfo{
-			Name:        "caswhois",
-			Tagline:     "WHOIS Lookup Service",
-			Description: "Domain, IP, and ASN WHOIS lookup service",
+			Name:        name,
+			Tagline:     tagline,
+			Description: description,
 		},
 		Status:    "healthy",
 		Version:   Version,
@@ -127,7 +140,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 			Date:   BuildDate,
 		},
 		Uptime:    formatUptime(uptime),
-		Mode:      "production", // TODO: read from config
+		Mode:      s.config.Mode,
 		Timestamp: time.Now().UTC(),
 		Cluster: ClusterInfo{
 			Enabled: false,

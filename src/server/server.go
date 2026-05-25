@@ -28,7 +28,7 @@ import (
 type Server struct {
 	config    *config.ServerConfig
 	server    *http.Server
-	info      *runtimeinfo.Info
+	info      *runtimeinfo.RuntimeInfo
 	cache     cache.Cache
 	ratelimit *ratelimit.Limiter
 	database  *db.DB
@@ -224,8 +224,7 @@ func (s *Server) Start() error {
 func (s *Server) setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Metrics endpoint (AI.md PART 21) - INTERNAL ONLY
-	// Should be protected by firewall or bearer token
+	// Metrics endpoint (PART 20) - INTERNAL ONLY, token-protected
 	if s.metrics != nil && s.config.MetricsEnabled {
 		endpoint := s.config.MetricsEndpoint
 		if endpoint == "" {
@@ -235,14 +234,13 @@ func (s *Server) setupRoutes() http.Handler {
 		log.Printf("[Metrics] Endpoint enabled at %s", endpoint)
 	}
 
-	// Health check endpoints (AI.md PART 13)
+	// Health check endpoints (PART 13)
+	mux.HandleFunc("/server/healthz", s.handleHealth)
+	mux.HandleFunc("/api/v1/server/healthz", s.handleHealth)
+	// Root alias when enabled
 	mux.HandleFunc("/healthz", s.handleHealth)
-	mux.HandleFunc("/api/v1/healthz", s.handleHealth)
 
-	// Legacy health endpoint (keep for backward compatibility)
-	mux.HandleFunc("/health", s.handleHealth)
-
-	// SEO & Security files (AI.md PART 14, PART 16) - REQUIRED
+	// SEO & Security files (PART 14, PART 16) - REQUIRED
 	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxt)
 	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
@@ -251,80 +249,30 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/", s.handlePublicWHOISPage)
 
 	// Public content pages
+	mux.HandleFunc("/server/about", s.handleAboutPage)
 	mux.HandleFunc("/about", s.handleAboutPage)
+	mux.HandleFunc("/server/docs", s.handleDocsPage)
 	mux.HandleFunc("/docs", s.handleDocsPage)
 
-	// API v1 endpoints - WHOIS (general)
+	// API v1 - WHOIS lookups (public, rate-limited)
 	mux.HandleFunc("/api/v1/whois/", s.handleWHOIS)
-
-	// API v1 endpoints - WHOIS (specific)
 	mux.HandleFunc("/api/v1/whois/domain/", s.handleWHOISDomainLookup)
 	mux.HandleFunc("/api/v1/whois/ip/", s.handleWHOISIPLookup)
 	mux.HandleFunc("/api/v1/whois/asn/", s.handleWHOISASNLookup)
 	mux.HandleFunc("/api/v1/whois/validate/", s.handleWHOISValidate)
 
-	// API v1 endpoints - WHOIS (bulk)
-	// Note: Bulk lookup should require authentication in production
-	mux.HandleFunc("/api/v1/whois/bulk", s.handleWHOISBulkLookup)
+	// API v1 - Bulk lookup (requires server token)
+	mux.HandleFunc("/api/v1/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
 
-	// API v1 endpoints - Utility
+	// API v1 - Utility (public)
 	mux.HandleFunc("/api/v1/whois-servers", s.handleWhoisServers)
-	mux.HandleFunc("/api/v1/stats", s.handleStats)
+	mux.HandleFunc("/api/v1/server/stats", s.handleStats)
 
-	// Auth endpoints (AI.md PART 17)
-	mux.HandleFunc("/auth/login", s.handleAuthLogin)
-	mux.HandleFunc("/auth/logout", s.handleAuthLogout)
-
-	// Admin setup endpoints (AI.md PART 17)
-	adminPath := s.config.AdminPath
-	if adminPath == "" {
-		adminPath = "admin"
-	}
-	
-	// Setup wizard page (no auth required)
-	mux.HandleFunc(fmt.Sprintf("/%s/server/setup", adminPath), s.handleAdminSetupPage)
-	
-	// Setup wizard API endpoints (no auth required)
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/setup", adminPath), s.handleAdminSetupStatus)
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/setup/verify", adminPath), s.handleAdminSetupVerify)
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/setup/account", adminPath), s.handleAdminSetupAccount)
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/setup/complete", adminPath), s.handleAdminSetupComplete)
-
-	// Admin dashboard (requires authentication)
-	mux.HandleFunc(fmt.Sprintf("/%s/dashboard", adminPath), s.RequireAdminSession(s.handleAdminDashboard))
-	mux.HandleFunc(fmt.Sprintf("/%s", adminPath), s.RequireAdminSession(s.handleAdminDashboard))
-
-	// Admin profile routes (PART 17: /{admin_path}/profile for admin's OWN settings)
-	mux.HandleFunc(fmt.Sprintf("/%s/profile", adminPath), s.RequireAdminSession(s.handleAdminProfile))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/profile", adminPath), s.RequireAdminSession(s.handleAdminProfileAPI))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/profile/update", adminPath), s.RequireAdminSession(s.handleAdminProfileUpdate))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/profile/password", adminPath), s.RequireAdminSession(s.handleAdminPasswordChange))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/profile/token", adminPath), s.RequireAdminSession(s.handleAdminAPIToken))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/profile/token/regenerate", adminPath), s.RequireAdminSession(s.handleAdminAPITokenRegenerate))
-
-	// Server settings (requires authentication)
-	mux.HandleFunc(fmt.Sprintf("/%s/server/settings", adminPath), s.RequireAdminSession(s.handleServerSettings))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/settings", adminPath), s.RequireAdminSession(s.handleServerSettingsAPI))
-
-	// SSL configuration (requires authentication)
-	mux.HandleFunc(fmt.Sprintf("/%s/server/ssl", adminPath), s.RequireAdminSession(s.handleServerSSLSettings))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/ssl", adminPath), s.RequireAdminSession(s.handleServerSSLSettingsAPI))
-
-	// Email/SMTP configuration (requires authentication)
-	mux.HandleFunc(fmt.Sprintf("/%s/server/email", adminPath), s.RequireAdminSession(s.handleServerEmailSettings))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/email", adminPath), s.RequireAdminSession(s.handleServerEmailSettingsAPI))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/email/test", adminPath), s.RequireAdminSession(s.handleServerEmailTest))
-
-	// Backup configuration (requires authentication)
-	mux.HandleFunc(fmt.Sprintf("/%s/server/backup", adminPath), s.RequireAdminSession(s.handleServerBackupSettings))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/backup", adminPath), s.RequireAdminSession(s.handleServerBackupSettingsAPI))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/backup/now", adminPath), s.RequireAdminSession(s.handleServerBackupNow))
-
-	// Scheduler management (requires authentication)
-	mux.HandleFunc(fmt.Sprintf("/%s/server/scheduler", adminPath), s.RequireAdminSession(s.handleServerSchedulerSettings))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/scheduler", adminPath), s.RequireAdminSession(s.handleServerSchedulerStatusAPI))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/scheduler/task", adminPath), s.RequireAdminSession(s.handleServerSchedulerTaskUpdate))
-	mux.HandleFunc(fmt.Sprintf("/api/v1/%s/server/scheduler/task/run", adminPath), s.RequireAdminSession(s.handleServerSchedulerTaskRun))
+	// API v1 - Server operations (requires server token)
+	mux.HandleFunc("/api/v1/server/schedulers", s.requireToken(s.handleSchedulerStatus))
+	mux.HandleFunc("/api/v1/server/schedulers/run", s.requireToken(s.handleSchedulerRun))
+	mux.HandleFunc("/api/v1/server/backups", s.requireToken(s.handleBackupStatus))
+	mux.HandleFunc("/api/v1/server/backups/run", s.requireToken(s.handleBackupRun))
 
 	return mux
 }
@@ -554,32 +502,12 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 // handleRobotsTxt serves robots.txt file (AI.md PART 14)
 func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
-	adminPath := s.config.AdminPath
-	if adminPath == "" {
-		adminPath = "admin"
-	}
-
-	// Generate robots.txt content
-	content := fmt.Sprintf(`User-agent: *
-Allow: /
-Disallow: /%s/
-Disallow: /auth/
-Disallow: /api/
-
-Sitemap: http://localhost:%d/sitemap.xml
-`, adminPath, s.config.Port)
-
-	// Use FQDN if available
+	sitemapURL := fmt.Sprintf("http://localhost:%d/sitemap.xml", s.config.Port)
 	if s.config.FQDN != "" {
-		content = fmt.Sprintf(`User-agent: *
-Allow: /
-Disallow: /%s/
-Disallow: /auth/
-Disallow: /api/
-
-Sitemap: https://%s/sitemap.xml
-`, adminPath, s.config.FQDN)
+		sitemapURL = "https://" + s.config.FQDN + "/sitemap.xml"
 	}
+
+	content := fmt.Sprintf("User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: %s\n", sitemapURL)
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

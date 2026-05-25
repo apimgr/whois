@@ -7,8 +7,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/casapps/caswhois/src/admin"
 	"github.com/casapps/caswhois/src/config"
 	"github.com/casapps/caswhois/src/db"
 	"github.com/casapps/caswhois/src/server"
@@ -146,11 +146,8 @@ func main() {
 	}
 	defer database.Close()
 
-	// Handle first-run setup
-	ctx := context.Background()
-	if err := handleFirstRun(ctx, cfg, database); err != nil {
-		log.Fatalf("Failed to handle first run: %v", err)
-	}
+	// Print startup banner
+	printStartupBanner(cfg)
 
 	// Create and start server
 	srv := server.New(cfg, database)
@@ -299,45 +296,10 @@ func getDefaultConfigDir() string {
 	return filepath.Join(home, ".config", "casapps", "caswhois")
 }
 
-func handleFirstRun(ctx context.Context, cfg *config.ServerConfig, database *db.DB) error {
-	// Check if this is first run
-	isFirstRun, err := admin.IsFirstRun(ctx, database)
-	if err != nil {
-		return fmt.Errorf("check first run: %w", err)
-	}
-
-	if !isFirstRun {
-		// Not first run, continue normally
-		return nil
-	}
-
-	// Generate setup token
-	setupToken, err := admin.GenerateSetupToken()
-	if err != nil {
-		return fmt.Errorf("generate setup token: %w", err)
-	}
-
-	// Store setup token in database
-	if err := admin.StoreSetupToken(ctx, database, setupToken); err != nil {
-		return fmt.Errorf("store setup token: %w", err)
-	}
-
-	// Display first-run banner with setup token
-	printFirstRunBanner(cfg, setupToken)
-
-	return nil
-}
-
-func printFirstRunBanner(cfg *config.ServerConfig, setupToken string) {
-	// Get addresses for display
+func printStartupBanner(cfg *config.ServerConfig) {
 	addr := cfg.Address
-	if addr == "0.0.0.0" || addr == "" {
+	if addr == "0.0.0.0" || addr == "[::]" || addr == "" {
 		addr = "localhost"
-	}
-
-	adminPath := cfg.AdminPath
-	if adminPath == "" {
-		adminPath = "admin"
 	}
 
 	fmt.Println()
@@ -345,20 +307,17 @@ func printFirstRunBanner(cfg *config.ServerConfig, setupToken string) {
 	fmt.Println("║                                                                      ║")
 	fmt.Printf("║   CASWHOIS %s                                                    ║\n", Version)
 	fmt.Println("║                                                                      ║")
-	fmt.Println("║   Status: Running (first run - setup available)                     ║")
+	fmt.Println("║   Status: Running                                                    ║")
 	fmt.Println("║                                                                      ║")
 	fmt.Println("╠══════════════════════════════════════════════════════════════════════╣")
 	fmt.Println("║                                                                      ║")
 	fmt.Println("║   🌐 Web Interface:                                                   ║")
 	fmt.Printf("║      http://%s:%d                                         ║\n", addr, cfg.Port)
 	fmt.Println("║                                                                      ║")
-	fmt.Println("║   🔧 Admin Panel:                                                     ║")
-	fmt.Printf("║      http://%s:%d/%s                                      ║\n", addr, cfg.Port, adminPath)
+	fmt.Println("║   📋 Health Check:                                                    ║")
+	fmt.Printf("║      http://%s:%d/server/healthz                           ║\n", addr, cfg.Port)
 	fmt.Println("║                                                                      ║")
-	fmt.Printf("║   🔑 Setup Token (use at /%s):                              ║\n", adminPath)
-	fmt.Printf("║      %s                                ║\n", setupToken)
-	fmt.Println("║                                                                      ║")
-	fmt.Println("║   ⚠️  Save the setup token! It will not be shown again.               ║")
+	fmt.Println("║   🔧 Configuration: edit server.yml to change settings               ║")
 	fmt.Println("║                                                                      ║")
 	fmt.Println("╚══════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
