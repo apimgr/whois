@@ -255,6 +255,9 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/server/docs", s.handleDocsPage)
 	mux.HandleFunc("/docs", s.handleDocsPage)
 
+	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
+	mux.HandleFunc("/whois", s.handleWHOISPage)
+
 	// API v1 - WHOIS lookups (public, rate-limited)
 	mux.HandleFunc("/api/v1/whois/", s.handleWHOIS)
 	mux.HandleFunc("/api/v1/whois/domain/", s.handleWHOISDomainLookup)
