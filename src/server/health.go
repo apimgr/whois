@@ -154,15 +154,15 @@ func (s *Server) buildHealthResponse() HealthResponse {
 			RateLimit: "ok",
 		},
 		Stats: StatsInfo{
-			RequestsTotal:   0,  // TODO: implement request counter
-			Requests24h:     0,  // TODO: implement 24h counter
-			ActiveConns:     0,  // TODO: track active connections
+			RequestsTotal:   s.stats.requestsTotal.Load(),
+			Requests24h:     s.stats.requests24h.Load(),
+			ActiveConns:     int(s.stats.activeConns.Load()),
 			CacheHits:       cacheStats.Hits,
 			CacheMisses:     cacheStats.Misses,
-			WhoisQueries:    cacheStats.Hits + cacheStats.Misses, // approximation
-			DomainQueries:   0,  // TODO: track by type
-			IPQueries:       0,  // TODO: track by type
-			ASNQueries:      0,  // TODO: track by type
+			WhoisQueries:    s.stats.domainQueries.Load() + s.stats.ipQueries.Load() + s.stats.asnQueries.Load(),
+			DomainQueries:   s.stats.domainQueries.Load(),
+			IPQueries:       s.stats.ipQueries.Load(),
+			ASNQueries:      s.stats.asnQueries.Load(),
 		},
 	}
 }

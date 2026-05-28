@@ -30,6 +30,8 @@ func (s *Server) handleWHOISDomainLookup(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	s.stats.domainQueries.Add(1)
+
 	// Perform lookup
 	s.performWHOISLookup(w, r, domain)
 }
@@ -53,6 +55,8 @@ func (s *Server) handleWHOISIPLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.stats.ipQueries.Add(1)
+
 	// Perform lookup
 	s.performWHOISLookup(w, r, ip)
 }
@@ -75,6 +79,8 @@ func (s *Server) handleWHOISASNLookup(w http.ResponseWriter, r *http.Request) {
 		SendError(w, ErrValidationFailed, "Invalid ASN format (use AS prefix, e.g., AS15169)")
 		return
 	}
+
+	s.stats.asnQueries.Add(1)
 
 	// Perform lookup
 	s.performWHOISLookup(w, r, asn)

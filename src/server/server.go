@@ -35,7 +35,8 @@ type Server struct {
 	scheduler *scheduler.Scheduler
 	geoip     *geoip.GeoIPManager
 	metrics   *metrics.Collector
-	startTime time.Time // Server start time for uptime calculation
+	startTime time.Time    // Server start time for uptime calculation
+	stats     serverStats  // Atomic runtime counters
 }
 
 // New creates a new Server instance
@@ -284,7 +285,7 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	if s.metrics != nil {
 		handler = s.metrics.HTTPMiddleware(handler)        // 7. Metrics collection
 	}
-	handler = LoggingMiddleware(handler)               // 6. Log requests
+	handler = s.LoggingMiddleware(handler)             // 6. Log requests
 	handler = AuthMiddleware(handler)                  // 5. Check auth
 	handler = RateLimitMiddleware(s.ratelimit)(handler) // 4. Rate limiting
 	handler = SecurityHeadersMiddleware(handler)       // 3. Add security headers

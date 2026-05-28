@@ -124,11 +124,15 @@ func AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// LoggingMiddleware logs HTTP requests
+// LoggingMiddleware logs HTTP requests and records stats.
 // MUST be LAST in middleware chain (logs final request state)
-func LoggingMiddleware(next http.Handler) http.Handler {
+func (s *Server) LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+
+		s.stats.connOpen()
+		defer s.stats.connClose()
+		s.stats.recordRequest()
 
 		// Wrap ResponseWriter to capture status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}

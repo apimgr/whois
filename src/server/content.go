@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 )
@@ -112,20 +113,28 @@ func respondText(w http.ResponseWriter, status int, data interface{}) {
 	fmt.Fprintf(w, "%s\n", text)
 }
 
-// respondHTML sends an HTML response
+// htmlResponseTmpl is the template for generic data HTML responses.
+var htmlResponseTmpl = template.Must(template.New("response").Parse(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>caswhois</title>
+</head>
+<body>
+<pre>{{.}}</pre>
+</body>
+</html>
+`))
+
+// respondHTML sends an HTML response using a server-side template.
+// The data value is HTML-escaped by html/template before rendering.
 func respondHTML(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-
-	// For now, simple HTML wrapper
-	// TODO: Implement proper templating
-	fmt.Fprintf(w, "<!DOCTYPE html>\n")
-	fmt.Fprintf(w, "<html>\n")
-	fmt.Fprintf(w, "<head><title>caswhois</title></head>\n")
-	fmt.Fprintf(w, "<body>\n")
-	fmt.Fprintf(w, "<pre>%v</pre>\n", data)
-	fmt.Fprintf(w, "</body>\n")
-	fmt.Fprintf(w, "</html>\n")
+	if err := htmlResponseTmpl.Execute(w, fmt.Sprintf("%v", data)); err != nil {
+		http.Error(w, "Template error", http.StatusInternalServerError)
+	}
 }
 
 // ErrorResponse represents an error response
