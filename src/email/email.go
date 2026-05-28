@@ -3,14 +3,18 @@
 package email
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"embed"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/smtp"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -477,10 +481,44 @@ func GetDefaultFromEmail(fqdn string) string {
 	return "no-reply@" + fqdn
 }
 
-// getDefaultGateway returns the default gateway IP address
+// getDefaultGateway returns the default gateway IP address.
+// On Linux it parses /proc/net/route; on all other platforms it returns "".
 func getDefaultGateway() string {
-	// TODO: Implement platform-specific gateway detection
-	// This is a placeholder - proper implementation requires parsing route tables
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+
+	f, err := os.Open("/proc/net/route")
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	// Skip the header line.
+	scanner.Scan()
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		// Fields: Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT
+		if len(fields) < 3 {
+			continue
+		}
+		iface := fields[0]
+		destination := fields[1]
+		gateway := fields[2]
+		// Skip loopback and non-default-route entries.
+		if iface == "lo" || destination != "00000000" {
+			continue
+		}
+		// Gateway is a little-endian 32-bit hex value.
+		raw, err := hex.DecodeString(gateway)
+		if err != nil || len(raw) != 4 {
+			continue
+		}
+		ip := make(net.IP, 4)
+		binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(raw))
+		return ip.String()
+	}
 	return ""
 }
 

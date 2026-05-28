@@ -3,6 +3,7 @@
 package metrics
 
 import (
+	"regexp"
 	"runtime"
 	"time"
 
@@ -370,12 +371,39 @@ func (c *Collector) UpdateSystemMetrics() {
 	}
 }
 
-// NormalizePath normalizes URL path for metrics
-// Replaces UUIDs, IDs, and other high-cardinality values with :id
-// This prevents metrics explosion (AI.md PART 21: cardinality warning)
+// Compiled regexps for NormalizePath — package-level to avoid repeated compilation.
+var (
+	reUUID            = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	reWhoisIP         = regexp.MustCompile(`^(/api/v1/whois/ip/)([^/]+)(.*)$`)
+	reWhoisDomain     = regexp.MustCompile(`^(/api/v1/whois/domain/)([^/]+)(.*)$`)
+	reWhoisASN        = regexp.MustCompile(`^(/api/v1/whois/asn/)([^/]+)(.*)$`)
+	reWhoisValidate   = regexp.MustCompile(`^(/api/v1/whois/validate/)([^/]+)(.*)$`)
+	reWhoisGeneric    = regexp.MustCompile(`^(/api/v1/whois/)([^/]+)(.*)$`)
+)
+
+// NormalizePath normalizes URL path for metrics by replacing high-cardinality
+// segments (UUIDs, IP addresses, domain names, ASNs, query values) with named
+// placeholders. This prevents metrics label explosion (AI.md PART 21).
 func NormalizePath(path string) string {
-	// TODO: Implement path normalization
-	// Replace /users/123/posts/456 with /users/:id/posts/:id
-	// For now, return as-is
+	// Replace WHOIS sub-resource paths before the generic whois rule to preserve ordering.
+	if reWhoisIP.MatchString(path) {
+		path = reWhoisIP.ReplaceAllString(path, "${1}:ip${3}")
+	} else if reWhoisDomain.MatchString(path) {
+		path = reWhoisDomain.ReplaceAllString(path, "${1}:domain${3}")
+	} else if reWhoisASN.MatchString(path) {
+		path = reWhoisASN.ReplaceAllString(path, "${1}:asn${3}")
+	} else if reWhoisValidate.MatchString(path) {
+		path = reWhoisValidate.ReplaceAllString(path, "${1}:query${3}")
+	} else if reWhoisGeneric.MatchString(path) {
+		// Preserve static terminal segments like "bulk".
+		m := reWhoisGeneric.FindStringSubmatch(path)
+		if m != nil && m[2] != "bulk" {
+			path = reWhoisGeneric.ReplaceAllString(path, "${1}:query${3}")
+		}
+	}
+
+	// Replace any remaining UUIDs with :id.
+	path = reUUID.ReplaceAllString(path, ":id")
+
 	return path
 }

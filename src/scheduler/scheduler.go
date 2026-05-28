@@ -301,12 +301,15 @@ func (s *Scheduler) executeTask(task *Task) {
 	s.mu.Unlock()
 }
 
-// calculateNextRun calculates the next run time for a task
-// TODO: Implement full cron parsing (use robfig/cron or similar)
+// calculateNextRun calculates the next run time for a task using the cron parser.
+// Falls back to 1 hour from now when the schedule expression is invalid.
 func (s *Scheduler) calculateNextRun(task *Task) time.Time {
-	// Simplified - just add 1 day for now
-	// Real implementation needs cron parser
-	return time.Now().Add(24 * time.Hour)
+	expr, err := parseCron(task.Schedule)
+	if err != nil {
+		log.Printf("WARN: Invalid cron schedule %q for task %s: %v", task.Schedule, task.ID, err)
+		return time.Now().Add(time.Hour)
+	}
+	return expr.nextAfter(time.Now(), s.timezone)
 }
 
 // acquireLock attempts to acquire a distributed lock for global tasks
