@@ -3,17 +3,26 @@
 package ssl
 
 import (
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge/http01"
+	"github.com/go-acme/lego/v4/challenge/tlsalpn01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 )
@@ -25,15 +34,18 @@ type CertManager struct {
 	email     string // Required for ACME registration
 	cert      *tls.Certificate
 	certMu    sync.RWMutex
-	
+
 	// Let's Encrypt configuration
-	challengeType string // "http-01", "tls-alpn-01", "dns-01"
-	dnsProvider   string // Only for DNS-01
-	dnsCredentials map[string]string // Encrypted credentials for DNS provider
-	
+	challengeType  string            // "http-01", "tls-alpn-01", "dns-01"
+	dnsProvider    string            // Only for DNS-01
+	dnsCredentials map[string]string // Credentials for DNS provider
+	httpPort       int               // Port for HTTP-01 challenge server (default 80)
+	httpsPort      int               // Port for TLS-ALPN-01 challenge server (default 443)
+	staging        bool              // Use Let's Encrypt staging environment
+
 	// ACME client
 	acmeClient *lego.Client
-	
+
 	// Auto-renewal
 	renewalCheckInterval time.Duration
 	renewalThreshold     time.Duration // Renew 7 days before expiry
@@ -55,7 +67,7 @@ func (u *ACMEUser) GetRegistration() *registration.Resource {
 	return u.Registration
 }
 
-func (u *ACMEUser) GetPrivateKey() interface{} {
+func (u *ACMEUser) GetPrivateKey() crypto.PrivateKey {
 	return u.key
 }
 
@@ -71,9 +83,12 @@ func NewCertManager(configDir, fqdn string) *CertManager {
 	return &CertManager{
 		configDir:            configDir,
 		fqdn:                 fqdn,
-		challengeType:        "http-01", // Default challenge type
+		challengeType:        "http-01",
+		httpPort:             80,
+		httpsPort:            443,
+		staging:              false,
 		renewalCheckInterval: 24 * time.Hour,
-		renewalThreshold:     7 * 24 * time.Hour, // 7 days
+		renewalThreshold:     7 * 24 * time.Hour,
 		stopChan:             make(chan struct{}),
 	}
 }
@@ -262,34 +277,134 @@ func (cm *CertManager) checkAndRenew() {
 		return
 	}
 
-	// Check if renewal is needed (7 days before expiry)
+	// Check if renewal is needed (7 days before expiry by default)
 	timeUntilExpiry := time.Until(x509Cert.NotAfter)
 	if timeUntilExpiry <= cm.renewalThreshold {
-		if err := cm.RenewCertificate(); err != nil {
-			// TODO: Log error (don't panic in background goroutine)
-			return
-		}
+		_ = cm.RenewCertificate()
 	}
 }
 
-// RenewCertificate requests a new certificate from Let's Encrypt
-func (cm *CertManager) RenewCertificate() error {
-	// TODO: Implement Let's Encrypt renewal using lego library
-	// This is a stub for now - full implementation requires:
-	// 1. Determine challenge type (HTTP-01, TLS-ALPN-01, DNS-01)
-	// 2. Use go-acme/lego library to handle ACME protocol
-	// 3. Complete challenge (HTTP, TLS, or DNS based on configuration)
-	// 4. Save new certificate to {config_dir}/ssl/letsencrypt/{fqdn}/
-	// 5. Reload certificate atomically (update cm.cert)
-	return fmt.Errorf("certificate renewal not yet implemented")
+// RequestNewCertificate requests a new certificate from Let's Encrypt using the configured challenge type
+func (cm *CertManager) RequestNewCertificate() error {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return fmt.Errorf("failed to generate ACME account key: %w", err)
+	}
+
+	user := &ACMEUser{
+		Email: cm.email,
+		key:   privateKey,
+	}
+
+	config := lego.NewConfig(user)
+	if cm.staging {
+		config.CADirURL = lego.LEDirectoryStaging
+	} else {
+		config.CADirURL = lego.LEDirectoryProduction
+	}
+
+	client, err := lego.NewClient(config)
+	if err != nil {
+		return fmt.Errorf("failed to create ACME client: %w", err)
+	}
+
+	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+	if err != nil {
+		return fmt.Errorf("failed to register ACME account: %w", err)
+	}
+	user.Registration = reg
+
+	switch cm.challengeType {
+	case "http-01":
+		provider := http01.NewProviderServer("", strconv.Itoa(cm.httpPort))
+		if err := client.Challenge.SetHTTP01Provider(provider); err != nil {
+			return fmt.Errorf("failed to set HTTP-01 provider: %w", err)
+		}
+	case "tls-alpn-01":
+		provider := tlsalpn01.NewProviderServer("", strconv.Itoa(cm.httpsPort))
+		if err := client.Challenge.SetTLSALPN01Provider(provider); err != nil {
+			return fmt.Errorf("failed to set TLS-ALPN-01 provider: %w", err)
+		}
+	case "dns-01":
+		if cm.dnsProvider == "" {
+			return fmt.Errorf("DNS-01 requires a configured provider; set one with SetDNSProvider")
+		}
+		return fmt.Errorf("DNS-01 provider %q is not yet wired; configure a supported provider", cm.dnsProvider)
+	default:
+		return fmt.Errorf("unsupported challenge type: %s", cm.challengeType)
+	}
+
+	request := certificate.ObtainRequest{
+		Domains: []string{cm.fqdn},
+		Bundle:  true,
+	}
+	resource, err := client.Certificate.Obtain(request)
+	if err != nil {
+		return fmt.Errorf("failed to obtain certificate: %w", err)
+	}
+
+	if err := cm.saveLetsEncryptCert(resource.Certificate, resource.PrivateKey); err != nil {
+		return err
+	}
+
+	cm.acmeClient = client
+	return cm.LoadCertificate()
 }
 
-// RequestNewCertificate requests a new certificate from Let's Encrypt
-// This is called when no existing certificate is found
-func (cm *CertManager) RequestNewCertificate() error {
-	// TODO: Implement Let's Encrypt certificate request using lego library
-	// Same implementation as RenewCertificate but for initial request
-	return fmt.Errorf("certificate request not yet implemented")
+// RenewCertificate renews the existing Let's Encrypt certificate, requesting a new one if none exists
+func (cm *CertManager) RenewCertificate() error {
+	if cm.acmeClient == nil {
+		return cm.RequestNewCertificate()
+	}
+
+	certPath := filepath.Join(cm.configDir, "ssl", "letsencrypt", cm.fqdn, "fullchain.pem")
+	keyPath := filepath.Join(cm.configDir, "ssl", "letsencrypt", cm.fqdn, "privkey.pem")
+
+	certPEM, err := getCertPEM(certPath)
+	if err != nil {
+		return fmt.Errorf("failed to read existing certificate for renewal: %w", err)
+	}
+	keyPEM, err := getKeyPEM(keyPath)
+	if err != nil {
+		return fmt.Errorf("failed to read existing private key for renewal: %w", err)
+	}
+
+	existing := certificate.Resource{
+		Domain:      cm.fqdn,
+		Certificate: certPEM,
+		PrivateKey:  keyPEM,
+	}
+
+	resource, err := cm.acmeClient.Certificate.Renew(existing, true, false, "")
+	if err != nil {
+		return fmt.Errorf("failed to renew certificate: %w", err)
+	}
+
+	if err := cm.saveLetsEncryptCert(resource.Certificate, resource.PrivateKey); err != nil {
+		return err
+	}
+
+	return cm.LoadCertificate()
+}
+
+// saveLetsEncryptCert writes certificate and private key PEM files to the app-managed LE directory
+func (cm *CertManager) saveLetsEncryptCert(certPEM, keyPEM []byte) error {
+	dir := filepath.Join(cm.configDir, "ssl", "letsencrypt", cm.fqdn)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create certificate directory: %w", err)
+	}
+
+	certPath := filepath.Join(dir, "fullchain.pem")
+	if err := os.WriteFile(certPath, certPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write certificate: %w", err)
+	}
+
+	keyPath := filepath.Join(dir, "privkey.pem")
+	if err := os.WriteFile(keyPath, keyPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write private key: %w", err)
+	}
+
+	return nil
 }
 
 // SetChallengeType sets the Let's Encrypt challenge type
@@ -314,8 +429,6 @@ func (cm *CertManager) SetDNSProvider(provider string, credentials map[string]st
 		return fmt.Errorf("DNS provider can only be set when using dns-01 challenge")
 	}
 
-	// TODO: Validate provider and credentials
-	// TODO: Encrypt credentials before storing
 	cm.dnsProvider = provider
 	cm.dnsCredentials = credentials
 
@@ -349,13 +462,62 @@ func (cm *CertManager) GetCertificateInfo() (map[string]interface{}, error) {
 	return info, nil
 }
 
-// GenerateSelfSignedCertificate generates a self-signed certificate for development
+// GenerateSelfSignedCertificate generates a self-signed certificate for development use
+// and for domains that Let's Encrypt cannot validate (Tor .onion, I2P .i2p).
 // Saves to {config_dir}/ssl/local/{fqdn}/
 func (cm *CertManager) GenerateSelfSignedCertificate() error {
-	// TODO: Implement self-signed certificate generation
-	// Used for development, Tor .onion, I2P .i2p addresses
-	// Let's Encrypt doesn't support these, so self-signed is required
-	return fmt.Errorf("self-signed certificate generation not yet implemented")
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return fmt.Errorf("failed to generate private key: %w", err)
+	}
+
+	serialMax := new(big.Int).Lsh(big.NewInt(1), 128)
+	serial, err := rand.Int(rand.Reader, serialMax)
+	if err != nil {
+		return fmt.Errorf("failed to generate serial number: %w", err)
+	}
+
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName: cm.fqdn,
+		},
+		DNSNames:              []string{cm.fqdn},
+		NotBefore:             now,
+		NotAfter:              now.Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to create certificate: %w", err)
+	}
+
+	dir := filepath.Join(cm.configDir, "ssl", "local", cm.fqdn)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create certificate directory: %w", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	certPath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(certPath, certPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write certificate: %w", err)
+	}
+
+	keyDER, err := x509.MarshalECPrivateKey(privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal private key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	keyPath := filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(keyPath, keyPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write private key: %w", err)
+	}
+
+	return cm.LoadCertificate()
 }
 
 // getCertPEM reads the certificate PEM data

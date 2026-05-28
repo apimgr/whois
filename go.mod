@@ -4,7 +4,6 @@ go 1.24.0
 
 require (
 	github.com/go-acme/lego/v4 v4.22.1
-	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.24
 	golang.org/x/crypto v0.41.0
 	golang.org/x/sys v0.40.0
