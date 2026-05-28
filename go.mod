@@ -1,6 +1,6 @@
 module github.com/casapps/caswhois
 
-go 1.24.0
+go 1.24.2
 
 require (
 	github.com/go-acme/lego/v4 v4.22.1
