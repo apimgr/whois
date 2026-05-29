@@ -70,6 +70,21 @@ type ServerConfig struct {
 	// Update settings (PART 23)
 	UpdateChannel string `yaml:"update_channel"` // stable, beta, daily
 
+	// Tor hidden service settings (PART 31)
+	TorBinary                    string `yaml:"tor_binary"`
+	TorUseNetwork                bool   `yaml:"tor_use_network"`
+	TorMaxCircuits               int    `yaml:"tor_max_circuits"`
+	TorCircuitTimeout            int    `yaml:"tor_circuit_timeout"`
+	TorBootstrapTimeout          int    `yaml:"tor_bootstrap_timeout"`
+	TorSafeLogging               bool   `yaml:"tor_safe_logging"`
+	TorMaxStreamsPerCircuit       int    `yaml:"tor_max_streams_per_circuit"`
+	TorCloseCircuitOnStreamLimit bool   `yaml:"tor_close_circuit_on_stream_limit"`
+	TorBandwidthRate             string `yaml:"tor_bandwidth_rate"`
+	TorBandwidthBurst            string `yaml:"tor_bandwidth_burst"`
+	TorMaxMonthlyBandwidth       string `yaml:"tor_max_monthly_bandwidth"`
+	TorNumIntroPoints            int    `yaml:"tor_num_intro_points"`
+	TorVirtualPort               int    `yaml:"tor_virtual_port"`
+
 	// Debug mode
 	Debug bool `yaml:"debug"`
 
@@ -123,8 +138,21 @@ func Default() *ServerConfig {
 		BackupKeepMonthly:      0,   // 0 = disabled (default per spec)
 		BackupKeepYearly:       0,   // 0 = disabled (default per spec)
 		ComplianceEnabled:     false, // HIPAA, SOC2, etc. - requires encrypted backups
-		UpdateChannel:         "stable", // stable, beta, daily (default per spec)
-		Debug:               false,
+		UpdateChannel:                "stable",
+		TorBinary:                    "",
+		TorUseNetwork:                false,
+		TorMaxCircuits:               32,
+		TorCircuitTimeout:            60,
+		TorBootstrapTimeout:          180,
+		TorSafeLogging:               true,
+		TorMaxStreamsPerCircuit:       100,
+		TorCloseCircuitOnStreamLimit: true,
+		TorBandwidthRate:             "1 MB",
+		TorBandwidthBurst:            "2 MB",
+		TorMaxMonthlyBandwidth:       "100 GB",
+		TorNumIntroPoints:            3,
+		TorVirtualPort:               80,
+		Debug:                        false,
 		ServerToken:         "", // auto-generated on first run
 		APITokens:           []string{},
 	}

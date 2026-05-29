@@ -20,23 +20,25 @@ import (
 	"github.com/casapps/caswhois/src/ratelimit"
 	runtimeinfo "github.com/casapps/caswhois/src/runtime"
 	"github.com/casapps/caswhois/src/scheduler"
+	castor "github.com/casapps/caswhois/src/tor"
 	"github.com/casapps/caswhois/src/whois"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	config    *config.ServerConfig
-	server    *http.Server
-	info      *runtimeinfo.RuntimeInfo
-	cache     cache.Cache
-	ratelimit *ratelimit.Limiter
-	database  *db.DB
-	scheduler *scheduler.Scheduler
-	geoip     *geoip.GeoIPManager
-	metrics   *metrics.Collector
-	startTime time.Time    // Server start time for uptime calculation
-	stats     serverStats  // Atomic runtime counters
+	config     *config.ServerConfig
+	server     *http.Server
+	info       *runtimeinfo.RuntimeInfo
+	cache      cache.Cache
+	ratelimit  *ratelimit.Limiter
+	database   *db.DB
+	scheduler  *scheduler.Scheduler
+	geoip      *geoip.GeoIPManager
+	metrics    *metrics.Collector
+	torService *castor.TorService
+	startTime  time.Time   // Server start time for uptime calculation
+	stats      serverStats // Atomic runtime counters
 }
 
 // New creates a new Server instance
@@ -185,6 +187,36 @@ func (s *Server) Start() error {
 		serverErrors <- s.server.ListenAndServe()
 	}()
 
+	// Start Tor hidden service (PART 31) — non-blocking, optional
+	// Tor starts after the HTTP listener is already running so ADD_ONION can forward to it.
+	torCtx, torCancel := context.WithCancel(context.Background())
+	defer torCancel()
+	go func() {
+		torCfg := castor.TorConfig{
+			Binary:                    s.config.TorBinary,
+			UseNetwork:                s.config.TorUseNetwork,
+			MaxCircuits:               s.config.TorMaxCircuits,
+			CircuitTimeout:            s.config.TorCircuitTimeout,
+			BootstrapTimeout:          s.config.TorBootstrapTimeout,
+			SafeLogging:               s.config.TorSafeLogging,
+			MaxStreamsPerCircuit:       s.config.TorMaxStreamsPerCircuit,
+			CloseCircuitOnStreamLimit: s.config.TorCloseCircuitOnStreamLimit,
+			BandwidthRate:             s.config.TorBandwidthRate,
+			BandwidthBurst:            s.config.TorBandwidthBurst,
+			MaxMonthlyBandwidth:       s.config.TorMaxMonthlyBandwidth,
+			NumIntroPoints:            s.config.TorNumIntroPoints,
+			VirtualPort:               s.config.TorVirtualPort,
+		}
+		svc, err := castor.Start(torCtx, s.config.Port, &torCfg, s.config.ConfigDir, s.config.DataDir)
+		if err != nil {
+			log.Printf("[Tor] bootstrap failed: %v", err)
+			return
+		}
+		if svc != nil {
+			s.torService = svc
+		}
+	}()
+
 	// Channel for OS signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
@@ -196,7 +228,15 @@ func (s *Server) Start() error {
 	case sig := <-shutdown:
 		log.Printf("Received signal %v, shutting down gracefully...", sig)
 
-		// Stop scheduler first (AI.md PART 19)
+		// Stop Tor first (PART 31)
+		torCancel()
+		if s.torService != nil {
+			if err := s.torService.Close(); err != nil {
+				log.Printf("[Tor] shutdown error: %v", err)
+			}
+		}
+
+		// Stop scheduler (AI.md PART 19)
 		if s.scheduler != nil {
 			log.Printf("Stopping scheduler...")
 			if err := s.scheduler.Stop(); err != nil {
