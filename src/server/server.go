@@ -308,6 +308,9 @@ func (s *Server) setupRoutes() http.Handler {
 	// API v1 - Bulk lookup (requires server token)
 	mux.HandleFunc("/api/v1/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
 
+	// Autodiscover endpoint (PART 32) — non-versioned, public
+	mux.HandleFunc("/api/autodiscover", s.handleAutodiscover)
+
 	// API v1 - Utility (public)
 	mux.HandleFunc("/api/v1/whois-servers", s.handleWhoisServers)
 	mux.HandleFunc("/api/v1/server/stats", s.handleStats)
