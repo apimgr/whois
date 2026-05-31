@@ -27,16 +27,13 @@ type HealthResponse struct {
 	Mode      string    `json:"mode"`
 	Timestamp time.Time `json:"timestamp"`
 
-	// 5. Cluster info (disabled for now)
-	Cluster ClusterInfo `json:"cluster"`
-
-	// 6. Features (caswhois-specific)
+	// 5. Features (caswhois-specific)
 	Features FeaturesInfo `json:"features"`
 
-	// 7. Component health checks
+	// 6. Component health checks
 	Checks ChecksInfo `json:"checks"`
 
-	// 8. Statistics (caswhois-specific)
+	// 7. Statistics (caswhois-specific)
 	Stats StatsInfo `json:"stats"`
 }
 
@@ -53,22 +50,30 @@ type BuildInfo struct {
 	Date   string `json:"date"`   // ISO 8601 build timestamp
 }
 
-// ClusterInfo - from cluster manager (AI.md PART 10)
-type ClusterInfo struct {
-	Enabled bool `json:"enabled"`
+// TorInfo - Tor hidden service status (AI.md PART 31)
+type TorInfo struct {
+	Enabled  bool   `json:"enabled"`
+	Running  bool   `json:"running"`
+	Status   string `json:"status"`
+	Hostname string `json:"hostname,omitempty"`
 }
 
-// FeaturesInfo - caswhois features
+// FeaturesInfo - caswhois features (AI.md PART 13)
 type FeaturesInfo struct {
-	RateLimiting bool `json:"rate_limiting"`
-	Caching      bool `json:"caching"`
-	Email        bool `json:"email"`
+	RateLimiting bool    `json:"rate_limiting"`
+	Caching      bool    `json:"caching"`
+	GeoIP        bool    `json:"geoip"`
+	Email        bool    `json:"email"`
+	Tor          TorInfo `json:"tor"`
 }
 
-// ChecksInfo - component health (ok/error only)
+// ChecksInfo - component health (ok/error only, AI.md PART 13)
 type ChecksInfo struct {
-	Cache      string `json:"cache"`
-	RateLimit  string `json:"rate_limit"`
+	Database  string `json:"database"`
+	Cache     string `json:"cache"`
+	Disk      string `json:"disk"`
+	Scheduler string `json:"scheduler"`
+	Tor       string `json:"tor,omitempty"`
 }
 
 // StatsInfo - caswhois statistics
@@ -143,17 +148,18 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Uptime:    formatUptime(uptime),
 		Mode:      s.config.Mode,
 		Timestamp: time.Now().UTC(),
-		Cluster: ClusterInfo{
-			Enabled: false,
-		},
 		Features: FeaturesInfo{
 			RateLimiting: true,
 			Caching:      true,
+			GeoIP:        s.geoip != nil && s.geoip.Enabled(),
 			Email:        s.email != nil && s.email.IsEnabled(),
+			Tor:          s.buildTorInfo(),
 		},
 		Checks: ChecksInfo{
+			Database:  s.checkDatabase(),
 			Cache:     "ok",
-			RateLimit: "ok",
+			Disk:      "ok",
+			Scheduler: s.checkScheduler(),
 		},
 		Stats: StatsInfo{
 			RequestsTotal:   s.stats.requestsTotal.Load(),
@@ -205,19 +211,20 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "timestamp: %s\n", response.Timestamp.Format(time.RFC3339))
 	fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 5. Cluster\n")
-	fmt.Fprintf(w, "cluster.enabled: %v\n", response.Cluster.Enabled)
-	fmt.Fprintf(w, "\n")
-
-	fmt.Fprintf(w, "# 6. Features\n")
+	fmt.Fprintf(w, "# 5. Features\n")
 	fmt.Fprintf(w, "features.rate_limiting: %v\n", response.Features.RateLimiting)
 	fmt.Fprintf(w, "features.caching: %v\n", response.Features.Caching)
+	fmt.Fprintf(w, "features.geoip: %v\n", response.Features.GeoIP)
 	fmt.Fprintf(w, "features.email: %v\n", response.Features.Email)
+	fmt.Fprintf(w, "features.tor.enabled: %v\n", response.Features.Tor.Enabled)
+	fmt.Fprintf(w, "features.tor.running: %v\n", response.Features.Tor.Running)
 	fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 7. Checks\n")
+	fmt.Fprintf(w, "# 6. Checks\n")
+	fmt.Fprintf(w, "checks.database: %s\n", response.Checks.Database)
 	fmt.Fprintf(w, "checks.cache: %s\n", response.Checks.Cache)
-	fmt.Fprintf(w, "checks.rate_limit: %s\n", response.Checks.RateLimit)
+	fmt.Fprintf(w, "checks.disk: %s\n", response.Checks.Disk)
+	fmt.Fprintf(w, "checks.scheduler: %s\n", response.Checks.Scheduler)
 	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "# 8. Stats\n")
@@ -230,6 +237,48 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "stats.domain_queries: %d\n", response.Stats.DomainQueries)
 	fmt.Fprintf(w, "stats.ip_queries: %d\n", response.Stats.IPQueries)
 	fmt.Fprintf(w, "stats.asn_queries: %d\n", response.Stats.ASNQueries)
+}
+
+// checkDatabase verifies the database connection is alive
+func (s *Server) checkDatabase() string {
+	if s.database == nil {
+		return "error"
+	}
+	if err := s.database.Server.PingContext(context.Background()); err != nil {
+		return "error"
+	}
+	return "ok"
+}
+
+// checkScheduler reports whether the scheduler is running
+func (s *Server) checkScheduler() string {
+	if s.scheduler == nil {
+		return "error"
+	}
+	return "ok"
+}
+
+// buildTorInfo returns current Tor hidden service status
+func (s *Server) buildTorInfo() TorInfo {
+	if s.torService == nil {
+		return TorInfo{
+			Enabled: false,
+			Running: false,
+			Status:  "disabled",
+		}
+	}
+	addr := s.torService.OnionAddress()
+	running := addr != "" && addr != ".onion"
+	status := "starting"
+	if running {
+		status = "healthy"
+	}
+	return TorInfo{
+		Enabled:  true,
+		Running:  running,
+		Status:   status,
+		Hostname: addr,
+	}
 }
 
 // formatUptime formats duration as human readable string
