@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "en",
+    "name": "English",
+    "native_name": "English",
+    "direction": "ltr"
+  },
+  "common": {
+    "select_language": "Select language",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "update": "Update",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "confirm": "Confirm",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "yes": "Yes",
+    "no": "No",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "none": "None",
+    "actions": "Actions",
+    "details": "Details",
+    "settings": "Settings",
+    "done": "Done"
+  },
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "docs": "API Docs",
+    "api_docs": "API Documentation",
+    "skip_to_content": "Skip to main content",
+    "main_navigation": "Site navigation"
+  },
+  "health": {
+    "title": "System Status",
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "unhealthy": "Unhealthy",
+    "version": "Version",
+    "uptime": "Uptime",
+    "mode": "Mode",
+    "status": "Status",
+    "features": "Features",
+    "production": "Production",
+    "development": "Development"
+  },
+  "whois": {
+    "title": "WHOIS Lookup",
+    "subtitle": "Query domain names, IP addresses, and autonomous system numbers.",
+    "placeholder": "example.com, 8.8.8.8, AS15169 …",
+    "button": "Look up",
+    "loading": "Looking up WHOIS information…",
+    "try_example": "Try an example",
+    "query_label": "Query — domain, IP address, or ASN",
+    "aria_lookup": "Run WHOIS lookup",
+    "result_query": "Query",
+    "result_type": "Type",
+    "result_server": "Server",
+    "result_timestamp": "Looked up",
+    "result_raw": "Raw WHOIS data",
+    "new_lookup": "← New lookup",
+    "no_result": "No result returned for \"{query}\".",
+    "error_prefix": "WHOIS lookup failed: "
+  },
+  "errors": {
+    "bad_request": "Bad request",
+    "validation_failed": "Validation failed",
+    "unauthorized": "Unauthorized",
+    "forbidden": "Forbidden",
+    "not_found": "Not found",
+    "method_not_allowed": "Method not allowed",
+    "conflict": "Conflict",
+    "rate_limited": "Rate limited — please slow down",
+    "server_error": "Internal server error",
+    "maintenance": "Service under maintenance"
+  },
+  "theme": {
+    "toggle": "Toggle colour scheme",
+    "light": "Light",
+    "dark": "Dark",
+    "auto": "Auto"
+  },
+  "footer": {
+    "health": "Health"
+  }
+}

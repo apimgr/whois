@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "zh",
+    "name": "Chinese",
+    "native_name": "中文",
+    "direction": "ltr"
+  },
+  "common": {
+    "select_language": "选择语言",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "create": "创建",
+    "update": "更新",
+    "close": "关闭",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "submit": "提交",
+    "confirm": "确认",
+    "search": "搜索",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "yes": "是",
+    "no": "否",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "none": "无",
+    "actions": "操作",
+    "details": "详情",
+    "settings": "设置",
+    "done": "完成"
+  },
+  "nav": {
+    "home": "主页",
+    "about": "关于",
+    "docs": "API 文档",
+    "api_docs": "API 文档",
+    "skip_to_content": "跳转到主要内容",
+    "main_navigation": "网站导航"
+  },
+  "health": {
+    "title": "系统状态",
+    "healthy": "健康",
+    "degraded": "降级",
+    "unhealthy": "不健康",
+    "version": "版本",
+    "uptime": "运行时间",
+    "mode": "模式",
+    "status": "状态",
+    "features": "功能",
+    "production": "生产",
+    "development": "开发"
+  },
+  "whois": {
+    "title": "WHOIS 查询",
+    "subtitle": "查询域名、IP 地址和自治系统号。",
+    "placeholder": "example.com，8.8.8.8，AS15169 …",
+    "button": "查询",
+    "loading": "正在查询 WHOIS 信息…",
+    "try_example": "尝试示例",
+    "query_label": "查询 — 域名、IP 地址或 ASN",
+    "aria_lookup": "运行 WHOIS 查询",
+    "result_query": "查询",
+    "result_type": "类型",
+    "result_server": "服务器",
+    "result_timestamp": "查询时间",
+    "result_raw": "原始 WHOIS 数据",
+    "new_lookup": "← 新查询",
+    "no_result": "未找到 \"{query}\" 的结果。",
+    "error_prefix": "WHOIS 查询失败: "
+  },
+  "errors": {
+    "bad_request": "错误请求",
+    "validation_failed": "验证失败",
+    "unauthorized": "未授权",
+    "forbidden": "禁止",
+    "not_found": "未找到",
+    "method_not_allowed": "方法不允许",
+    "conflict": "冲突",
+    "rate_limited": "请求过于频繁 — 请放慢速度",
+    "server_error": "内部服务器错误",
+    "maintenance": "服务维护中"
+  },
+  "theme": {
+    "toggle": "切换颜色方案",
+    "light": "浅色",
+    "dark": "深色",
+    "auto": "自动"
+  },
+  "footer": {
+    "health": "健康"
+  }
+}

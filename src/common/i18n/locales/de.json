@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "de",
+    "name": "German",
+    "native_name": "Deutsch",
+    "direction": "ltr"
+  },
+  "common": {
+    "select_language": "Sprache auswählen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "create": "Erstellen",
+    "update": "Aktualisieren",
+    "close": "Schließen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "previous": "Zurück",
+    "submit": "Absenden",
+    "confirm": "Bestätigen",
+    "search": "Suchen",
+    "loading": "Wird geladen...",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "yes": "Ja",
+    "no": "Nein",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "none": "Keine",
+    "actions": "Aktionen",
+    "details": "Details",
+    "settings": "Einstellungen",
+    "done": "Fertig"
+  },
+  "nav": {
+    "home": "Startseite",
+    "about": "Über uns",
+    "docs": "API-Dokumentation",
+    "api_docs": "API-Dokumentation",
+    "skip_to_content": "Zum Hauptinhalt springen",
+    "main_navigation": "Website-Navigation"
+  },
+  "health": {
+    "title": "Systemstatus",
+    "healthy": "Gesund",
+    "degraded": "Beeinträchtigt",
+    "unhealthy": "Fehlerhaft",
+    "version": "Version",
+    "uptime": "Betriebszeit",
+    "mode": "Modus",
+    "status": "Status",
+    "features": "Funktionen",
+    "production": "Produktion",
+    "development": "Entwicklung"
+  },
+  "whois": {
+    "title": "WHOIS-Abfrage",
+    "subtitle": "Domainnamen, IP-Adressen und autonome Systemnummern abfragen.",
+    "placeholder": "beispiel.de, 8.8.8.8, AS15169 …",
+    "button": "Abfragen",
+    "loading": "WHOIS-Informationen werden abgerufen…",
+    "try_example": "Beispiel ausprobieren",
+    "query_label": "Abfrage — Domain, IP-Adresse oder ASN",
+    "aria_lookup": "WHOIS-Abfrage starten",
+    "result_query": "Abfrage",
+    "result_type": "Typ",
+    "result_server": "Server",
+    "result_timestamp": "Abgerufen",
+    "result_raw": "Rohe WHOIS-Daten",
+    "new_lookup": "← Neue Abfrage",
+    "no_result": "Kein Ergebnis für \"{query}\" gefunden.",
+    "error_prefix": "WHOIS-Abfrage fehlgeschlagen: "
+  },
+  "errors": {
+    "bad_request": "Ungültige Anfrage",
+    "validation_failed": "Validierung fehlgeschlagen",
+    "unauthorized": "Nicht autorisiert",
+    "forbidden": "Verboten",
+    "not_found": "Nicht gefunden",
+    "method_not_allowed": "Methode nicht erlaubt",
+    "conflict": "Konflikt",
+    "rate_limited": "Zu viele Anfragen — bitte langsamer",
+    "server_error": "Interner Serverfehler",
+    "maintenance": "Dienst wird gewartet"
+  },
+  "theme": {
+    "toggle": "Farbschema umschalten",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "auto": "Automatisch"
+  },
+  "footer": {
+    "health": "Gesundheit"
+  }
+}

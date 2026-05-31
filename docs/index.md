@@ -1,18 +1,18 @@
 # caswhois
 
-**WHOIS lookup service with built-in scheduler, GeoIP, metrics, and comprehensive admin panel.**
+**WHOIS lookup service — query domains, IP addresses, and ASNs. File-only configuration, no admin web UI, token auth.**
 
 ## Features
 
 - ✅ Server-side WHOIS queries (domain, IP, ASN)
 - ✅ Built-in scheduler (no external cron needed)
-- ✅ GeoIP integration (MaxMind)
-- ✅ Prometheus metrics
-- ✅ Comprehensive admin panel
-- ✅ Backup & restore with encryption
+- ✅ GeoIP integration (MaxMind GeoLite2)
+- ✅ Prometheus metrics at `/metrics`
+- ✅ Backup & restore with optional Argon2id encryption
 - ✅ Self-updating via GitHub releases
-- ✅ Service management (systemd, launchd, runit, rc.d)
-- ✅ Client binary for CLI/TUI operations
+- ✅ Service management (systemd, launchd, OpenRC, runit, s6, Windows SCM)
+- ✅ Optional Tor v3 hidden service
+- ✅ Zero-config first run — random port, auto-generated token
 
 ## Quick Start
 
@@ -33,8 +33,10 @@ Visit `http://localhost:64000` to access the web interface.
 
 - [Installation](installation.md)
 - [Configuration](configuration.md)
-- [CLI Usage](cli.md)
+- [CLI Reference](cli.md)
 - [API Reference](api.md)
+- [Security](security.md)
+- [Integrations](integrations.md)
 
 ## License
 

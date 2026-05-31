@@ -374,12 +374,13 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	if s.metrics != nil {
 		handler = s.metrics.HTTPMiddleware(handler)        // 7. Metrics collection
 	}
-	handler = s.LoggingMiddleware(handler)             // 6. Log requests
-	handler = AuthMiddleware(handler)                  // 5. Check auth
-	handler = RateLimitMiddleware(s.ratelimit)(handler) // 4. Rate limiting
-	handler = SecurityHeadersMiddleware(handler)       // 3. Add security headers
-	handler = PathSecurityMiddleware(handler)          // 2. Validate paths, block traversal
-	handler = URLNormalizeMiddleware(handler)          // 1. FIRST - normalize URLs
+	handler = s.LoggingMiddleware(handler)              // 7. Log requests
+	handler = AuthMiddleware(handler)                   // 6. Check auth
+	handler = RateLimitMiddleware(s.ratelimit)(handler) // 5. Rate limiting
+	handler = LanguageMiddleware(handler)               // 4. Detect request language
+	handler = SecurityHeadersMiddleware(handler)        // 3. Add security headers
+	handler = PathSecurityMiddleware(handler)           // 2. Validate paths, block traversal
+	handler = URLNormalizeMiddleware(handler)           // 1. FIRST - normalize URLs
 	return handler
 }
 

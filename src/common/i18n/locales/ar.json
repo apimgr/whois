@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "ar",
+    "name": "Arabic",
+    "native_name": "العربية",
+    "direction": "rtl"
+  },
+  "common": {
+    "select_language": "اختر اللغة",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "create": "إنشاء",
+    "update": "تحديث",
+    "close": "إغلاق",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق",
+    "submit": "إرسال",
+    "confirm": "تأكيد",
+    "search": "بحث",
+    "loading": "جار التحميل...",
+    "error": "خطأ",
+    "success": "نجاح",
+    "yes": "نعم",
+    "no": "لا",
+    "enabled": "مفعّل",
+    "disabled": "معطّل",
+    "none": "لا شيء",
+    "actions": "إجراءات",
+    "details": "تفاصيل",
+    "settings": "إعدادات",
+    "done": "تم"
+  },
+  "nav": {
+    "home": "الرئيسية",
+    "about": "حول",
+    "docs": "وثائق API",
+    "api_docs": "توثيق API",
+    "skip_to_content": "الانتقال إلى المحتوى الرئيسي",
+    "main_navigation": "تصفح الموقع"
+  },
+  "health": {
+    "title": "حالة النظام",
+    "healthy": "سليم",
+    "degraded": "متدهور",
+    "unhealthy": "غير سليم",
+    "version": "الإصدار",
+    "uptime": "وقت التشغيل",
+    "mode": "الوضع",
+    "status": "الحالة",
+    "features": "الميزات",
+    "production": "إنتاج",
+    "development": "تطوير"
+  },
+  "whois": {
+    "title": "بحث WHOIS",
+    "subtitle": "استعلم عن أسماء النطاقات وعناوين IP وأرقام الأنظمة المستقلة.",
+    "placeholder": "example.com، 8.8.8.8، AS15169 …",
+    "button": "بحث",
+    "loading": "جار البحث عن معلومات WHOIS…",
+    "try_example": "جرّب مثالاً",
+    "query_label": "استعلام — نطاق أو عنوان IP أو ASN",
+    "aria_lookup": "تشغيل بحث WHOIS",
+    "result_query": "الاستعلام",
+    "result_type": "النوع",
+    "result_server": "الخادم",
+    "result_timestamp": "تاريخ البحث",
+    "result_raw": "بيانات WHOIS الخام",
+    "new_lookup": "← بحث جديد",
+    "no_result": "لم يتم العثور على نتيجة لـ \"{query}\".",
+    "error_prefix": "فشل بحث WHOIS: "
+  },
+  "errors": {
+    "bad_request": "طلب غير صالح",
+    "validation_failed": "فشل التحقق",
+    "unauthorized": "غير مصرح",
+    "forbidden": "ممنوع",
+    "not_found": "غير موجود",
+    "method_not_allowed": "الطريقة غير مسموح بها",
+    "conflict": "تعارض",
+    "rate_limited": "تم تجاوز حد الطلبات — الرجاء التباطؤ",
+    "server_error": "خطأ داخلي في الخادم",
+    "maintenance": "الخدمة تحت الصيانة"
+  },
+  "theme": {
+    "toggle": "تبديل نظام الألوان",
+    "light": "فاتح",
+    "dark": "داكن",
+    "auto": "تلقائي"
+  },
+  "footer": {
+    "health": "الصحة"
+  }
+}

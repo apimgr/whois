@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "fr",
+    "name": "French",
+    "native_name": "Français",
+    "direction": "ltr"
+  },
+  "common": {
+    "select_language": "Sélectionner la langue",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "update": "Mettre à jour",
+    "close": "Fermer",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "submit": "Soumettre",
+    "confirm": "Confirmer",
+    "search": "Rechercher",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "yes": "Oui",
+    "no": "Non",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "none": "Aucun",
+    "actions": "Actions",
+    "details": "Détails",
+    "settings": "Paramètres",
+    "done": "Terminé"
+  },
+  "nav": {
+    "home": "Accueil",
+    "about": "À propos",
+    "docs": "Docs API",
+    "api_docs": "Documentation API",
+    "skip_to_content": "Aller au contenu principal",
+    "main_navigation": "Navigation du site"
+  },
+  "health": {
+    "title": "État du système",
+    "healthy": "En bonne santé",
+    "degraded": "Dégradé",
+    "unhealthy": "Défaillant",
+    "version": "Version",
+    "uptime": "Disponibilité",
+    "mode": "Mode",
+    "status": "Statut",
+    "features": "Fonctionnalités",
+    "production": "Production",
+    "development": "Développement"
+  },
+  "whois": {
+    "title": "Recherche WHOIS",
+    "subtitle": "Interrogez des noms de domaine, des adresses IP et des numéros de système autonome.",
+    "placeholder": "exemple.com, 8.8.8.8, AS15169 …",
+    "button": "Rechercher",
+    "loading": "Recherche des informations WHOIS…",
+    "try_example": "Essayer un exemple",
+    "query_label": "Requête — domaine, adresse IP ou ASN",
+    "aria_lookup": "Lancer la recherche WHOIS",
+    "result_query": "Requête",
+    "result_type": "Type",
+    "result_server": "Serveur",
+    "result_timestamp": "Consulté le",
+    "result_raw": "Données WHOIS brutes",
+    "new_lookup": "← Nouvelle recherche",
+    "no_result": "Aucun résultat trouvé pour « {query} ».",
+    "error_prefix": "Échec de la recherche WHOIS : "
+  },
+  "errors": {
+    "bad_request": "Requête incorrecte",
+    "validation_failed": "Échec de validation",
+    "unauthorized": "Non autorisé",
+    "forbidden": "Interdit",
+    "not_found": "Introuvable",
+    "method_not_allowed": "Méthode non autorisée",
+    "conflict": "Conflit",
+    "rate_limited": "Limite de débit atteinte — veuillez ralentir",
+    "server_error": "Erreur interne du serveur",
+    "maintenance": "Service en maintenance"
+  },
+  "theme": {
+    "toggle": "Changer le thème de couleur",
+    "light": "Clair",
+    "dark": "Sombre",
+    "auto": "Automatique"
+  },
+  "footer": {
+    "health": "Santé"
+  }
+}

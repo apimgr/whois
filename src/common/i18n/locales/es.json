@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "es",
+    "name": "Spanish",
+    "native_name": "Español",
+    "direction": "ltr"
+  },
+  "common": {
+    "select_language": "Seleccionar idioma",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "create": "Crear",
+    "update": "Actualizar",
+    "close": "Cerrar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "submit": "Enviar",
+    "confirm": "Confirmar",
+    "search": "Buscar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "yes": "Sí",
+    "no": "No",
+    "enabled": "Habilitado",
+    "disabled": "Deshabilitado",
+    "none": "Ninguno",
+    "actions": "Acciones",
+    "details": "Detalles",
+    "settings": "Configuración",
+    "done": "Hecho"
+  },
+  "nav": {
+    "home": "Inicio",
+    "about": "Acerca de",
+    "docs": "Docs de API",
+    "api_docs": "Documentación de API",
+    "skip_to_content": "Saltar al contenido principal",
+    "main_navigation": "Navegación del sitio"
+  },
+  "health": {
+    "title": "Estado del sistema",
+    "healthy": "Saludable",
+    "degraded": "Degradado",
+    "unhealthy": "No saludable",
+    "version": "Versión",
+    "uptime": "Tiempo activo",
+    "mode": "Modo",
+    "status": "Estado",
+    "features": "Características",
+    "production": "Producción",
+    "development": "Desarrollo"
+  },
+  "whois": {
+    "title": "Consulta WHOIS",
+    "subtitle": "Consulta nombres de dominio, direcciones IP y números de sistema autónomo.",
+    "placeholder": "ejemplo.com, 8.8.8.8, AS15169 …",
+    "button": "Consultar",
+    "loading": "Buscando información WHOIS…",
+    "try_example": "Prueba un ejemplo",
+    "query_label": "Consulta — dominio, dirección IP o ASN",
+    "aria_lookup": "Ejecutar consulta WHOIS",
+    "result_query": "Consulta",
+    "result_type": "Tipo",
+    "result_server": "Servidor",
+    "result_timestamp": "Consultado",
+    "result_raw": "Datos WHOIS sin procesar",
+    "new_lookup": "← Nueva consulta",
+    "no_result": "No se encontró resultado para \"{query}\".",
+    "error_prefix": "Error en la consulta WHOIS: "
+  },
+  "errors": {
+    "bad_request": "Solicitud incorrecta",
+    "validation_failed": "Validación fallida",
+    "unauthorized": "No autorizado",
+    "forbidden": "Prohibido",
+    "not_found": "No encontrado",
+    "method_not_allowed": "Método no permitido",
+    "conflict": "Conflicto",
+    "rate_limited": "Límite de velocidad — por favor reduzca la velocidad",
+    "server_error": "Error interno del servidor",
+    "maintenance": "Servicio en mantenimiento"
+  },
+  "theme": {
+    "toggle": "Cambiar esquema de color",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "auto": "Automático"
+  },
+  "footer": {
+    "health": "Estado"
+  }
+}

@@ -11,7 +11,6 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
-  custom_dir: docs/stylesheets
   palette:
     - scheme: slate
       primary: indigo
@@ -61,8 +60,13 @@ extra_css:
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Configuration: configuration.md
-  - API Reference: api.md
-  - Admin Guide: admin.md
-  - Development: development.md
+  - Getting Started:
+    - Installation: installation.md
+    - Configuration: configuration.md
+  - Usage:
+    - API Reference: api.md
+    - CLI Reference: cli.md
+    - Security: security.md
+    - Integrations: integrations.md
+  - Development:
+    - Contributing: development.md

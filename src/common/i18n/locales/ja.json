@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "language": "ja",
+    "name": "Japanese",
+    "native_name": "日本語",
+    "direction": "ltr"
+  },
+  "common": {
+    "select_language": "言語を選択",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "create": "作成",
+    "update": "更新",
+    "close": "閉じる",
+    "back": "戻る",
+    "next": "次へ",
+    "previous": "前へ",
+    "submit": "送信",
+    "confirm": "確認",
+    "search": "検索",
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功",
+    "yes": "はい",
+    "no": "いいえ",
+    "enabled": "有効",
+    "disabled": "無効",
+    "none": "なし",
+    "actions": "アクション",
+    "details": "詳細",
+    "settings": "設定",
+    "done": "完了"
+  },
+  "nav": {
+    "home": "ホーム",
+    "about": "概要",
+    "docs": "API ドキュメント",
+    "api_docs": "API ドキュメント",
+    "skip_to_content": "メインコンテンツへスキップ",
+    "main_navigation": "サイトナビゲーション"
+  },
+  "health": {
+    "title": "システム状態",
+    "healthy": "正常",
+    "degraded": "低下",
+    "unhealthy": "異常",
+    "version": "バージョン",
+    "uptime": "稼働時間",
+    "mode": "モード",
+    "status": "ステータス",
+    "features": "機能",
+    "production": "本番",
+    "development": "開発"
+  },
+  "whois": {
+    "title": "WHOIS 検索",
+    "subtitle": "ドメイン名、IPアドレス、自律システム番号を照会します。",
+    "placeholder": "example.com、8.8.8.8、AS15169 …",
+    "button": "検索",
+    "loading": "WHOIS 情報を検索中…",
+    "try_example": "例を試す",
+    "query_label": "クエリ — ドメイン、IPアドレス、または ASN",
+    "aria_lookup": "WHOIS 検索を実行",
+    "result_query": "クエリ",
+    "result_type": "タイプ",
+    "result_server": "サーバー",
+    "result_timestamp": "検索日時",
+    "result_raw": "生の WHOIS データ",
+    "new_lookup": "← 新しい検索",
+    "no_result": "「{query}」の結果が見つかりませんでした。",
+    "error_prefix": "WHOIS 検索に失敗しました: "
+  },
+  "errors": {
+    "bad_request": "不正なリクエスト",
+    "validation_failed": "バリデーション失敗",
+    "unauthorized": "未認証",
+    "forbidden": "禁止",
+    "not_found": "見つかりません",
+    "method_not_allowed": "メソッドが許可されていません",
+    "conflict": "競合",
+    "rate_limited": "レート制限 — 速度を落としてください",
+    "server_error": "内部サーバーエラー",
+    "maintenance": "メンテナンス中"
+  },
+  "theme": {
+    "toggle": "カラースキームを切り替え",
+    "light": "ライト",
+    "dark": "ダーク",
+    "auto": "自動"
+  },
+  "footer": {
+    "health": "ヘルス"
+  }
+}
