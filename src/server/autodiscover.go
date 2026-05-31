@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"runtime"
 	"time"
@@ -114,7 +113,5 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	resp.Server.Build.Commit = CommitID
 	resp.Server.Build.Date = BuildDate
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	SendSuccess(w, resp)
 }

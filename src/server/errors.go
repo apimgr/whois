@@ -77,6 +77,18 @@ func mapErrorCodeToStatus(code string) int {
 	}
 }
 
+// handleNotFound is the catch-all 404 handler.
+// Returns JSON for /api/* paths; HTML 404 page for all others.
+func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
+		SendError(w, ErrNotFound, "not found")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	htmlResponseTmpl.Execute(w, "404 — page not found")
+}
+
 // Common error messages
 var (
 	MsgBadRequest       = "Invalid request format"

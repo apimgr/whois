@@ -7,31 +7,15 @@ import (
 	"time"
 )
 
-// RegisterBuiltInTasks registers all required built-in tasks
-// See AI.md PART 19 for task requirements
+// RegisterBuiltInTasks registers all required built-in tasks.
+// Task IDs use underscore convention per AI.md PART 18.
+// Required tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation,
+// backup_daily, backup_hourly, healthcheck_self.
 func (s *Scheduler) RegisterBuiltInTasks() error {
-	// Session cleanup - Every 15 minutes (REQUIRED)
-	// Removes expired admin sessions from database
+	// token_cleanup — Every 15 minutes (REQUIRED)
+	// Removes expired API tokens from database
 	if err := s.Register(&Task{
-		ID:       "session.cleanup",
-		Name:     "Session Cleanup",
-		Schedule: "@every 15m",
-		Enabled:  true,
-		Global:   true,
-		Handler:  s.taskSessionCleanup,
-		RetryPolicy: &RetryPolicy{
-			MaxRetries: 3,
-			RetryDelay: 1 * time.Minute,
-			Backoff:    "linear",
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to register session.cleanup: %w", err)
-	}
-
-	// Token cleanup - Every 15 minutes (REQUIRED)
-	// Removes expired API tokens and setup tokens from database
-	if err := s.Register(&Task{
-		ID:       "token.cleanup",
+		ID:       "token_cleanup",
 		Name:     "Token Cleanup",
 		Schedule: "@every 15m",
 		Enabled:  true,
@@ -43,31 +27,13 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 			Backoff:    "linear",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register token.cleanup: %w", err)
+		return fmt.Errorf("failed to register token_cleanup: %w", err)
 	}
 
-	// Cache cleanup - Every hour (REQUIRED for WHOIS)
-	// Removes expired WHOIS cache entries from memory/database
-	if err := s.Register(&Task{
-		ID:       "cache.cleanup",
-		Name:     "Cache Cleanup",
-		Schedule: "@every 1h",
-		Enabled:  true,
-		Global:   true,
-		Handler:  s.taskCacheCleanup,
-		RetryPolicy: &RetryPolicy{
-			MaxRetries: 3,
-			RetryDelay: 5 * time.Minute,
-			Backoff:    "linear",
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to register cache.cleanup: %w", err)
-	}
-
-	// Log rotation - Daily at midnight (REQUIRED)
+	// log_rotation — Daily at midnight (REQUIRED)
 	// Rotates and compresses old log files
 	if err := s.Register(&Task{
-		ID:       "log.rotation",
+		ID:       "log_rotation",
 		Name:     "Log Rotation",
 		Schedule: "0 0 * * *",
 		Enabled:  true,
@@ -79,16 +45,15 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 			Backoff:    "exponential",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register log.rotation: %w", err)
+		return fmt.Errorf("failed to register log_rotation: %w", err)
 	}
 
-	// Database backup - Daily at 02:00 (OPTIONAL, can be disabled by admin)
-	// Backs up both server.db and users.db (or single PostgreSQL DB)
+	// backup_daily — Daily at 02:00 (REQUIRED per spec)
 	if err := s.Register(&Task{
-		ID:       "backup.daily",
+		ID:       "backup_daily",
 		Name:     "Daily Backup",
 		Schedule: "0 2 * * *",
-		Enabled:  false, // Disabled by default, admin can enable
+		Enabled:  true,
 		Global:   true,
 		Handler:  s.taskDailyBackup,
 		RetryPolicy: &RetryPolicy{
@@ -97,13 +62,30 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 			Backoff:    "exponential",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register backup.daily: %w", err)
+		return fmt.Errorf("failed to register backup_daily: %w", err)
 	}
 
-	// SSL renewal - Daily at 03:00 (REQUIRED)
-	// Checks and renews Let's Encrypt certificates 7 days before expiry
+	// backup_hourly — Every hour (REQUIRED per spec)
 	if err := s.Register(&Task{
-		ID:       "ssl.renewal",
+		ID:       "backup_hourly",
+		Name:     "Hourly Backup",
+		Schedule: "0 * * * *",
+		Enabled:  true,
+		Global:   true,
+		Handler:  s.taskHourlyBackup,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 2,
+			RetryDelay: 10 * time.Minute,
+			Backoff:    "exponential",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register backup_hourly: %w", err)
+	}
+
+	// ssl_renewal — Daily at 03:00 (REQUIRED)
+	// Checks and renews Let's Encrypt certificates 30 days before expiry
+	if err := s.Register(&Task{
+		ID:       "ssl_renewal",
 		Name:     "SSL Certificate Renewal",
 		Schedule: "0 3 * * *",
 		Enabled:  true,
@@ -115,13 +97,13 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 			Backoff:    "exponential",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register ssl.renewal: %w", err)
+		return fmt.Errorf("failed to register ssl_renewal: %w", err)
 	}
 
-	// Health check - Every 5 minutes (REQUIRED)
+	// healthcheck_self — Every 5 minutes (REQUIRED)
 	// Verifies database, disk space, and critical services
 	if err := s.Register(&Task{
-		ID:       "healthcheck.self",
+		ID:       "healthcheck_self",
 		Name:     "Self Health Check",
 		Schedule: "@every 5m",
 		Enabled:  true,
@@ -133,15 +115,32 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 			Backoff:    "linear",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register healthcheck.self: %w", err)
+		return fmt.Errorf("failed to register healthcheck_self: %w", err)
 	}
 
-	// WHOIS server list update - Weekly Sunday at 03:00 (OPTIONAL)
+	// cache_cleanup — Every hour (internal maintenance)
+	if err := s.Register(&Task{
+		ID:       "cache_cleanup",
+		Name:     "Cache Cleanup",
+		Schedule: "@every 1h",
+		Enabled:  true,
+		Global:   true,
+		Handler:  s.taskCacheCleanup,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 3,
+			RetryDelay: 5 * time.Minute,
+			Backoff:    "linear",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register cache_cleanup: %w", err)
+	}
+
+	// whois_servers_update — Weekly Sunday at 04:00 (optional)
 	// Downloads latest IANA TLD list and updates WHOIS server mappings
 	if err := s.Register(&Task{
-		ID:       "whois.servers.update",
+		ID:       "whois_servers_update",
 		Name:     "WHOIS Server List Update",
-		Schedule: "0 3 * * 0", // Sunday 3 AM
+		Schedule: "0 4 * * 0",
 		Enabled:  true,
 		Global:   true,
 		Handler:  s.taskWhoisServersUpdate,
@@ -151,26 +150,10 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 			Backoff:    "exponential",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register whois.servers.update: %w", err)
+		return fmt.Errorf("failed to register whois_servers_update: %w", err)
 	}
 
 	log.Printf("INFO: Registered %d built-in scheduler tasks", 8)
-	return nil
-}
-
-// taskSessionCleanup removes expired admin sessions
-func (s *Scheduler) taskSessionCleanup(ctx context.Context) error {
-	// Delete sessions older than expiry time
-	query := `DELETE FROM admin_sessions WHERE expires_at < datetime('now')`
-	result, err := s.db.ExecContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to delete expired sessions: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows > 0 {
-		log.Printf("INFO: Cleaned up %d expired admin sessions", rows)
-	}
 	return nil
 }
 
@@ -224,6 +207,20 @@ func (s *Scheduler) taskLogRotation(ctx context.Context) error {
 	//
 	// For now, this is a placeholder until logging package is integrated
 	log.Printf("INFO: Log rotation task executed (placeholder - needs logging integration)")
+	return nil
+}
+
+// taskHourlyBackup performs hourly incremental database backup
+func (s *Scheduler) taskHourlyBackup(ctx context.Context) error {
+	// Hourly incremental backup implementation would require:
+	// 1. Determine database type from connection string
+	// 2. For SQLite: use sqlite3 online backup API or WAL checkpoint
+	// 3. Create backup with timestamp: backup-hourly-YYYY-MM-DD-HHMMSS.db
+	// 4. Apply retention policy: keep last N hourly backups (default 24)
+	// 5. Skip if no changes since last backup (compare WAL sequence)
+	//
+	// For now, this is a placeholder until backup package is implemented
+	log.Printf("INFO: Hourly backup task executed (placeholder - needs backup integration)")
 	return nil
 }
 

@@ -286,8 +286,11 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
 
-	// Public web interface - WHOIS lookup page at root
-	mux.HandleFunc("/", s.handlePublicWHOISPage)
+	// Public web interface — exact root only (Go 1.22+ /{$} syntax)
+	mux.HandleFunc("/{$}", s.handlePublicWHOISPage)
+
+	// Catch-all 404 for all unmatched paths (must be last)
+	mux.HandleFunc("/", s.handleNotFound)
 
 	// Public content pages
 	mux.HandleFunc("/server/about", s.handleAboutPage)
@@ -430,7 +433,7 @@ func (s *Server) registerGeoIPTask() error {
 	}
 
 	return s.scheduler.Register(&scheduler.Task{
-		ID:       "geoip.update",
+		ID:       "geoip_update",
 		Name:     "GeoIP Database Update",
 		Schedule: "0 3 * * 0", // Weekly on Sunday at 03:00 (cron format)
 		Enabled:  true,
