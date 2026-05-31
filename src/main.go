@@ -29,20 +29,27 @@ func main() {
 
 	// Define CLI flags
 	var (
-		showHelp        bool
-		showVersion     bool
-		showStatus      bool
-		mode            string
-		configDir       string
-		dataDir         string
-		logDir          string
-		address         string
-		port            int
-		debug           bool
-		daemon          bool
-		serviceCmd      string
-		maintenanceCmd  string
-		updateCmd       string
+		showHelp       bool
+		showVersion    bool
+		showStatus     bool
+		mode           string
+		configDir      string
+		dataDir        string
+		cacheDir       string
+		logDir         string
+		backupDir      string
+		pidFile        string
+		address        string
+		port           int
+		baseURL        string
+		debug          bool
+		daemon         bool
+		colorFlag      string
+		langFlag       string
+		shellCmd       string
+		serviceCmd     string
+		maintenanceCmd string
+		updateCmd      string
 	)
 
 	flag.BoolVar(&showHelp, "help", false, "Show help message")
@@ -53,20 +60,31 @@ func main() {
 	flag.StringVar(&mode, "mode", "production", "Application mode (production|development)")
 	flag.StringVar(&configDir, "config", "", "Config directory")
 	flag.StringVar(&dataDir, "data", "", "Data directory")
+	flag.StringVar(&cacheDir, "cache", "", "Cache directory")
 	flag.StringVar(&logDir, "log", "", "Log directory")
-	flag.StringVar(&address, "address", "127.0.0.1", "Listen address")
+	flag.StringVar(&backupDir, "backup", "", "Backup directory")
+	flag.StringVar(&pidFile, "pid", "", "PID file path")
+	flag.StringVar(&address, "address", "[::]", "Listen address (default: all interfaces)")
 	flag.IntVar(&port, "port", 0, "Listen port (0 = random 64000-64999)")
+	flag.StringVar(&baseURL, "baseurl", "/", "URL path prefix")
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&daemon, "daemon", false, "Run as daemon (detach from terminal)")
+	flag.StringVar(&colorFlag, "color", "auto", "Color output (always|never|auto)")
+	flag.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
+	flag.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
 	flag.StringVar(&serviceCmd, "service", "", "Service management (install|uninstall|disable|start|stop|restart|reload|status|help)")
 	flag.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|help)")
 	flag.StringVar(&updateCmd, "update", "", "Update operations (check|yes|branch|help)")
 
 	flag.Parse()
 
+	// Apply NO_COLOR standard (PART 8): non-empty NO_COLOR env var disables colors and emojis.
+	// CLI --color flag takes priority over NO_COLOR.
+	useColor := colorEnabled(colorFlag)
+
 	// Handle immediate-exit flags (AI.md PART 8)
 	if showVersion {
-		printVersion(binaryName)
+		printVersion(binaryName, useColor)
 		os.Exit(0)
 	}
 
@@ -78,6 +96,19 @@ func main() {
 	if showStatus {
 		os.Exit(checkStatus(configDir))
 	}
+
+	// Handle shell integration (completions / init)
+	if shellCmd != "" {
+		handleShell(shellCmd, binaryName, flag.Args())
+		os.Exit(0)
+	}
+
+	// Suppress unused variable warnings for flags consumed only via config
+	_ = cacheDir
+	_ = backupDir
+	_ = pidFile
+	_ = baseURL
+	_ = langFlag
 
 	// Handle service management
 	if serviceCmd != "" {
@@ -156,11 +187,99 @@ func main() {
 	}
 }
 
-func printVersion(binaryName string) {
+// colorEnabled returns whether color output is enabled, respecting PART 8 priority order:
+// 1. CLI --color flag  2. NO_COLOR env var  3. Auto-detect (TTY)
+func colorEnabled(flag string) bool {
+	switch flag {
+	case "always":
+		return true
+	case "never":
+		return false
+	}
+	// auto: respect NO_COLOR, then TTY
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	// Check if stdout is a TTY (simple heuristic — no extra deps)
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
+func printVersion(binaryName string, useColor bool) {
 	fmt.Printf("%s version %s\n", binaryName, Version)
 	fmt.Printf("Commit: %s\n", CommitID)
-	fmt.Printf("Built: %s\n", BuildDate)
-	fmt.Printf("Site: %s\n", OfficialSite)
+	fmt.Printf("Built:  %s\n", BuildDate)
+	fmt.Printf("Site:   %s\n", OfficialSite)
+	// Suppress unused parameter warning in older Go toolchains
+	_ = useColor
+}
+
+// handleShell prints shell completion scripts or init commands (PART 8)
+func handleShell(cmd, binaryName string, args []string) {
+	shell := ""
+	if len(args) > 0 {
+		shell = args[0]
+	}
+	if shell == "" {
+		// Auto-detect from SHELL env
+		shellEnv := os.Getenv("SHELL")
+		if shellEnv != "" {
+			shell = filepath.Base(shellEnv)
+		}
+	}
+
+	switch cmd {
+	case "completions":
+		printShellCompletions(binaryName, shell)
+	case "init":
+		printShellInit(binaryName, shell)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown shell command: %s\n", cmd)
+		fmt.Fprintf(os.Stderr, "Usage: %s --shell {completions|init} [SHELL]\n", binaryName)
+		os.Exit(1)
+	}
+}
+
+func printShellCompletions(binaryName, shell string) {
+	switch shell {
+	case "bash":
+		fmt.Printf("# bash completions for %s\n", binaryName)
+		fmt.Printf("complete -W '--help --version --status --mode --config --data --cache --log --backup --pid --address --port --baseurl --daemon --debug --color --lang --shell --service --maintenance --update' %s\n", binaryName)
+	case "zsh":
+		fmt.Printf("# zsh completions for %s — source this file\n", binaryName)
+		fmt.Printf("compdef _%s %s\n", binaryName, binaryName)
+		fmt.Printf("_%s() { _arguments '--help[Show help]' '--version[Show version]' '--status[Show status]' '--config[Config directory]:dir:_files -/' '--data[Data directory]:dir:_files -/' '--port[Port]:port:' '--debug[Debug mode]' '--daemon[Daemonize]' }\n", binaryName)
+	case "fish":
+		fmt.Printf("# fish completions for %s\n", binaryName)
+		fmt.Printf("complete -c %s -l help -d 'Show help'\n", binaryName)
+		fmt.Printf("complete -c %s -l version -d 'Show version'\n", binaryName)
+		fmt.Printf("complete -c %s -l status -d 'Show status'\n", binaryName)
+		fmt.Printf("complete -c %s -l config -d 'Config directory' -r\n", binaryName)
+		fmt.Printf("complete -c %s -l data -d 'Data directory' -r\n", binaryName)
+		fmt.Printf("complete -c %s -l port -d 'Listen port' -r\n", binaryName)
+		fmt.Printf("complete -c %s -l debug -d 'Debug mode'\n", binaryName)
+		fmt.Printf("complete -c %s -l daemon -d 'Daemonize'\n", binaryName)
+	default:
+		fmt.Fprintf(os.Stderr, "Unsupported shell: %s (supported: bash, zsh, fish)\n", shell)
+		os.Exit(1)
+	}
+}
+
+func printShellInit(binaryName, shell string) {
+	switch shell {
+	case "bash":
+		fmt.Printf("source <(%s --shell completions bash)\n", binaryName)
+	case "zsh":
+		fmt.Printf("source <(%s --shell completions zsh)\n", binaryName)
+	case "fish":
+		fmt.Printf("%s --shell completions fish | source\n", binaryName)
+	default:
+		fmt.Fprintf(os.Stderr, "Unsupported shell: %s (supported: bash, zsh, fish)\n", shell)
+		os.Exit(1)
+	}
 }
 
 func printHelp(binaryName string) {
@@ -168,30 +287,34 @@ func printHelp(binaryName string) {
 	fmt.Printf("Usage:\n")
 	fmt.Printf("  %s [flags]\n\n", binaryName)
 	fmt.Printf("Information:\n")
-	fmt.Printf("  -h, --help          Show this help message\n")
-	fmt.Printf("  -v, --version       Show version information\n")
-	fmt.Printf("      --status        Show server status and health (exit 0=healthy, 1=unhealthy)\n\n")
+	fmt.Printf("  -h, --help                        Show this help message\n")
+	fmt.Printf("  -v, --version                     Show version information\n")
+	fmt.Printf("      --status                      Show server status and health\n\n")
+	fmt.Printf("Shell Integration:\n")
+	fmt.Printf("      --shell completions [SHELL]   Print shell completions\n")
+	fmt.Printf("      --shell init [SHELL]          Print shell init command\n\n")
 	fmt.Printf("Server Configuration:\n")
-	fmt.Printf("      --mode MODE     Application mode (production|development)\n")
-	fmt.Printf("      --config DIR    Config directory\n")
-	fmt.Printf("      --data DIR      Data directory\n")
-	fmt.Printf("      --log DIR       Log directory\n")
-	fmt.Printf("      --address ADDR  Listen address (default: 127.0.0.1)\n")
-	fmt.Printf("      --port PORT     Listen port (default: random 64000-64999)\n")
-	fmt.Printf("      --daemon        Run as daemon (detach from terminal)\n")
-	fmt.Printf("      --debug         Enable debug mode\n\n")
+	fmt.Printf("      --mode MODE                   Application mode (production|development)\n")
+	fmt.Printf("      --config DIR                  Config directory\n")
+	fmt.Printf("      --data DIR                    Data directory\n")
+	fmt.Printf("      --cache DIR                   Cache directory\n")
+	fmt.Printf("      --log DIR                     Log directory\n")
+	fmt.Printf("      --backup DIR                  Backup directory\n")
+	fmt.Printf("      --pid FILE                    PID file path\n")
+	fmt.Printf("      --address ADDR                Listen address (default: 0.0.0.0)\n")
+	fmt.Printf("      --port PORT                   Listen port (default: random 64000-64999)\n")
+	fmt.Printf("      --baseurl PATH                URL path prefix (default: /)\n")
+	fmt.Printf("      --daemon                      Run as daemon (detach from terminal)\n")
+	fmt.Printf("      --debug                       Enable debug mode\n")
+	fmt.Printf("      --color {always|never|auto}   Color output (default: auto)\n")
+	fmt.Printf("      --lang CODE                   Language for output (default: auto)\n\n")
 	fmt.Printf("Service Management:\n")
-	fmt.Printf("      --service CMD   Service operations (install|uninstall|start|stop|restart|reload|status|help)\n\n")
+	fmt.Printf("      --service CMD                 Service management (install|uninstall|start|stop|restart|reload|status|help)\n\n")
 	fmt.Printf("Maintenance:\n")
-	fmt.Printf("      --maintenance CMD  Maintenance operations (backup|restore|help)\n")
-	fmt.Printf("                         backup: Create encrypted backup\n")
-	fmt.Printf("                         restore FILE: Restore from backup file\n\n")
+	fmt.Printf("      --maintenance CMD             Maintenance operations (backup|restore|update|help)\n\n")
 	fmt.Printf("Update:\n")
-	fmt.Printf("      --update CMD    Update operations (check|yes|branch|help)\n")
-	fmt.Printf("                      check: Check for available updates\n")
-	fmt.Printf("                      yes: Download and install update\n")
-	fmt.Printf("                      branch NAME: Switch update channel (stable|beta|daily)\n\n")
-	fmt.Printf("Full CLI implementation follows AI.md PART 8\n")
+	fmt.Printf("      --update [CMD]                Check/perform updates (check|yes|branch|help)\n\n")
+	fmt.Printf("Run '%s <command> --help' for detailed help on any command.\n", binaryName)
 }
 
 func loadConfig(configDir, mode, address string, port int, debug bool) (*config.ServerConfig, error) {
@@ -302,22 +425,31 @@ func printStartupBanner(cfg *config.ServerConfig) {
 		addr = "localhost"
 	}
 
+	useEmoji := os.Getenv("NO_COLOR") == ""
+
+	webIcon, healthIcon, configIcon := "Web Interface:", "Health Check:", "Configuration:"
+	if useEmoji {
+		webIcon = "🌐 Web Interface:"
+		healthIcon = "📋 Health Check:"
+		configIcon = "🔧 Configuration:"
+	}
+
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║                                                                      ║")
-	fmt.Printf("║   CASWHOIS %s                                                    ║\n", Version)
+	fmt.Printf("║   CASWHOIS %-60s║\n", Version)
 	fmt.Println("║                                                                      ║")
 	fmt.Println("║   Status: Running                                                    ║")
 	fmt.Println("║                                                                      ║")
 	fmt.Println("╠══════════════════════════════════════════════════════════════════════╣")
 	fmt.Println("║                                                                      ║")
-	fmt.Println("║   🌐 Web Interface:                                                   ║")
-	fmt.Printf("║      http://%s:%d                                         ║\n", addr, cfg.Port)
+	fmt.Printf("║   %s\n", webIcon)
+	fmt.Printf("║      http://%s:%d\n", addr, cfg.Port)
 	fmt.Println("║                                                                      ║")
-	fmt.Println("║   📋 Health Check:                                                    ║")
-	fmt.Printf("║      http://%s:%d/server/healthz                           ║\n", addr, cfg.Port)
+	fmt.Printf("║   %s\n", healthIcon)
+	fmt.Printf("║      http://%s:%d/server/healthz\n", addr, cfg.Port)
 	fmt.Println("║                                                                      ║")
-	fmt.Println("║   🔧 Configuration: edit server.yml to change settings               ║")
+	fmt.Printf("║   %s edit server.yml to change settings\n", configIcon)
 	fmt.Println("║                                                                      ║")
 	fmt.Println("╚══════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
