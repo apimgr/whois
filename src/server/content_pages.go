@@ -14,7 +14,7 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="About caswhois — a WHOIS lookup service for domains, IP addresses, and ASNs.">
 <title>About — caswhois</title>
-<style>` + sharedCSS + aboutExtraCSS + `</style>
+<link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -128,60 +128,9 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
   </p>
 </footer>
 
-<style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}</style>
-<script>` + themeToggleJS + `</script>
+<script src="/static/js/main.js" defer></script>
 </body>
 </html>`))
-
-// aboutExtraCSS contains styles specific to the about page.
-const aboutExtraCSS = `
-.about-content{
-  display:flex;flex-direction:column;gap:1.5rem;
-  padding-bottom:2rem;
-}
-.about-content .card{margin:0}
-.check-list{list-style:none;padding:0;display:flex;flex-direction:column;gap:0.5rem}
-.check-list li{padding-left:1.5rem;position:relative;color:var(--fg-muted);line-height:1.6}
-.check-list li::before{
-  content:"✓";position:absolute;left:0;
-  color:var(--color-success-fg);font-weight:700;
-}
-.feature-grid{
-  display:grid;grid-template-columns:1fr;gap:1rem;margin-top:1rem;
-}
-.feature-card{
-  background:var(--bg-subtle);border:1px solid var(--border);
-  border-radius:6px;padding:1rem;
-  border-left:3px solid var(--accent);
-}
-.feature-card h3{font-size:1rem;font-weight:600;margin-bottom:0.375rem}
-.feature-card p{font-size:0.9375rem;color:var(--fg-muted);margin:0;line-height:1.5}
-.feature-card code{
-  font-family:'SF Mono','Fira Code',monospace;font-size:0.875em;
-  background:var(--bg-inset);color:var(--fg);padding:0.125rem 0.375rem;border-radius:4px;
-}
-.about-nav{
-  display:flex;flex-wrap:wrap;gap:0.75rem;
-  padding-top:0.5rem;
-}
-.btn-secondary{
-  padding:0.75rem 1.5rem;font-size:1rem;font-weight:600;
-  font-family:inherit;cursor:pointer;min-height:44px;
-  background:var(--bg-elevated);color:var(--accent);
-  border:1px solid var(--accent);border-radius:6px;
-  text-decoration:none;display:inline-flex;align-items:center;
-  transition:background 150ms,color 150ms;
-}
-.btn-secondary:hover{background:var(--accent-subtle)}
-.about-nav .btn-primary{text-decoration:none;display:inline-flex;align-items:center}
-@media(min-width:768px){
-  .feature-grid{grid-template-columns:repeat(2,1fr)}
-  .about-content{padding-top:0.5rem}
-}
-@media(min-width:1024px){
-  .feature-grid{grid-template-columns:repeat(3,1fr)}
-}
-`
 
 // docsTmpl is the template for the /docs API documentation page.
 var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
@@ -191,7 +140,7 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="caswhois REST API documentation — endpoints, authentication, and response formats.">
 <title>API Documentation — caswhois</title>
-<style>` + sharedCSS + docsExtraCSS + `</style>
+<link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -458,96 +407,9 @@ Content-Type: application/json
   </p>
 </footer>
 
-<style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}</style>
-<script>` + themeToggleJS + `</script>
+<script src="/static/js/main.js" defer></script>
 </body>
 </html>`))
-
-// docsExtraCSS contains styles specific to the docs page.
-const docsExtraCSS = `
-.docs-layout{
-  display:flex;flex-direction:column;gap:1.5rem;
-  padding-bottom:2.5rem;
-}
-.docs-toc{
-  background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;
-  padding:1.25rem;align-self:start;
-}
-.toc-heading{
-  font-size:0.75rem;font-weight:600;text-transform:uppercase;
-  letter-spacing:.06em;color:var(--fg-muted);margin-bottom:0.75rem;
-}
-.docs-toc ul{list-style:none;display:flex;flex-direction:column;gap:0.25rem}
-.docs-toc a{
-  font-size:0.9375rem;color:var(--fg-muted);text-decoration:none;
-  display:block;padding:0.25rem 0;transition:color 150ms;
-}
-.docs-toc a:hover{color:var(--accent)}
-.docs-body{display:flex;flex-direction:column;gap:1.5rem;min-width:0}
-.docs-body .card{margin:0}
-.docs-body h2{font-size:1.375rem;font-weight:700;margin-bottom:1rem}
-.docs-body h3{font-size:1rem;font-weight:600;margin:1rem 0 0.5rem}
-.docs-body p{color:var(--fg-muted);line-height:1.65;margin-bottom:0.75rem}
-.docs-body p:last-child{margin-bottom:0}
-.code-block{
-  background:var(--bg-inset);color:var(--fg);
-  border:1px solid var(--border);border-radius:6px;
-  padding:0.875rem 1rem;overflow-x:auto;
-  font-family:'SF Mono','Fira Code','Fira Mono',monospace;
-  font-size:0.8125rem;line-height:1.65;
-  white-space:pre;word-break:normal;
-  margin:0.75rem 0;
-}
-.code-block code{background:none;padding:0;color:inherit;font-size:inherit}
-.docs-body code{
-  font-family:'SF Mono','Fira Code',monospace;font-size:0.875em;
-  background:var(--bg-inset);color:var(--fg);
-  padding:0.125rem 0.375rem;border-radius:4px;
-}
-.endpoint{
-  border:1px solid var(--border);border-radius:6px;
-  padding:1rem;margin-bottom:1rem;
-  border-left:3px solid var(--accent);
-  background:var(--bg-subtle);
-}
-.endpoint:last-child{margin-bottom:0}
-.endpoint-header{display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;margin-bottom:0.5rem}
-.method{
-  display:inline-flex;align-items:center;
-  padding:0.125rem 0.5rem;border-radius:4px;
-  font-size:0.75rem;font-weight:700;letter-spacing:.04em;flex-shrink:0;
-}
-.method-get{background:var(--color-success-bg);color:var(--color-success-fg)}
-.method-post{background:var(--color-info-bg);color:var(--color-info-fg)}
-.endpoint-path{
-  font-family:'SF Mono','Fira Code',monospace;font-size:0.9375rem;
-  color:var(--fg);word-break:break-all;background:none;padding:0;
-}
-.endpoint-desc{color:var(--fg-muted);font-size:0.9375rem;margin:0.25rem 0 0.5rem}
-.auth-badge{
-  font-size:0.75rem;font-weight:600;
-  padding:0.125rem 0.5rem;border-radius:4px;
-  background:var(--color-warning-bg);color:var(--color-warning-fg);
-}
-.table-wrap{overflow-x:auto;margin:0.75rem 0}
-table{width:100%;border-collapse:collapse;font-size:0.9375rem}
-th,td{text-align:left;padding:0.625rem 0.75rem;border-bottom:1px solid var(--border)}
-th{background:var(--bg-subtle);color:var(--fg);font-weight:600}
-td{color:var(--fg-muted)}
-td code{font-size:0.875em}
-.btn-primary-inline{
-  display:inline-flex;align-items:center;
-  padding:0.625rem 1.25rem;font-size:0.9375rem;font-weight:600;
-  background:var(--accent);color:var(--fg-on-accent);
-  border-radius:6px;text-decoration:none;transition:background 150ms;
-}
-.btn-primary-inline:hover{background:var(--accent-hover);color:var(--fg-on-accent)}
-@media(min-width:1024px){
-  .docs-layout{flex-direction:row;align-items:flex-start}
-  .docs-toc{width:14rem;flex-shrink:0;position:sticky;top:1rem}
-  .docs-body{flex:1}
-}
-`
 
 // handleAboutPage serves the about page.
 // GET /about, /server/about

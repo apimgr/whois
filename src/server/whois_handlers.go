@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 	"time"
@@ -306,118 +307,64 @@ func sendTextResponse(w http.ResponseWriter, result *whois.WHOISResult) {
 	fmt.Fprint(w, result.Raw)
 }
 
-// sendHTMLResponse sends a WHOIS response in HTML format
+// sendHTMLResponse sends a WHOIS response in HTML format using the shared stylesheet.
 func sendHTMLResponse(w http.ResponseWriter, result *whois.WHOISResult) {
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WHOIS Lookup: %s</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            padding: 2rem;
-        }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            padding: 2rem;
-        }
-        h1 {
-            color: #2d3748;
-            margin-bottom: 1rem;
-            font-size: 1.75rem;
-        }
-        .meta {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-            padding: 1rem;
-            background: #f7fafc;
-            border-radius: 6px;
-        }
-        .meta-item {
-            display: flex;
-            flex-direction: column;
-        }
-        .meta-label {
-            color: #718096;
-            font-size: 0.875rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.25rem;
-        }
-        .meta-value {
-            color: #2d3748;
-            font-size: 1rem;
-        }
-        .raw-data {
-            background: #2d3748;
-            color: #e2e8f0;
-            padding: 1.5rem;
-            border-radius: 6px;
-            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-            font-size: 0.875rem;
-            line-height: 1.6;
-            overflow-x: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        .back-link {
-            display: inline-block;
-            margin-top: 1.5rem;
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WHOIS: %s — caswhois</title>
+<link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
-    <div class="container">
-        <h1>WHOIS Lookup Result</h1>
-        
-        <div class="meta">
-            <div class="meta-item">
-                <span class="meta-label">Query</span>
-                <span class="meta-value">%s</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Type</span>
-                <span class="meta-value">%s</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Server</span>
-                <span class="meta-value">%s</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Timestamp</span>
-                <span class="meta-value">%s</span>
-            </div>
+<nav class="site-nav" aria-label="Site navigation">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">About</a></li>
+      <li><a href="/docs">API Docs</a></li>
+    </ul>
+  </div>
+</nav>
+<main id="main-content">
+  <div class="container" style="padding-top:2rem;padding-bottom:2rem">
+    <div class="card">
+      <div class="result-meta" style="margin-bottom:1rem">
+        <div class="meta-item">
+          <div class="meta-label">Query</div>
+          <div class="meta-value long-string">%s</div>
         </div>
-        
-        <pre class="raw-data">%s</pre>
-        
-        <a href="/" class="back-link">&larr; Back to Search</a>
+        <div class="meta-item">
+          <div class="meta-label">Type</div>
+          <div class="meta-value"><span class="type-badge">%s</span></div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Server</div>
+          <div class="meta-value long-string">%s</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Timestamp</div>
+          <div class="meta-value">%s</div>
+        </div>
+      </div>
+      <pre class="whois-raw" aria-label="Raw WHOIS data">%s</pre>
+      <p style="margin-top:1rem"><a href="/">&larr; New lookup</a></p>
     </div>
+  </div>
+</main>
+<footer class="site-footer">
+  <p><a href="/">caswhois</a> &mdash; <a href="/about">About</a> &middot; <a href="/docs">API Docs</a></p>
+</footer>
+<script src="/static/js/main.js" defer></script>
 </body>
 </html>`,
 		result.Query,
-		result.Query,
-		result.Type.String(),
-		result.Server,
-		result.Timestamp.Format(time.RFC3339),
-		result.Raw,
+		template.HTMLEscapeString(result.Query),
+		template.HTMLEscapeString(result.Type.String()),
+		template.HTMLEscapeString(result.Server),
+		template.HTMLEscapeString(result.Timestamp.Format(time.RFC3339)),
+		template.HTMLEscapeString(result.Raw),
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

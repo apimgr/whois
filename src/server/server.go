@@ -281,6 +281,9 @@ func (s *Server) setupRoutes() http.Handler {
 	// Root alias when enabled
 	mux.HandleFunc("/healthz", s.handleHealth)
 
+	// Static assets — CSS, JS (embedded at compile time, served under /static/)
+	mux.Handle("/static/", staticFileServer())
+
 	// SEO & Security files (PART 14, PART 16) - REQUIRED
 	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxt)
 	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
