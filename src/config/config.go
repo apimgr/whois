@@ -85,6 +85,17 @@ type ServerConfig struct {
 	TorNumIntroPoints            int    `yaml:"tor_num_intro_points"`
 	TorVirtualPort               int    `yaml:"tor_virtual_port"`
 
+	// SMTP / Email settings (PART 17)
+	// If host is empty, SMTP auto-detection runs on startup.
+	SMTPHost      string `yaml:"smtp_host"`
+	SMTPPort      int    `yaml:"smtp_port"`
+	SMTPUsername  string `yaml:"smtp_username"`
+	SMTPPassword  string `yaml:"smtp_password"`
+	// SMTPTLSMode: auto, starttls, tls, none
+	SMTPTLSMode   string `yaml:"smtp_tls"`
+	EmailFromName  string `yaml:"email_from_name"`
+	EmailFromEmail string `yaml:"email_from_email"`
+
 	// Debug mode
 	Debug bool `yaml:"debug"`
 
@@ -152,6 +163,13 @@ func Default() *ServerConfig {
 		TorMaxMonthlyBandwidth:       "100 GB",
 		TorNumIntroPoints:            3,
 		TorVirtualPort:               80,
+		SMTPHost:      "",     // empty = auto-detect on startup
+		SMTPPort:      587,
+		SMTPUsername:  "",
+		SMTPPassword:  "",
+		SMTPTLSMode:   "auto",
+		EmailFromName:  "",    // default: branding title
+		EmailFromEmail: "",    // default: no-reply@{fqdn}
 		Debug:                        false,
 		ServerToken:         "", // auto-generated on first run
 		APITokens:           []string{},

@@ -15,6 +15,7 @@ import (
 	"github.com/casapps/caswhois/src/cache"
 	"github.com/casapps/caswhois/src/config"
 	"github.com/casapps/caswhois/src/db"
+	"github.com/casapps/caswhois/src/email"
 	"github.com/casapps/caswhois/src/geoip"
 	"github.com/casapps/caswhois/src/metrics"
 	"github.com/casapps/caswhois/src/ratelimit"
@@ -35,6 +36,7 @@ type Server struct {
 	database   *db.DB
 	scheduler  *scheduler.Scheduler
 	geoip      *geoip.GeoIPManager
+	email      *email.EmailManager
 	metrics    *metrics.Collector
 	torService *castor.TorService
 	startTime  time.Time   // Server start time for uptime calculation
@@ -91,6 +93,40 @@ func New(cfg *config.ServerConfig, database *db.DB) *Server {
 		log.Println("[Metrics] Initialized")
 	}
 
+	// Initialize Email manager (PART 17)
+	emailMgr := email.NewEmailManager(cfg.ConfigDir)
+	if cfg.SMTPHost != "" {
+		// Explicit SMTP configured — apply settings and test connection
+		emailMgr.Configure(
+			cfg.SMTPHost,
+			cfg.SMTPPort,
+			cfg.SMTPUsername,
+			cfg.SMTPPassword,
+			cfg.SMTPTLSMode,
+			cfg.EmailFromName,
+			cfg.EmailFromEmail,
+		)
+		if err := emailMgr.TestConnection(); err != nil {
+			log.Printf("[Email] SMTP connection test failed: %v — email features disabled", err)
+			emailMgr.Disable()
+		} else {
+			emailMgr.Enable()
+			log.Printf("[Email] SMTP configured and reachable at %s:%d", cfg.SMTPHost, cfg.SMTPPort)
+		}
+	} else {
+		// No explicit SMTP — attempt auto-detection in background
+		go func() {
+			info := runtimeinfo.Detect()
+			detected := emailMgr.AutoDetectSMTP(info.FQDN, info.PrimaryIPv4)
+			if detected {
+				log.Printf("[Email] SMTP auto-detected at %s — email features enabled", emailMgr.GetSMTPInfo()["host"])
+				emailMgr.Enable()
+			} else {
+				log.Printf("[Email] No local SMTP found — email features disabled")
+			}
+		}()
+	}
+
 	srv := &Server{
 		config:    cfg,
 		info:      runtimeinfo.Detect(),
@@ -99,6 +135,7 @@ func New(cfg *config.ServerConfig, database *db.DB) *Server {
 		database:  database,
 		scheduler: sched,
 		geoip:     geoipMgr,
+		email:     emailMgr,
 		metrics:   metricsCollector,
 		startTime: time.Now(),
 	}

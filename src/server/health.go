@@ -62,6 +62,7 @@ type ClusterInfo struct {
 type FeaturesInfo struct {
 	RateLimiting bool `json:"rate_limiting"`
 	Caching      bool `json:"caching"`
+	Email        bool `json:"email"`
 }
 
 // ChecksInfo - component health (ok/error only)
@@ -148,6 +149,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Features: FeaturesInfo{
 			RateLimiting: true,
 			Caching:      true,
+			Email:        s.email != nil && s.email.IsEnabled(),
 		},
 		Checks: ChecksInfo{
 			Cache:     "ok",
@@ -210,6 +212,7 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "# 6. Features\n")
 	fmt.Fprintf(w, "features.rate_limiting: %v\n", response.Features.RateLimiting)
 	fmt.Fprintf(w, "features.caching: %v\n", response.Features.Caching)
+	fmt.Fprintf(w, "features.email: %v\n", response.Features.Email)
 	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "# 7. Checks\n")

@@ -130,7 +130,24 @@ metrics_token: ""
 # EMAIL / SMTP (PART 17)
 # =============================================================================
 
-# Email settings (sendmail → msmtp → ssmtp → SMTP direct, auto-detected)
+# SMTP host — empty: auto-detect loopback/Docker/gateway SMTP on startup
+smtp_host: ""
+
+# SMTP port (587 = STARTTLS, 465 = TLS, 25 = plain)
+smtp_port: 587
+
+# SMTP credentials (leave empty if no auth required)
+smtp_username: ""
+smtp_password: ""
+
+# TLS mode: auto, starttls, tls, none
+smtp_tls: "auto"
+
+# Sender display name (empty = branding title)
+email_from_name: ""
+
+# Sender address (empty = no-reply@{fqdn})
+email_from_email: ""
 
 # =============================================================================
 # BACKUP & RESTORE (PART 21)
