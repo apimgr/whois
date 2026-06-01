@@ -10,10 +10,12 @@ import (
 
 // CLIConfig holds the CLI configuration
 type CLIConfig struct {
-	Server string `yaml:"server"`
-	Token  string `yaml:"token"`
-	Format string `yaml:"format"`
-	Debug  bool   `yaml:"debug"`
+	Server        string `yaml:"server"`
+	Token         string `yaml:"token"`
+	Format        string `yaml:"format"`
+	Lang          string `yaml:"lang"`
+	UpdateChannel string `yaml:"update_channel"`
+	Debug         bool   `yaml:"debug"`
 }
 
 // ConfigPath returns the platform-appropriate config file path

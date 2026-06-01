@@ -21,8 +21,9 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
+<a class="skip-link" href="#navigation">Skip to navigation</a>
 
-<nav class="site-nav" aria-label="Site navigation">
+<nav id="navigation" class="site-nav" aria-label="Site navigation">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
     <ul class="nav-links" role="list">
@@ -172,8 +173,9 @@ var whoisPageTmpl = template.Must(template.New("whois-page").Parse(`<!DOCTYPE ht
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
+<a class="skip-link" href="#navigation">Skip to navigation</a>
 
-<nav class="site-nav" aria-label="Site navigation">
+<nav id="navigation" class="site-nav" aria-label="Site navigation">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
     <ul class="nav-links" role="list">

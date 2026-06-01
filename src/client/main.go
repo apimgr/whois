@@ -13,6 +13,8 @@ import (
 	"github.com/casapps/caswhois/src/client/lookup"
 	"github.com/casapps/caswhois/src/client/setup"
 	"github.com/casapps/caswhois/src/client/tui"
+	"github.com/casapps/caswhois/src/common/i18n"
+	"github.com/casapps/caswhois/src/update"
 )
 
 // Build info — set via -ldflags at build time
@@ -27,6 +29,9 @@ func main() {
 		flagServer  string
 		flagToken   string
 		flagFormat  string
+		flagLang    string
+		flagColor   string
+		flagUpdate  string
 		flagDebug   bool
 		flagVersion bool
 		flagStatus  bool
@@ -35,6 +40,9 @@ func main() {
 	flag.StringVar(&flagServer, "server", "", "Server base URL")
 	flag.StringVar(&flagToken, "token", "", "API token")
 	flag.StringVar(&flagFormat, "format", "", "Output format: json/text/raw (default: text)")
+	flag.StringVar(&flagLang, "lang", "", "Language code (en, es, zh, fr, ar, de, ja)")
+	flag.StringVar(&flagColor, "color", "", "Color output: always/never/auto (default: auto)")
+	flag.StringVar(&flagUpdate, "update", "", "Update command: check/yes/branch=<name>")
 	flag.BoolVar(&flagDebug, "debug", false, "Debug mode")
 	flag.BoolVar(&flagVersion, "version", false, "Show version information")
 	flag.BoolVar(&flagVersion, "v", false, "Show version information")
@@ -70,6 +78,33 @@ func main() {
 	}
 
 	applyEnvOverrides(cfg)
+
+	// Resolve language: flag > config > env > default
+	lang := flagLang
+	if lang == "" {
+		lang = cfg.Lang
+	}
+	if lang == "" {
+		lang = os.Getenv("LANG")
+		if len(lang) > 2 {
+			lang = lang[:2]
+		}
+	}
+	if !i18n.IsSupported(lang) {
+		lang = "en"
+	}
+	tr, _ := i18n.Load(lang)
+	_ = tr
+
+	// Resolve color: flag > NO_COLOR env > auto-detect
+	colorEnabled := resolveColor(flagColor)
+	_ = colorEnabled
+
+	// Handle --update before any server interaction
+	if flagUpdate != "" {
+		runUpdateCommand(flagUpdate, cfg)
+		return
+	}
 
 	if flagStatus {
 		runStatusCheck(cfg)
@@ -107,6 +142,73 @@ func main() {
 			return
 		}
 		runCLICommand(args, cfg)
+	}
+}
+
+// resolveColor returns true if ANSI color output should be used.
+// Priority: --color flag > NO_COLOR env > TTY auto-detect.
+func resolveColor(flagColor string) bool {
+	switch strings.ToLower(flagColor) {
+	case "always", "on", "yes", "1":
+		return true
+	case "never", "off", "no", "0":
+		return false
+	}
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
+// runUpdateCommand handles --update check/yes/branch=<name>
+func runUpdateCommand(cmd string, cfg *config.CLIConfig) {
+	channel := update.ChannelStable
+	if cfg.UpdateChannel != "" {
+		channel = update.UpdateChannel(cfg.UpdateChannel)
+	}
+
+	switch {
+	case cmd == "check":
+		info, err := update.CheckForUpdates(Version, channel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error checking for updates: %v\n", err)
+			os.Exit(1)
+		}
+		if info.Available {
+			fmt.Printf("Update available: %s → %s\n", info.CurrentVersion, info.LatestVersion)
+			fmt.Printf("Run '%s --update yes' to install.\n", filepath.Base(os.Args[0]))
+		} else {
+			fmt.Printf("Already up to date (%s)\n", info.CurrentVersion)
+		}
+
+	case cmd == "yes":
+		fmt.Printf("Checking for updates (channel: %s)…\n", channel)
+		if err := update.PerformUpdate(Version, channel); err != nil {
+			fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Update complete.")
+
+	case strings.HasPrefix(cmd, "branch="):
+		branch := strings.TrimPrefix(cmd, "branch=")
+		if branch == "" {
+			fmt.Fprintln(os.Stderr, "Error: branch name required (e.g. --update branch=beta)")
+			os.Exit(1)
+		}
+		cfg.UpdateChannel = branch
+		if err := config.Save(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Update channel set to %q\n", branch)
+
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown update command %q. Use: check, yes, branch=<name>\n", cmd)
+		os.Exit(1)
 	}
 }
 
@@ -208,9 +310,6 @@ func printResult(result *lookup.Result, err error, format string) {
 		os.Exit(1)
 	}
 
-	noColor := os.Getenv("NO_COLOR") != ""
-	_ = noColor
-
 	switch strings.ToLower(format) {
 	case "json":
 		data, jsonErr := json.MarshalIndent(result, "", "  ")
@@ -252,13 +351,18 @@ func showHelp() {
 	fmt.Println("  <query>            Direct lookup (auto-detect)")
 	fmt.Println()
 	fmt.Println("Flags:")
-	fmt.Println("  -h, --help         Show this help")
-	fmt.Println("  -v, --version      Show version information")
-	fmt.Println("  --status           Health check (exit 0=healthy, 1=unhealthy)")
-	fmt.Println("  --server URL       Server base URL")
-	fmt.Println("  --token TOKEN      API token")
-	fmt.Println("  --format FORMAT    Output format: json/text/raw (default: text)")
-	fmt.Println("  --debug            Debug mode")
+	fmt.Println("  -h, --help                   Show this help")
+	fmt.Println("  -v, --version                Show version information")
+	fmt.Println("  --status                     Health check (exit 0=healthy, 1=unhealthy)")
+	fmt.Println("  --server URL                 Server base URL")
+	fmt.Println("  --token TOKEN                API token")
+	fmt.Println("  --format FORMAT              Output format: json/text/raw (default: text)")
+	fmt.Println("  --lang CODE                  Language: en/es/zh/fr/ar/de/ja (default: en)")
+	fmt.Println("  --color always|never|auto    Color output (default: auto)")
+	fmt.Println("  --update check               Check for available updates")
+	fmt.Println("  --update yes                 Download and install the latest update")
+	fmt.Println("  --update branch=NAME         Switch update channel (stable/beta/daily)")
+	fmt.Println("  --debug                      Debug mode")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
 	fmt.Println("  CASWHOIS_SERVER    Default server URL")
@@ -274,4 +378,5 @@ func showHelp() {
 	fmt.Printf("  %s domain github.com --server http://localhost:64580\n", binaryName)
 	fmt.Printf("  %s ip 8.8.8.8 --format json\n", binaryName)
 	fmt.Printf("  %s asn AS15169\n", binaryName)
+	fmt.Printf("  %s --update check\n", binaryName)
 }

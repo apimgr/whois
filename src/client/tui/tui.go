@@ -5,36 +5,40 @@ import (
 	"strings"
 
 	"github.com/casapps/caswhois/src/client/lookup"
+	"github.com/casapps/caswhois/src/common/theme"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+// palette is resolved once at startup from the system/config theme mode.
+var palette = theme.GetThemePalette("auto")
+
 var (
 	styleBorder = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
+			BorderForeground(lipgloss.Color(palette.Border)).
 			Padding(0, 1)
 
 	styleTitle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("205"))
+			Foreground(lipgloss.Color(palette.Primary))
 
 	styleLabel = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
+			Foreground(lipgloss.Color(palette.Muted))
 
 	styleResult = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
+			Foreground(lipgloss.Color(palette.Foreground))
 
 	styleError = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196"))
+			Foreground(lipgloss.Color(palette.Error))
 
 	styleHelp = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(lipgloss.Color(palette.Muted)).
 			Italic(true)
 
 	styleLoading = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214"))
+			Foreground(lipgloss.Color(palette.Warning))
 )
 
 // lookupDoneMsg is sent when a lookup completes
