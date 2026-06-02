@@ -9,31 +9,39 @@ import (
 	"time"
 )
 
-// DB represents a database connection with common operations
+// DB represents a database connection with common operations.
 type DB struct {
-	Server     *sql.DB      // Server database (server.db)
-	Driver     string       // "sqlite"
-	closeHook  func() error // optional close override; used in tests to inject close errors
+	// Server is the primary database handle (server.db).
+	Server *sql.DB
+	// Driver is the normalized driver name (always "sqlite").
+	Driver string
+	// closeHook is an optional close override used in tests to inject close errors.
+	closeHook func() error
 }
 
-// DatabaseConfig holds database configuration
+// DatabaseConfig holds database configuration. Only SQLite/libsql are
+// supported (PART 10) — Name is used for libsql/Turso remote database names.
 type DatabaseConfig struct {
-	Driver   string     // "sqlite", "postgres", "mysql"
-	Host     string     // Database host (postgres/mysql)
-	Port     int        // Database port
-	Name     string     // Database name
-	Username string     // Database username
-	Password string     // Database password
-	Path     string     // Path for SQLite files
-	Pool     PoolConfig // Connection pool config
+	// Driver is "sqlite" (also matches libsql via the same SQL driver).
+	Driver string
+	// Name is the remote database name for libsql/Turso connections.
+	Name string
+	// Path is the directory containing SQLite files (server.db).
+	Path string
+	// Pool holds connection-pool tuning.
+	Pool PoolConfig
 }
 
-// PoolConfig holds connection pool settings
+// PoolConfig holds connection pool settings.
 type PoolConfig struct {
-	MaxOpen     int           // Maximum open connections
-	MaxIdle     int           // Maximum idle connections
-	MaxLifetime time.Duration // Maximum connection lifetime
-	MaxIdleTime time.Duration // Maximum idle time
+	// MaxOpen is the maximum number of open connections.
+	MaxOpen int
+	// MaxIdle is the maximum number of idle connections kept in the pool.
+	MaxIdle int
+	// MaxLifetime is the maximum lifetime of a connection.
+	MaxLifetime time.Duration
+	// MaxIdleTime is the maximum time a connection can sit idle.
+	MaxIdleTime time.Duration
 }
 
 // DefaultPoolConfig returns sensible pool defaults

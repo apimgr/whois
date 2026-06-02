@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -8,6 +10,52 @@ import (
 
 	"github.com/casapps/caswhois/src/backup"
 )
+
+// runBackup builds the BackupOptions for the current server config and
+// invokes backup.Create. It is the shared entry point used by both the
+// HTTP handler (handleBackupRun) and the scheduler hooks (backup_daily /
+// backup_hourly). prefix controls the filename prefix; pass "backup" for
+// daily/full backups and "backup-hourly" for hourly incrementals.
+func (s *Server) runBackup(prefix string) (string, error) {
+	backupDir := s.config.GetBackupDir()
+	if err := os.MkdirAll(backupDir, 0750); err != nil {
+		return "", fmt.Errorf("create backup directory: %w", err)
+	}
+
+	filename := prefix + "-" + time.Now().UTC().Format("20060102-150405") + ".tar.gz"
+	destPath := filepath.Join(backupDir, filename)
+
+	password := ""
+	if s.config.BackupEncryptionEnabled {
+		// Server token doubles as the backup encryption key (AI.md PART 21).
+		password = s.config.ServerToken
+	}
+
+	opts := &backup.BackupOptions{
+		ConfigDir:   s.config.ConfigDir,
+		DataDir:     s.config.GetDatabaseDir(),
+		OutputFile:  destPath,
+		Password:    password,
+		IncludeData: true,
+		AppVersion:  "dev",
+	}
+
+	if err := backup.Create(opts); err != nil {
+		return filename, fmt.Errorf("backup.Create: %w", err)
+	}
+
+	// Apply retention policy after successful creation (AI.md PART 21).
+	if err := backup.ApplyRetentionPolicy(
+		backupDir,
+		s.config.BackupMaxBackups,
+		s.config.BackupKeepWeekly,
+		s.config.BackupKeepMonthly,
+		s.config.BackupKeepYearly,
+	); err != nil {
+		log.Printf("WARN: backup retention failed: %v", err)
+	}
+	return filename, nil
+}
 
 // ---- Scheduler handlers -------------------------------------------------------
 
@@ -157,37 +205,17 @@ func (s *Server) handleBackupRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	backupDir := s.config.GetBackupDir()
-	if err := os.MkdirAll(backupDir, 0750); err != nil {
-		SendError(w, ErrServerError, "Failed to create backup directory: "+err.Error())
-		return
-	}
 
-	filename := "backup-" + time.Now().UTC().Format("20060102-150405") + ".tar.gz"
-	destPath := filepath.Join(backupDir, filename)
-
-	password := ""
-	if s.config.BackupEncryptionEnabled {
-		password = s.config.ServerToken // use server token as backup encryption key
-	}
-
-	opts := &backup.BackupOptions{
-		ConfigDir:   s.config.ConfigDir,
-		DataDir:     s.config.GetDatabaseDir(),
-		OutputFile:  destPath,
-		Password:    password,
-		IncludeData: true,
-	}
-
-	// Run backup asynchronously so the HTTP response returns immediately
+	// Run backup asynchronously so the HTTP response returns immediately.
+	// Errors are logged because no caller is waiting once the response is sent.
 	go func() {
-		if err := backup.Create(opts); err != nil {
-			// Errors are not surfaced to the caller — logged only
+		if _, err := s.runBackup("backup"); err != nil {
+			log.Printf("ERROR: on-demand backup failed: %v", err)
 		}
 	}()
 
 	SendSuccess(w, map[string]interface{}{
 		"backup_dir": backupDir,
-		"filename":   filename,
 		"started":    true,
 	})
 }

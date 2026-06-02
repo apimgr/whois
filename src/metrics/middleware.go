@@ -37,10 +37,12 @@ func (c *Collector) HTTPMiddleware(next http.Handler) http.Handler {
 		c.HTTPActiveRequests.Inc()
 		defer c.HTTPActiveRequests.Dec()
 
-		// Wrap response writer to capture status and size
+		// Wrap response writer to capture status and size.
+		// statusCode defaults to 200 because net/http treats a missing
+		// WriteHeader call as an implicit 200 OK.
 		rw := &responseWriter{
 			ResponseWriter: w,
-			statusCode:     200, // Default to 200 if WriteHeader not called
+			statusCode:     200,
 		}
 
 		// Call next handler

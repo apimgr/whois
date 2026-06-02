@@ -267,13 +267,16 @@ func performBackup(configDir, dataDir string) error {
 	// For CLI usage, default to current directory
 	backupDir := "."
 
+	// OutputFile is empty so backup.Create auto-generates a timestamped name.
+	// IncludeSSL captures SSL certificates; IncludeData is false to keep CLI
+	// backups small (data directory can be very large).
 	opts := &backup.BackupOptions{
 		ConfigDir:   getConfigDir(configDir),
 		DataDir:     getDataDir(configDir),
-		OutputFile:  "", // Will be auto-generated with timestamp
+		OutputFile:  "",
 		Password:    password,
-		IncludeSSL:  true,  // Include SSL certificates
-		IncludeData: false, // Don't include data directory (can be large)
+		IncludeSSL:  true,
+		IncludeData: false,
 		AdminUser:   "cli-user",
 		AppVersion:  Version,
 	}
@@ -334,7 +337,8 @@ func performRestore(backupFile, configDir, dataDir string) error {
 func checkForUpdates(binaryName string) error {
 	// Read update channel from config
 	cfg, err := config.LoadServerConfig(getConfigDir(""))
-	channel := update.ChannelStable // Default
+	// Default to the stable channel; overridden below if server.yml configures otherwise.
+	channel := update.ChannelStable
 	if err == nil && cfg.UpdateChannel != "" {
 		switch cfg.UpdateChannel {
 		case "stable":
@@ -369,7 +373,8 @@ func checkForUpdates(binaryName string) error {
 func performUpdate(binaryName string) error {
 	// Read update channel from config
 	cfg, err := config.LoadServerConfig(getConfigDir(""))
-	channel := update.ChannelStable // Default
+	// Default to the stable channel; overridden below if server.yml configures otherwise.
+	channel := update.ChannelStable
 	if err == nil && cfg.UpdateChannel != "" {
 		switch cfg.UpdateChannel {
 		case "stable":

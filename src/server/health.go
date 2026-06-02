@@ -46,8 +46,10 @@ type ProjectInfo struct {
 
 // BuildInfo - from build-time variables (AI.md PART 7)
 type BuildInfo struct {
-	Commit string `json:"commit"` // git short hash (7 chars)
-	Date   string `json:"date"`   // ISO 8601 build timestamp
+	// Commit is the git short hash (7 chars) embedded at build time.
+	Commit string `json:"commit"`
+	// Date is the ISO 8601 build timestamp embedded at build time.
+	Date string `json:"date"`
 }
 
 // TorInfo - Tor hidden service status (AI.md PART 31)

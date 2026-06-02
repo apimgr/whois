@@ -27,29 +27,37 @@ import (
 	"github.com/go-acme/lego/v4/registration"
 )
 
-// CertManager handles SSL/TLS certificate management
+// CertManager handles SSL/TLS certificate management.
 type CertManager struct {
 	configDir string
 	fqdn      string
-	email     string // Required for ACME registration
-	cert      *tls.Certificate
-	certMu    sync.RWMutex
+	// email is required by ACME providers for account registration.
+	email  string
+	cert   *tls.Certificate
+	certMu sync.RWMutex
 
-	// Let's Encrypt configuration
-	challengeType  string            // "http-01", "tls-alpn-01", "dns-01"
-	dnsProvider    string            // Only for DNS-01
-	dnsCredentials map[string]string // Credentials for DNS provider
-	httpPort       int               // Port for HTTP-01 challenge server (default 80)
-	httpsPort      int               // Port for TLS-ALPN-01 challenge server (default 443)
-	staging        bool              // Use Let's Encrypt staging environment
+	// Let's Encrypt configuration.
+	// challengeType is one of "http-01", "tls-alpn-01", "dns-01".
+	challengeType string
+	// dnsProvider is set only when challengeType is "dns-01".
+	dnsProvider string
+	// dnsCredentials holds provider-specific credentials for DNS-01 challenges.
+	dnsCredentials map[string]string
+	// httpPort is the HTTP-01 challenge listener port (default 80).
+	httpPort int
+	// httpsPort is the TLS-ALPN-01 challenge listener port (default 443).
+	httpsPort int
+	// staging selects the Let's Encrypt staging environment when true.
+	staging bool
 
-	// ACME client
+	// ACME client.
 	acmeClient *lego.Client
 
-	// Auto-renewal
+	// Auto-renewal.
 	renewalCheckInterval time.Duration
-	renewalThreshold     time.Duration // Renew 7 days before expiry
-	stopChan             chan struct{}
+	// renewalThreshold is how long before expiry a renewal is attempted.
+	renewalThreshold time.Duration
+	stopChan         chan struct{}
 }
 
 // ACMEUser implements the ACME registration.User interface

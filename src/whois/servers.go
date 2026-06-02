@@ -19,12 +19,14 @@ var (
 	// IANA - root WHOIS server
 	IANAServer = Server{Host: "whois.iana.org", Port: DefaultPort}
 
-	// Regional Internet Registries (RIR)
-	ARINServer    = Server{Host: "whois.arin.net", Port: DefaultPort}    // North America
-	RIPEServer    = Server{Host: "whois.ripe.net", Port: DefaultPort}    // Europe
-	APNICServer   = Server{Host: "whois.apnic.net", Port: DefaultPort}   // Asia Pacific
-	LACNICServer  = Server{Host: "whois.lacnic.net", Port: DefaultPort}  // Latin America
-	AFRINICServer = Server{Host: "whois.afrinic.net", Port: DefaultPort} // Africa
+	// Regional Internet Registries (RIRs) — one per region:
+	// ARIN: North America, RIPE: Europe, APNIC: Asia Pacific,
+	// LACNIC: Latin America, AFRINIC: Africa.
+	ARINServer    = Server{Host: "whois.arin.net", Port: DefaultPort}
+	RIPEServer    = Server{Host: "whois.ripe.net", Port: DefaultPort}
+	APNICServer   = Server{Host: "whois.apnic.net", Port: DefaultPort}
+	LACNICServer  = Server{Host: "whois.lacnic.net", Port: DefaultPort}
+	AFRINICServer = Server{Host: "whois.afrinic.net", Port: DefaultPort}
 )
 
 // TLD WHOIS servers (common TLDs)

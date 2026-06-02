@@ -39,8 +39,10 @@ type Server struct {
 	email      *email.EmailManager
 	metrics    *metrics.Collector
 	torService *castor.TorService
-	startTime  time.Time   // Server start time for uptime calculation
-	stats      serverStats // Atomic runtime counters
+	// startTime is the server start time, used for uptime calculation.
+	startTime time.Time
+	// stats holds atomic runtime counters surfaced via /server/stats.
+	stats serverStats
 }
 
 // New creates a new Server instance
@@ -140,13 +142,27 @@ func New(cfg *config.ServerConfig, database *db.DB) *Server {
 		startTime: time.Now(),
 	}
 
-	// Register built-in tasks if scheduler initialized
+	// Register built-in tasks if scheduler initialized.
 	if sched != nil {
+		// Wire real implementations for the placeholder built-in tasks
+		// (AI.md PART 18) before registering them.
+		sched.BackupDailyHook = func(ctx context.Context) error {
+			_, err := srv.runBackup("backup")
+			return err
+		}
+		sched.BackupHourlyHook = func(ctx context.Context) error {
+			_, err := srv.runBackup("backup-hourly")
+			return err
+		}
+		// SSLRenewHook and LogRotateHook stay nil until the SSL manager
+		// and logging package are integrated; the task handlers become
+		// no-ops in that case rather than reporting failure.
+
 		if err := sched.RegisterBuiltInTasks(); err != nil {
 			log.Printf("WARN: Failed to register built-in tasks: %v", err)
 		}
 
-		// Register GeoIP update task if GeoIP is enabled
+		// Register GeoIP update task if GeoIP is enabled.
 		if geoipMgr != nil && geoipMgr.Enabled() {
 			if err := srv.registerGeoIPTask(); err != nil {
 				log.Printf("WARN: Failed to register GeoIP task: %v", err)
@@ -376,40 +392,31 @@ func (s *Server) setupRoutes() http.Handler {
 // setupMiddleware configures middleware chain
 // Order matters - security first!
 func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
-	// Wrap with metrics middleware first (outermost) to capture all requests
+	// Middleware is applied innermost-first; the outermost wrapper (last line)
+	// runs first on the request and last on the response. Order matters —
+	// see comments above each wrapper for the layer they implement.
 	if s.metrics != nil {
-		handler = s.metrics.HTTPMiddleware(handler)        // 7. Metrics collection
+		// 7. Metrics collection — outermost so it sees every request.
+		handler = s.metrics.HTTPMiddleware(handler)
 	}
-	handler = s.LoggingMiddleware(handler)              // 7. Log requests
-	handler = AuthMiddleware(handler)                   // 6. Check auth
-	handler = RateLimitMiddleware(s.ratelimit)(handler) // 5. Rate limiting
-	handler = LanguageMiddleware(handler)               // 4. Detect request language
-	handler = SecurityHeadersMiddleware(handler)        // 3. Add security headers
-	handler = PathSecurityMiddleware(handler)           // 2. Validate paths, block traversal
-	handler = URLNormalizeMiddleware(handler)           // 1. FIRST - normalize URLs
+	// 7. Access log.
+	handler = s.LoggingMiddleware(handler)
+	// 6. Authentication.
+	handler = AuthMiddleware(handler)
+	// 5. Rate limiting.
+	handler = RateLimitMiddleware(s.ratelimit)(handler)
+	// 4. Request-language detection.
+	handler = LanguageMiddleware(handler)
+	// 3. Security response headers.
+	handler = SecurityHeadersMiddleware(handler)
+	// 2. Path validation / traversal block.
+	handler = PathSecurityMiddleware(handler)
+	// 1. URL normalization — runs first.
+	handler = URLNormalizeMiddleware(handler)
 	return handler
 }
 
-// handleHealth handles health check requests
-// handleRoot handles root requests
-func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"service":     "caswhois",
-		"description": "WHOIS lookup service",
-		"version":     "0.1.0",
-		"endpoints": []string{
-			"/healthz - Health check",
-			"/api/v1/healthz - API health check",
-			"/api/v1/whois/{query} - WHOIS lookup",
-			"/api/v1/whois-servers - List WHOIS servers",
-			"/api/v1/stats - Service statistics",
-		},
-	}
-
-	SendSuccess(w, data)
-}
-
-// handleWHOIS handles WHOIS lookup requests
+// handleWHOIS handles WHOIS lookup requests.
 func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
 	// Extract query from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/whois/")
@@ -456,17 +463,15 @@ func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
 	SendSuccess(w, data)
 }
 
-// getPIDFilePath returns the PID file path based on privilege level
+// getPIDFilePath returns the PID file path based on privilege level (AI.md PART 23).
 func (s *Server) getPIDFilePath() string {
-// Check if running as root
-if os.Geteuid() == 0 {
-// System-wide PID file
-return "/var/run/casapps/caswhois.pid"
-}
-
-// User-specific PID file
-homeDir, _ := os.UserHomeDir()
-return filepath.Join(homeDir, ".local", "share", "casapps", "caswhois", "caswhois.pid")
+	// System-wide PID file when running as root.
+	if os.Geteuid() == 0 {
+		return "/var/run/casapps/caswhois.pid"
+	}
+	// User-specific PID file otherwise.
+	homeDir, _ := os.UserHomeDir()
+	return filepath.Join(homeDir, ".local", "share", "casapps", "caswhois", "caswhois.pid")
 }
 
 // registerGeoIPTask registers the GeoIP database update task
@@ -484,7 +489,6 @@ func (s *Server) registerGeoIPTask() error {
 		Name:     "GeoIP Database Update",
 		Schedule: "0 3 * * 0", // Weekly on Sunday at 03:00 (cron format)
 		Enabled:  true,
-		Global:   true,
 		Handler: func(ctx context.Context) error {
 			return s.geoip.UpdateDatabases(ctx, cfg)
 		},

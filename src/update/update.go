@@ -192,10 +192,10 @@ func getLatestRelease(channel UpdateChannel) (*Release, error) {
 	// Adjust endpoint based on channel
 	switch channel {
 	case ChannelStable:
-		apiURL += "/latest" // Get latest stable release
+		// /latest returns the most recent non-prerelease release.
+		apiURL += "/latest"
 	case ChannelBeta, ChannelDaily:
-		// Get all releases and filter for pre-releases
-		// This is a simplified implementation
+		// Fetch the most recent release (including prereleases) and filter below.
 		apiURL += "?per_page=1"
 	}
 

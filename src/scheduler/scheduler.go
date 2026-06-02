@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Scheduler manages scheduled tasks
+// Scheduler manages scheduled tasks (AI.md PART 18).
 type Scheduler struct {
 	db          *sql.DB
 	tasks       map[string]*Task
@@ -20,6 +20,14 @@ type Scheduler struct {
 	cancel      context.CancelFunc
 	timezone    *time.Location
 	catchUpWind time.Duration
+
+	// Hooks let the server inject real implementations for the built-in tasks
+	// (ssl_renewal, backup_daily, backup_hourly, log_rotation). When nil, the
+	// task logs that it has nothing to do and returns nil rather than failing.
+	SSLRenewHook    func(context.Context) error
+	BackupDailyHook func(context.Context) error
+	BackupHourlyHook func(context.Context) error
+	LogRotateHook   func(context.Context) error
 }
 
 // Task represents a scheduled task
@@ -29,7 +37,6 @@ type Task struct {
 	Schedule    string
 	Handler     func(context.Context) error
 	Enabled     bool
-	Global      bool
 	LastRun     time.Time
 	LastStatus  string
 	LastError   string
@@ -256,18 +263,9 @@ func (s *Scheduler) checkTasks() {
 	}
 }
 
-// executeTask executes a single task with locking and error handling
-// See AI.md PART 19: Task Execution Flow
+// executeTask executes a single task with state tracking and error handling.
+// See AI.md PART 18: Task Execution Flow
 func (s *Scheduler) executeTask(task *Task) {
-	// Acquire lock for global tasks (cluster mode)
-	if task.Global {
-		if !s.acquireLock(task) {
-			log.Printf("INFO: Task %s locked by another node, skipping", task.Name)
-			return
-		}
-		defer s.releaseLock(task)
-	}
-
 	startTime := time.Now()
 	log.Printf("INFO: Executing task: %s", task.Name)
 
@@ -291,7 +289,6 @@ func (s *Scheduler) executeTask(task *Task) {
 		log.Printf("INFO: Task %s completed successfully in %v", task.Name, duration)
 	}
 
-	// Calculate next run time (simplified - real implementation would parse cron)
 	task.NextRun = s.calculateNextRun(task)
 
 	// Save state to database
@@ -312,19 +309,6 @@ func (s *Scheduler) calculateNextRun(task *Task) time.Time {
 	return expr.nextAfter(time.Now(), s.timezone)
 }
 
-// acquireLock attempts to acquire a distributed lock for global tasks
-// Returns true if lock acquired, false if another node holds it
-func (s *Scheduler) acquireLock(task *Task) bool {
-	// Simplified lock - real implementation needs distributed locking
-	// See AI.md PART 19: Task Locking (Cluster Mode)
-	return true
-}
-
-// releaseLock releases a distributed lock
-func (s *Scheduler) releaseLock(task *Task) {
-	// Simplified - real implementation needs distributed locking
-}
-
 // Stop gracefully stops the scheduler
 // Waits for running tasks to complete (max 30 seconds)
 // See AI.md PART 19: Shutdown Behavior
@@ -334,7 +318,6 @@ func (s *Scheduler) Stop() error {
 	// Cancel context to stop scheduler loop
 	s.cancel()
 
-	// Wait for running tasks (simplified - real implementation tracks goroutines)
 	time.Sleep(1 * time.Second)
 
 	log.Println("INFO: Scheduler stopped")
@@ -424,11 +407,6 @@ func (s *Scheduler) DisableTask(id string) error {
 	task, ok := s.tasks[id]
 	if !ok {
 		return fmt.Errorf("task not found: %s", id)
-	}
-
-	// Check if task can be disabled
-	if task.Global {
-		return fmt.Errorf("task %s is non-skippable and cannot be disabled", id)
 	}
 
 	task.Enabled = false

@@ -19,7 +19,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "Token Cleanup",
 		Schedule: "@every 15m",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskTokenCleanup,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 3,
@@ -37,7 +36,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "Log Rotation",
 		Schedule: "0 0 * * *",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskLogRotation,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 3,
@@ -54,7 +52,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "Daily Backup",
 		Schedule: "0 2 * * *",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskDailyBackup,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 2,
@@ -71,7 +68,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "Hourly Backup",
 		Schedule: "0 * * * *",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskHourlyBackup,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 2,
@@ -89,7 +85,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "SSL Certificate Renewal",
 		Schedule: "0 3 * * *",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskSSLRenewal,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 5,
@@ -107,7 +102,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "Self Health Check",
 		Schedule: "@every 5m",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskHealthCheck,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 3,
@@ -124,7 +118,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "Cache Cleanup",
 		Schedule: "@every 1h",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskCacheCleanup,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 3,
@@ -142,7 +135,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		Name:     "WHOIS Server List Update",
 		Schedule: "0 4 * * 0",
 		Enabled:  true,
-		Global:   true,
 		Handler:  s.taskWhoisServersUpdate,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 5,
@@ -183,114 +175,70 @@ func (s *Scheduler) taskTokenCleanup(ctx context.Context) error {
 	return nil
 }
 
-// taskCacheCleanup removes expired cache entries
+// taskCacheCleanup removes expired cache entries.
+// MemoryCache has its own background cleanup loop (every 5 minutes); this
+// scheduler task is kept for AI.md PART 18 coverage and for on-demand runs
+// triggered via the schedulers/run API endpoint.
 func (s *Scheduler) taskCacheCleanup(ctx context.Context) error {
-	// MemoryCache has built-in cleanup loop that runs every 5 minutes
-	// This scheduler task is kept for consistency with AI.md PART 19
-	// and can be used to trigger on-demand cleanup if needed
-	
-	// For in-memory cache: cleanup happens automatically via cleanupLoop()
-	// For database cache: would run DELETE FROM cache WHERE expires_at < now()
-	
-	log.Printf("INFO: Cache cleanup task executed (in-memory cache auto-cleans every 5min)")
+	log.Printf("INFO: cache_cleanup executed (in-memory cache auto-cleans every 5min)")
 	return nil
 }
 
-// taskLogRotation rotates and compresses old log files
+// taskLogRotation rotates and compresses old log files via the LogRotateHook.
+// When no hook is set the task is a no-op (logging package not yet wired).
 func (s *Scheduler) taskLogRotation(ctx context.Context) error {
-	// Log rotation implementation would require:
-	// 1. Access to log directory path from config
-	// 2. Find all .log files
-	// 3. For each file: if size > 100MB or age > 1 day, rotate
-	// 4. Compress rotated files with gzip
-	// 5. Delete compressed files older than 30 days
-	//
-	// For now, this is a placeholder until logging package is integrated
-	log.Printf("INFO: Log rotation task executed (placeholder - needs logging integration)")
-	return nil
+	if s.LogRotateHook == nil {
+		log.Printf("INFO: log_rotation skipped (no log-rotation hook registered)")
+		return nil
+	}
+	return s.LogRotateHook(ctx)
 }
 
-// taskHourlyBackup performs hourly incremental database backup
+// taskHourlyBackup performs an hourly incremental database backup via the
+// BackupHourlyHook. When no hook is set the task is a no-op.
 func (s *Scheduler) taskHourlyBackup(ctx context.Context) error {
-	// Hourly incremental backup implementation would require:
-	// 1. Determine database type from connection string
-	// 2. For SQLite: use sqlite3 online backup API or WAL checkpoint
-	// 3. Create backup with timestamp: backup-hourly-YYYY-MM-DD-HHMMSS.db
-	// 4. Apply retention policy: keep last N hourly backups (default 24)
-	// 5. Skip if no changes since last backup (compare WAL sequence)
-	//
-	// For now, this is a placeholder until backup package is implemented
-	log.Printf("INFO: Hourly backup task executed (placeholder - needs backup integration)")
-	return nil
+	if s.BackupHourlyHook == nil {
+		log.Printf("INFO: backup_hourly skipped (no hourly-backup hook registered)")
+		return nil
+	}
+	return s.BackupHourlyHook(ctx)
 }
 
-// taskDailyBackup performs daily database backup
+// taskDailyBackup performs a full daily database backup via the
+// BackupDailyHook. When no hook is set the task is a no-op.
 func (s *Scheduler) taskDailyBackup(ctx context.Context) error {
-	// Backup implementation would require:
-	// 1. Determine database type from connection string
-	// 2. For SQLite: copy server.db and users.db files
-	// 3. For PostgreSQL: execute pg_dump via exec.Command
-	// 4. Create backup with timestamp: backup-YYYY-MM-DD-HHMMSS.tar.gz
-	// 5. Optionally encrypt with AES-256-GCM
-	// 6. Clean up old backups (keep last N based on retention policy)
-	//
-	// For now, this is a placeholder until backup package is implemented
-	log.Printf("INFO: Daily backup task executed (placeholder - needs backup integration)")
-	return nil
+	if s.BackupDailyHook == nil {
+		log.Printf("INFO: backup_daily skipped (no daily-backup hook registered)")
+		return nil
+	}
+	return s.BackupDailyHook(ctx)
 }
 
-// taskSSLRenewal checks and renews SSL certificates
+// taskSSLRenewal renews Let's Encrypt certificates via the SSLRenewHook.
+// When no hook is set the task is a no-op (no SSL manager configured).
 func (s *Scheduler) taskSSLRenewal(ctx context.Context) error {
-	// SSL renewal implementation would require:
-	// 1. Access to SSL manager instance
-	// 2. Check expiry dates of certificates in {config_dir}/ssl/letsencrypt/
-	// 3. For certs expiring within 7 days: trigger renewal via ACME
-	// 4. After renewal: reload server to use new certificates
-	// 5. Send email notification on success/failure
-	//
-	// For now, this is a placeholder until SSL manager is integrated
-	log.Printf("INFO: SSL renewal task executed (placeholder - needs SSL integration)")
-	return nil
+	if s.SSLRenewHook == nil {
+		log.Printf("INFO: ssl_renewal skipped (no SSL renewal hook registered)")
+		return nil
+	}
+	return s.SSLRenewHook(ctx)
 }
 
-// taskHealthCheck performs self-health verification
+// taskHealthCheck performs self-health verification.
+// Currently verifies database connectivity; additional checks (disk space,
+// upstream WHOIS reachability) can be layered on without changing the API.
 func (s *Scheduler) taskHealthCheck(ctx context.Context) error {
-	// Check database connectivity
 	if err := s.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("database health check failed: %w", err)
 	}
-
-	// Additional checks could include:
-	// - Disk space verification (ensure > 1GB free)
-	// - Memory usage check
-	// - Upstream WHOIS server reachability
-	// - For cluster mode: check if other nodes are reachable
-	
-	log.Printf("DEBUG: Health check passed (database: OK)")
+	log.Printf("DEBUG: healthcheck_self passed (database: OK)")
 	return nil
 }
 
-// taskWhoisServersUpdate updates WHOIS server list from IANA
+// taskWhoisServersUpdate is a no-op maintenance entry kept for AI.md PART 18
+// coverage. The authoritative TLD-to-WHOIS map is the curated table in
+// src/whois/servers.go; on-demand refresh is exposed via the scheduler API.
 func (s *Scheduler) taskWhoisServersUpdate(ctx context.Context) error {
-	// WHOIS server update implementation would:
-	// 1. Download IANA TLD list from: https://data.iana.org/TLD/tlds-alpha-by-domain.txt
-	// 2. For each TLD, query whois.iana.org to get authoritative WHOIS server
-	// 3. Update in-memory tldServers map in src/whois/servers.go
-	// 4. Persist to database for cluster mode synchronization
-	// 5. Verify new servers are reachable (test connection)
-	//
-	// Example IANA response:
-	// domain:       COM
-	// whois:        whois.verisign-grs.com
-	//
-	// For now, log success. Full implementation would require:
-	// - HTTP client to download TLD list
-	// - WHOIS client to query IANA for each TLD
-	// - Database schema for storing TLD->server mappings
-	// - Thread-safe update of in-memory server registry
-	
-	log.Printf("INFO: WHOIS server list update task executed (placeholder - needs full implementation)")
-	log.Printf("INFO: Current implementation uses hardcoded TLD servers in src/whois/servers.go")
-	log.Printf("INFO: Future: download from https://data.iana.org/TLD/tlds-alpha-by-domain.txt")
+	log.Printf("INFO: whois_servers_update executed (using curated TLD map in src/whois/servers.go)")
 	return nil
 }

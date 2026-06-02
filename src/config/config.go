@@ -18,15 +18,19 @@ type ServerConfig struct {
 	Daemonize bool   `yaml:"daemonize"`
 	PIDFile   bool   `yaml:"pidfile"`
 
-	// Path settings
-	ConfigDir   string `yaml:"config_dir"`
-	DataDir     string `yaml:"data_dir"`
-	LogDir      string `yaml:"log_dir"`
-	DatabaseDir string `yaml:"database_dir"` // SQLite database directory
+	// Path settings.
+	ConfigDir string `yaml:"config_dir"`
+	DataDir   string `yaml:"data_dir"`
+	LogDir    string `yaml:"log_dir"`
+	CacheDir  string `yaml:"cache_dir"`
+	// DatabaseDir is the SQLite database directory.
+	DatabaseDir string `yaml:"database_dir"`
 
-	// Database settings
-	DatabaseDriver string `yaml:"database_driver"` // sqlite, postgres, mysql
-	DatabaseURL    string `yaml:"database_url"`    // Connection string for remote DB
+	// Database settings (PART 10 — SQLite or libsql/Turso only; never PostgreSQL or MySQL).
+	// DatabaseDriver is "sqlite" (default) or "libsql"; empty means auto-detect from URL.
+	DatabaseDriver string `yaml:"database_driver"`
+	// DatabaseURL is the libsql/Turso connection string when using a remote database.
+	DatabaseURL string `yaml:"database_url"`
 
 	// Branding settings
 	BrandingTitle       string `yaml:"branding_title"`

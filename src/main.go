@@ -103,12 +103,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Suppress unused variable warnings for flags consumed only via config
-	_ = cacheDir
-	_ = backupDir
-	_ = pidFile
-	_ = baseURL
+	// langFlag is consumed by the language layer after config load.
 	_ = langFlag
+	// baseURL and pidFile are placeholders for follow-up work; they are
+	// parsed for forward compatibility but not yet applied to config.
+	_ = baseURL
+	_ = pidFile
 
 	// Handle service management
 	if serviceCmd != "" {
@@ -164,10 +164,24 @@ func main() {
 		}
 	}
 
-	// Load configuration
+	// Load configuration.
 	cfg, err := loadConfig(configDir, mode, address, port, debug)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Apply directory overrides from CLI flags (AI.md PART 8).
+	if dataDir != "" {
+		cfg.DataDir = dataDir
+	}
+	if cacheDir != "" {
+		cfg.CacheDir = cacheDir
+	}
+	if logDir != "" {
+		cfg.LogDir = logDir
+	}
+	if backupDir != "" {
+		cfg.BackupDir = backupDir
 	}
 
 	// Initialize database
@@ -367,12 +381,12 @@ func initDatabase(cfg *config.ServerConfig) (*db.DB, error) {
 		Pool:     db.DefaultPoolConfig(),
 	}
 
-	// Parse connection string for PostgreSQL/MySQL
+	// Parse connection string for libsql/Turso remote databases.
 	if url != "" {
-		// Parse database URL (postgres://user:pass@host:port/dbname or mysql://...)
-		dbCfg.Name = "caswhois" // Default database name
-		
-		// Extract database name from URL if present
+		// Default database name when the URL does not specify one.
+		dbCfg.Name = "caswhois"
+
+		// Extract database name from URL if present.
 		if strings.Contains(url, "/") {
 			parts := strings.Split(url, "/")
 			if len(parts) > 0 {

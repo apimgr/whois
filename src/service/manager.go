@@ -21,13 +21,18 @@ const (
 	ServiceHelp      ServiceCommand = "help"
 )
 
-// ServiceManager provides service management functionality
+// ServiceManager provides service management functionality.
 type ServiceManager struct {
-	Name        string // Service name (e.g., "caswhois")
-	DisplayName string // Display name (e.g., "caswhois service")
-	Description string // Service description
-	BinaryPath  string // Path to binary
-	WorkingDir  string // Working directory
+	// Name is the short service name (e.g., "caswhois").
+	Name string
+	// DisplayName is shown in service manager UIs (e.g., "caswhois service").
+	DisplayName string
+	// Description is a one-line service description.
+	Description string
+	// BinaryPath is the absolute path to the binary the service runs.
+	BinaryPath string
+	// WorkingDir is the working directory used when the service starts.
+	WorkingDir string
 }
 
 // NewServiceManager creates a new service manager

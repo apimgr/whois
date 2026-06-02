@@ -61,9 +61,11 @@ RUN apk add --no-cache \
 # Create non-root user
 RUN addgroup -S caswhois && adduser -S caswhois -G caswhois
 
-# Create directories
-RUN mkdir -p /config /data /logs && \
-    chown -R caswhois:caswhois /config /data /logs
+# Create directories.
+# Container layout per AI.md PART 4: /config (config), /data (data + databases),
+# /data/logs (logs), /data/backups (backups).
+RUN mkdir -p /config /data /data/logs /data/backups && \
+    chown -R caswhois:caswhois /config /data
 
 # Copy binary from builder
 COPY --from=builder /build/caswhois /usr/local/bin/caswhois
@@ -72,14 +74,21 @@ COPY --from=builder /build/caswhois /usr/local/bin/caswhois
 COPY docker/file_system/usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Set volumes
-VOLUME ["/config", "/data", "/logs"]
+# Set volumes (logs and backups live inside /data per AI.md PART 4).
+VOLUME ["/config", "/data"]
 
 # Set default timezone (override with TZ env var)
 ENV TZ=America/New_York
 
 # Default internal port (override with PORT env var)
 ENV PORT=80
+
+# Expose the configured HTTP port (AI.md PART 26).
+EXPOSE 80
+
+# Container health check (AI.md PART 26).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- "http://localhost:${PORT}/server/healthz" >/dev/null 2>&1 || exit 1
 
 # Use caswhois user
 USER caswhois
