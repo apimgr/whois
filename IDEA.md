@@ -35,15 +35,15 @@ maintainer_email:  casjay@yahoo.com
 - **GeoIP**: MaxMind GeoLite2 ASN/Country/City; weekly scheduler update
 - **Tor Hidden Service**: Optional onion address via built-in Tor integration
 - **Email/Notifications**: SMTP auto-detection (sendmail→msmtp→ssmtp→direct); explicit SMTP config optional
-- **Bulk Lookup**: POST /api/v1/whois/bulk — batch queries (server-token required)
+- **Bulk Lookup**: Batch WHOIS queries in a single request (server-token required)
 - **Metrics**: Prometheus-compatible /metrics endpoint; token-protected when configured
 - **Backup/Restore**: Argon2id-encrypted backups; daily/hourly retention; --maintenance backup/restore
 - **Self-Update**: --update check/yes/branch for in-place binary replacement with SHA-256 verification
 - **Service Manager**: systemd/OpenRC/runit/s6 (Linux), launchd (macOS), SCM (Windows)
 - **Scheduler**: Built-in; no external cron; tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self
-- **TLS/HTTPS**: Let's Encrypt via lego (HTTP-01/TLS-ALPN-01/DNS-01); auto-renewal at 30d before expiry
-- **Internationalization**: 7 languages (en/es/zh/fr/ar/de/ja); embedded via go:embed; language cookie
-- **CLI Client**: caswhois-cli with TUI (bubbletea), setup wizard, --update, --lang, --color flags
+- **TLS/HTTPS**: Let's Encrypt auto-provisioning (HTTP-01/TLS-ALPN-01/DNS-01 challenges); auto-renewal at 30d before expiry
+- **Internationalization**: 7 languages (en/es/zh/fr/ar/de/ja); embedded at build; language cookie
+- **CLI Client**: caswhois-cli with TUI, setup wizard, --update, --lang, --color flags
 - **Shell Completions**: bash, zsh, fish, powershell via --shell completions
 
 **Data models:**
@@ -88,9 +88,9 @@ maintainer_email:  casjay@yahoo.com
 - Metrics (Prometheus format, token-protected when configured)
 - Autodiscovery (server info + CLI version/sha256 for auto-update)
 - CLI binary download (public by default)
-- /.well-known/security.txt
-- /sitemap.xml and /robots.txt
-- /about and /docs pages (server-side rendered)
+- Security disclosure policy (well-known)
+- Sitemap and robots policy
+- About and API documentation pages (server-side rendered)
 
 **Data sources:**
 
