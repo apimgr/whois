@@ -110,6 +110,12 @@ func ParseAcceptLanguage(header string) string {
 	return "en"
 }
 
+// LocaleJSON returns the raw JSON bytes for the given language code.
+// The caller must pass a validated language code (use IsSupported first).
+func LocaleJSON(lang string) ([]byte, error) {
+	return localeFS.ReadFile("locales/" + lang + ".json")
+}
+
 // IsSupported reports whether the given language code is in the Supported list.
 func IsSupported(lang string) bool {
 	for _, s := range Supported {

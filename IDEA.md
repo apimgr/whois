@@ -1,148 +1,105 @@
-# caswhois
+## Project description
 
-## Project Description
+caswhois is a self-hosted WHOIS lookup service that provides fast, cached information about domain names, IP addresses, and Autonomous System Numbers (ASNs). It ships as a single static binary with an embedded SQLite database, a web interface, a REST API, and a companion CLI client. No external dependencies are required for first-run.
 
-A WHOIS lookup service that provides comprehensive information about domain names, IP addresses, and ASN (Autonomous System Numbers). The service offers both REST API endpoints and a web interface for querying ownership, registration details, and network information.
+Target users include system administrators, network engineers, security researchers, domain investors, and developers who need programmatic access to WHOIS data. The service is fully free — no feature gating, no premium tiers, no telemetry without explicit opt-in.
 
-**Target Users:**
+## Project variables
+
+project_name:      caswhois
+project_org:       casapps
+internal_name:     caswhois
+app_name:          caswhois
+binary:            caswhois
+binary_cli:        caswhois-cli
+module:            github.com/casapps/caswhois
+api_version:       v1
+official_site:     https://caswhois.casapps.dev
+maintainer_name:   CasJay
+maintainer_email:  casjay@yahoo.com
+
+## Business logic
+
+**Target users:**
 - System administrators and network engineers
 - Security researchers and analysts
 - Domain investors and registrars
 - Developers building applications that need WHOIS data
-- Anyone needing domain/IP ownership information
+- Anyone needing domain/IP/ASN ownership information
 
----
+**Features:**
 
-## Project-Specific Features
+- **WHOIS Lookup**: Auto-detect query type (domain, IPv4, IPv6, ASN); query upstream WHOIS servers (IANA, RIRs, TLD-specific); parse structured data from raw responses; fallback to alternate servers on failure
+- **Caching**: In-memory cache (default) or Valkey/Redis (optional); TTL 24h domain, 7d IP/ASN, 5m failures
+- **Rate Limiting**: 60 req/min per IP (configurable in server.yml); never blocks operators via API token
+- **GeoIP**: MaxMind GeoLite2 ASN/Country/City; weekly scheduler update
+- **Tor Hidden Service**: Optional onion address via built-in Tor integration
+- **Email/Notifications**: SMTP auto-detection (sendmail→msmtp→ssmtp→direct); explicit SMTP config optional
+- **Bulk Lookup**: POST /api/v1/whois/bulk — batch queries (server-token required)
+- **Metrics**: Prometheus-compatible /metrics endpoint; token-protected when configured
+- **Backup/Restore**: Argon2id-encrypted backups; daily/hourly retention; --maintenance backup/restore
+- **Self-Update**: --update check/yes/branch for in-place binary replacement with SHA-256 verification
+- **Service Manager**: systemd/OpenRC/runit/s6 (Linux), launchd (macOS), SCM (Windows)
+- **Scheduler**: Built-in; no external cron; tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self
+- **TLS/HTTPS**: Let's Encrypt via lego (HTTP-01/TLS-ALPN-01/DNS-01); auto-renewal at 30d before expiry
+- **Internationalization**: 7 languages (en/es/zh/fr/ar/de/ja); embedded via go:embed; language cookie
+- **CLI Client**: caswhois-cli with TUI (bubbletea), setup wizard, --update, --lang, --color flags
+- **Shell Completions**: bash, zsh, fish, powershell via --shell completions
 
-- **Domain WHOIS**: Query registration details, nameservers, and ownership for domain names
-- **IP WHOIS**: Lookup network ownership, allocation details, and geographic information for IP addresses
-- **ASN WHOIS**: Retrieve Autonomous System information, routing details, and organization data
-- **Multi-format Output**: Support JSON, XML, and plain text responses
-- **Caching**: Intelligent caching to reduce upstream WHOIS server load
-- **Rate Limiting**: Built-in protection against abuse while maintaining usability
+**Data models:**
 
----
+- **whois_cache_meta**: query, query_type, whois_server, raw_response, cached_at, expires_at
+- **api_tokens**: token_hash (SHA-256), token_prefix, resource_type, resource_id, revoked_at, last_used_at
+- **rate_limits**: client_ip, window_start, request_count
+- **scheduler_tasks**: task_id, name, schedule, last_run, next_run, status
+- **scheduler_history**: task_id, ran_at, duration_ms, outcome, error
+- **backups**: filename, created_at, size_bytes, encrypted
+- **audit_log**: event, actor, target, detail, created_at
+- **config**: key, value (runtime-readable config mirror — not for mutation)
 
-## Detailed Specification
+**Business rules:**
 
-### Data Models
+- All configuration via server.yml only — no admin web UI, no runtime mutation via API
+- Token-only auth: tok_ + 32 base62 chars; SHA-256 stored; constant-time compare; never in DB plain
+- SQLite only (default) or libsql/Turso — no PostgreSQL, no MySQL
+- CGO_ENABLED=0 always — single static binary
+- No feature gating — all features free
+- Backup passwords use Argon2id only — never bcrypt, never plaintext
+- WHOIS cache TTLs: domain 24h, IP 7d, ASN 7d, failure 5m
+- Rate limit: 60 req/min per IP (configurable); bypassed by server token
+- Server token auto-generated on first run if absent; stored in server.yml never in DB
+- Anonymous GET allowed on all public endpoints, rate-limited
+- Port: random 64000–64999 on first run; persisted to server.yml
+- Parameterized queries always — no string concatenation in SQL
 
-**Domain Query Result:**
-- domain: Domain name queried
-- registrar: Registrar name and IANA ID
-- registrant: Owner/registrant information (name, organization, email)
-- nameservers: List of authoritative nameservers
-- status: Domain status codes (clientTransferProhibited, etc.)
-- dates: creation_date, updated_date, expiry_date
-- dnssec: DNSSEC status (signed/unsigned)
-- raw: Raw WHOIS response text
+**Endpoints (WHAT — see AI.md PART 14 for paths):**
 
-**IP Query Result:**
-- ip: IP address queried
-- network: Network range (CIDR notation)
-- organization: Organization name
-- asn: Associated Autonomous System Number
-- country: Country code
-- abuse_contact: Abuse reporting email/phone
-- allocation_date: When IP block was allocated
-- raw: Raw WHOIS response text
+- Generic WHOIS lookup (auto-detect domain/IP/ASN)
+- Domain-specific WHOIS lookup
+- IP-specific WHOIS lookup (v4 and v6)
+- ASN-specific WHOIS lookup
+- Query validation (without performing lookup)
+- Bulk lookup (POST, server-token required)
+- WHOIS server list
+- Server statistics
+- Scheduler task list and trigger (server-token required)
+- Backup list and trigger (server-token required)
+- Health check (public, no auth)
+- Metrics (Prometheus format, token-protected when configured)
+- Autodiscovery (server info + CLI version/sha256 for auto-update)
+- CLI binary download (public by default)
+- /.well-known/security.txt
+- /sitemap.xml and /robots.txt
+- /about and /docs pages (server-side rendered)
 
-**ASN Query Result:**
-- asn: Autonomous System Number
-- organization: ASN holder organization
-- description: Network description
-- country: Registration country
-- prefixes: List of announced IP prefixes
-- peers: Peering information (if available)
-- raw: Raw WHOIS response text
+**Data sources:**
 
-### Business Rules
-
-- Query responses cached for 24 hours (domain), 7 days (IP/ASN)
-- Rate limit: 60 queries per minute per IP (configurable)
-- Invalid queries return 400 Bad Request with error message
-- WHOIS server failures cached for 5 minutes to prevent retry storms
-- Privacy: User IP addresses not logged in standard mode
-- GDPR compliance: Minimal data retention, anonymized analytics only
-
-### Features
-
-**WHOIS Lookup:**
-- Auto-detect query type (domain, IPv4, IPv6, ASN)
-- Query upstream WHOIS servers (IANA, regional registries)
-- Parse structured data from raw WHOIS responses
-- Handle different WHOIS server response formats
-- Fallback to alternate WHOIS servers on failure
-
-**Caching:**
-- Redis/Valkey for distributed caching (cluster mode)
-- In-memory cache for single instance mode
-- TTL-based expiration
-- Cache hit/miss metrics
-
-**Output Formats:**
-- JSON (default): Structured data for API consumers
-- XML: For legacy system integration
-- Plain text: Human-readable format for CLI/web
-- HTML: Formatted web interface display
-
-### Endpoints
-
-See AI.md PART 14 for API structure rules. All endpoints follow `/api/v1/` prefix convention.
-
-**WHOIS Endpoints:**
-- Domain lookup: Query domain WHOIS
-- IP lookup: Query IP WHOIS (v4 and v6)
-- ASN lookup: Query AS information
-- Bulk lookup: Query multiple domains/IPs in batch (authenticated users only)
-
-**Utility Endpoints:**
-- Validate domain/IP: Check if query is valid before lookup
-- Available registrars: List supported domain registrars
-- WHOIS servers: List upstream WHOIS servers by TLD/registry
-
-### Data Sources
-
-**Upstream WHOIS Servers:**
 - IANA WHOIS: whois.iana.org (TLD/ASN root)
-- Regional Internet Registries (RIR):
-  - ARIN (North America): whois.arin.net
-  - RIPE NCC (Europe): whois.ripe.net
-  - APNIC (Asia Pacific): whois.apnic.net
-  - LACNIC (Latin America): whois.lacnic.net
-  - AFRINIC (Africa): whois.afrinic.net
-- TLD-specific WHOIS servers (per-domain basis)
-
-**Update Frequency:**
-- WHOIS data: Queried on-demand, cached per TTL rules
-- Server list: Updated weekly via built-in scheduler
-- No local database of all domains (queries are proxied)
-
-### Integration
-
-**API Authentication:**
-- Public endpoints: No auth required, rate-limited
-- Bulk/batch endpoints: API token required (see AI.md PART 11)
-- Admin endpoints: Admin authentication (see AI.md PART 17)
-
-**Client Binary:**
-- CLI mode: `caswhois-cli domain example.com`
-- TUI mode: Interactive terminal interface
-- Output format selection via flags
-
-### Optional Features
-
-**Multi-user Support (PART 34):**
-- User accounts with API token generation
-- Per-user rate limits and query history
-- Usage analytics dashboard
-
-**Organizations (PART 35):**
-- Team-based access to shared query history
-- Organization-level API tokens
-- Centralized billing/quota management
-
-**Custom Domains (PART 36):**
-- Users can access via their own domain
-- Branded WHOIS service for resellers
+- ARIN (North America): whois.arin.net
+- RIPE NCC (Europe): whois.ripe.net
+- APNIC (Asia Pacific): whois.apnic.net
+- LACNIC (Latin America): whois.lacnic.net
+- AFRINIC (Africa): whois.afrinic.net
+- TLD-specific WHOIS servers (per-domain, queried on-demand)
+- MaxMind GeoLite2 (ASN, Country, City) — updated weekly by scheduler
+- No local database of all domains; queries are proxied with caching

@@ -59,15 +59,20 @@ func IsSystemDarkTheme() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return true
 	}
-	// COLORFGBG is set by some terminals: "fg;bg" where bg < 8 means dark
+	// COLORFGBG is set by some terminals: "fg;bg" where bg < 8 means dark.
+	// Parse the numeric background value; single-character comparison is wrong for values >= 10.
 	if v := os.Getenv("COLORFGBG"); v != "" {
 		for i := len(v) - 1; i >= 0; i-- {
 			if v[i] == ';' {
 				bg := v[i+1:]
-				if len(bg) > 0 && bg[0] >= '0' && bg[0] <= '7' {
-					return true
+				n := 0
+				for _, c := range bg {
+					if c < '0' || c > '9' {
+						break
+					}
+					n = n*10 + int(c-'0')
 				}
-				return false
+				return n < 8
 			}
 		}
 	}

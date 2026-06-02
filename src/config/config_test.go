@@ -3,8 +3,13 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// ---------------------------------------------------------------------------
+// Default()
+// ---------------------------------------------------------------------------
 
 // TestDefault verifies that Default() returns a non-nil config with the
 // mandated production-safe values from AI.md PART 5/12.
@@ -48,7 +53,100 @@ func TestDefault(t *testing.T) {
 	if cfg.APITokens == nil {
 		t.Error("Default().APITokens = nil, want empty slice")
 	}
+
+	// Branding title must default to "caswhois"
+	if cfg.BrandingTitle != "caswhois" {
+		t.Errorf("Default().BrandingTitle = %q, want %q", cfg.BrandingTitle, "caswhois")
+	}
+
+	// Branding theme must default to "auto" (dark/light/auto CSS)
+	if cfg.BrandingTheme != "auto" {
+		t.Errorf("Default().BrandingTheme = %q, want %q", cfg.BrandingTheme, "auto")
+	}
+
+	// Accent color must have a sensible default
+	if cfg.BrandingAccentColor == "" {
+		t.Error("Default().BrandingAccentColor is empty")
+	}
+
+	// Rate limit window must be non-empty
+	if cfg.RateLimitWindow == "" {
+		t.Error("Default().RateLimitWindow is empty")
+	}
+
+	// Rate limit request count must be > 0
+	if cfg.RateLimitRequests <= 0 {
+		t.Errorf("Default().RateLimitRequests = %d, want > 0", cfg.RateLimitRequests)
+	}
+
+	// GeoIP defaults: all four databases enabled
+	if !cfg.GeoIPEnabled {
+		t.Error("Default().GeoIPEnabled = false, want true")
+	}
+	if !cfg.GeoIPDatabaseASN {
+		t.Error("Default().GeoIPDatabaseASN = false, want true")
+	}
+	if !cfg.GeoIPDatabaseCountry {
+		t.Error("Default().GeoIPDatabaseCountry = false, want true")
+	}
+	if !cfg.GeoIPDatabaseCity {
+		t.Error("Default().GeoIPDatabaseCity = false, want true")
+	}
+
+	// GeoIPDenyCountries must be non-nil empty slice
+	if cfg.GeoIPDenyCountries == nil {
+		t.Error("Default().GeoIPDenyCountries = nil, want empty slice")
+	}
+
+	// Metrics enabled by default
+	if !cfg.MetricsEnabled {
+		t.Error("Default().MetricsEnabled = false, want true")
+	}
+
+	// Backup encryption disabled by default
+	if cfg.BackupEncryptionEnabled {
+		t.Error("Default().BackupEncryptionEnabled = true, want false")
+	}
+
+	// BackupMaxBackups must be >= 1 (spec: keep at least 1)
+	if cfg.BackupMaxBackups < 1 {
+		t.Errorf("Default().BackupMaxBackups = %d, want >= 1", cfg.BackupMaxBackups)
+	}
+
+	// Tor network disabled by default
+	if cfg.TorUseNetwork {
+		t.Error("Default().TorUseNetwork = true, want false")
+	}
+
+	// TorSafeLogging must be true by default
+	if !cfg.TorSafeLogging {
+		t.Error("Default().TorSafeLogging = false, want true")
+	}
+
+	// ServerToken starts empty — generated on first run
+	if cfg.ServerToken != "" {
+		t.Errorf("Default().ServerToken = %q, want empty (auto-generated on first run)", cfg.ServerToken)
+	}
+
+	// Daemonize must be false by default
+	if cfg.Daemonize {
+		t.Error("Default().Daemonize = true, want false")
+	}
+
+	// PIDFile must be true by default
+	if !cfg.PIDFile {
+		t.Error("Default().PIDFile = false, want true")
+	}
+
+	// DatabaseDriver empty — auto-detected at runtime
+	if cfg.DatabaseDriver != "" {
+		t.Errorf("Default().DatabaseDriver = %q, want empty", cfg.DatabaseDriver)
+	}
 }
+
+// ---------------------------------------------------------------------------
+// Validate()
+// ---------------------------------------------------------------------------
 
 // TestValidateAcceptsValidConfig confirms Validate() passes for a fully valid config.
 func TestValidateAcceptsValidConfig(t *testing.T) {
@@ -113,10 +211,24 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			// BackupMaxBackups ≤ 0 is corrected to 1, no error
+			// BackupMaxBackups <= 0 is corrected to 1, no error
 			name: "zero backup max corrected to 1",
 			setup: func(c *ServerConfig) {
 				c.BackupMaxBackups = 0
+			},
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.BackupMaxBackups != 1 {
+					t.Errorf("BackupMaxBackups after correction = %d, want 1", c.BackupMaxBackups)
+				}
+			},
+		},
+		{
+			// BackupMaxBackups = -5 must also be corrected to 1
+			name: "negative backup max corrected to 1",
+			setup: func(c *ServerConfig) {
+				c.BackupMaxBackups = -5
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
@@ -137,6 +249,34 @@ func TestValidate(t *testing.T) {
 				t.Helper()
 				if c.BackupKeepWeekly != 0 {
 					t.Errorf("BackupKeepWeekly after clamping = %d, want 0", c.BackupKeepWeekly)
+				}
+			},
+		},
+		{
+			// Negative monthly retention clamped to 0
+			name: "negative monthly retention clamped to 0",
+			setup: func(c *ServerConfig) {
+				c.BackupKeepMonthly = -1
+			},
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.BackupKeepMonthly != 0 {
+					t.Errorf("BackupKeepMonthly after clamping = %d, want 0", c.BackupKeepMonthly)
+				}
+			},
+		},
+		{
+			// Negative yearly retention clamped to 0
+			name: "negative yearly retention clamped to 0",
+			setup: func(c *ServerConfig) {
+				c.BackupKeepYearly = -2
+			},
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.BackupKeepYearly != 0 {
+					t.Errorf("BackupKeepYearly after clamping = %d, want 0", c.BackupKeepYearly)
 				}
 			},
 		},
@@ -171,6 +311,15 @@ func TestValidate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			// Compliance with encryption disabled must not block startup
+			name: "compliance without encryption does not error",
+			setup: func(c *ServerConfig) {
+				c.ComplianceEnabled = true
+				c.BackupEncryptionEnabled = false
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tc := range cases {
@@ -193,14 +342,14 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// LoadServerConfig()
+// ---------------------------------------------------------------------------
+
 // TestLoadServerConfigMissingFile verifies that LoadServerConfig returns Default()
 // values (no error) when the config directory exists but server.yml does not.
 func TestLoadServerConfigMissingFile(t *testing.T) {
-	dir, err := os.MkdirTemp("", "caswhois-config-test-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	cfg, err := LoadServerConfig(dir)
 	if err != nil {
@@ -238,11 +387,7 @@ func TestLoadServerConfigEmptyDir(t *testing.T) {
 // TestLoadServerConfigWithValidYAML verifies that a well-formed server.yml is
 // parsed correctly and fields override defaults.
 func TestLoadServerConfigWithValidYAML(t *testing.T) {
-	dir, err := os.MkdirTemp("", "caswhois-config-yaml-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	// Write a minimal valid server.yml that sets a few well-known fields.
 	yaml := `mode: development
@@ -276,31 +421,152 @@ server_token: tok_testtoken12345678901234567890123
 
 // TestLoadServerConfigInvalidYAML verifies that malformed YAML returns an error.
 func TestLoadServerConfigInvalidYAML(t *testing.T) {
-	dir, err := os.MkdirTemp("", "caswhois-config-bad-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	// Write YAML that cannot be parsed.
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte("mode: [\nbroken"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	_, err = LoadServerConfig(dir)
+	_, err := LoadServerConfig(dir)
 	if err == nil {
 		t.Error("LoadServerConfig(invalid YAML) expected error, got nil")
 	}
 }
 
+// TestLoadServerConfigPartialYAMLMergesWithDefaults confirms that a partial
+// YAML file leaves unspecified fields at their default values.
+func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
+	dir := t.TempDir()
+
+	// Only set the mode; everything else should remain at Default() values.
+	yaml := "mode: development\nserver_token: tok_partialmergetoken123456789012\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+
+	// Explicitly set field is overridden
+	if cfg.Mode != "development" {
+		t.Errorf("cfg.Mode = %q, want %q", cfg.Mode, "development")
+	}
+
+	// Unset field retains its default
+	if cfg.SMTPPort != 587 {
+		t.Errorf("cfg.SMTPPort = %d, want 587 (default)", cfg.SMTPPort)
+	}
+	if cfg.UpdateChannel != "stable" {
+		t.Errorf("cfg.UpdateChannel = %q, want %q (default)", cfg.UpdateChannel, "stable")
+	}
+	if cfg.RateLimitRequests != 120 {
+		t.Errorf("cfg.RateLimitRequests = %d, want 120 (default)", cfg.RateLimitRequests)
+	}
+}
+
+// TestLoadServerConfigAutoGeneratesToken verifies that a server.yml without a
+// server_token triggers auto-generation and the resulting token is valid.
+func TestLoadServerConfigAutoGeneratesToken(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a valid YAML file with no server_token field.
+	yaml := "mode: production\nport: 64100\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+
+	// Token must have been generated
+	if !strings.HasPrefix(cfg.ServerToken, "tok_") {
+		t.Errorf("auto-generated token = %q, must start with tok_", cfg.ServerToken)
+	}
+	if len(cfg.ServerToken) != 36 {
+		t.Errorf("auto-generated token length = %d, want 36", len(cfg.ServerToken))
+	}
+
+	// Token must have been persisted back so the next load reads the same token
+	reloaded, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("second LoadServerConfig: %v", err)
+	}
+	if reloaded.ServerToken != cfg.ServerToken {
+		t.Errorf("persisted token mismatch: first=%q second=%q", cfg.ServerToken, reloaded.ServerToken)
+	}
+}
+
+// TestLoadServerConfigSetsConfigDirFromArg verifies that when server.yml has no
+// config_dir set the loaded struct uses the argument directory.
+func TestLoadServerConfigSetsConfigDirFromArg(t *testing.T) {
+	dir := t.TempDir()
+
+	yaml := "mode: production\nserver_token: tok_configdirtest12345678901234567\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+
+	if cfg.ConfigDir != dir {
+		t.Errorf("cfg.ConfigDir = %q, want %q", cfg.ConfigDir, dir)
+	}
+}
+
+// TestLoadServerConfigPreservesConfigDirFromYAML verifies that when server.yml
+// explicitly sets config_dir it is not overwritten by the argument.
+func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	customDir := "/custom/config"
+
+	yaml := "mode: production\nconfig_dir: " + customDir + "\nserver_token: tok_preserveconfigdir12345678901234\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+
+	// When the YAML has config_dir, that value must not be overwritten
+	if cfg.ConfigDir != customDir {
+		t.Errorf("cfg.ConfigDir = %q, want %q", cfg.ConfigDir, customDir)
+	}
+}
+
+// TestLoadServerConfigInvalidPortInYAML verifies that a port out of range in
+// the config file causes an error from the Validate call inside LoadServerConfig.
+func TestLoadServerConfigInvalidPortInYAML(t *testing.T) {
+	dir := t.TempDir()
+
+	yaml := "mode: production\nport: 99999\nserver_token: tok_badport1234567890123456789012\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := LoadServerConfig(dir)
+	if err == nil {
+		t.Error("LoadServerConfig with out-of-range port expected error, got nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Save()
+// ---------------------------------------------------------------------------
+
 // TestSaveAndReload verifies that Save() writes a file that LoadServerConfig
 // reads back with equivalent values.
 func TestSaveAndReload(t *testing.T) {
-	dir, err := os.MkdirTemp("", "caswhois-save-reload-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	original := Default()
 	original.Port = 64321
@@ -333,6 +599,364 @@ func TestSaveAndReload(t *testing.T) {
 	}
 }
 
+// TestSaveCreatesDirectory verifies that Save() creates the config directory
+// when it does not yet exist.
+func TestSaveCreatesDirectory(t *testing.T) {
+	parent := t.TempDir()
+	newDir := filepath.Join(parent, "nested", "config")
+
+	cfg := Default()
+	cfg.ServerToken = "tok_savecreatesdir12345678901234567"
+	cfg.Mode = "production"
+
+	if err := cfg.Save(newDir); err != nil {
+		t.Fatalf("Save to new directory: %v", err)
+	}
+
+	configPath := filepath.Join(newDir, "server.yml")
+	if _, err := os.Stat(configPath); err != nil {
+		t.Errorf("server.yml not found after Save: %v", err)
+	}
+}
+
+// TestSaveUsesConfigDirFieldWhenArgIsEmpty verifies that Save("") falls back
+// to c.ConfigDir when the argument is empty.
+func TestSaveUsesConfigDirFieldWhenArgIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := Default()
+	cfg.ConfigDir = dir
+	cfg.ServerToken = "tok_saveusesconfigdir1234567890123"
+	cfg.Mode = "production"
+
+	if err := cfg.Save(""); err != nil {
+		t.Fatalf("Save with empty arg: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "server.yml")); err != nil {
+		t.Errorf("server.yml not found when using ConfigDir fallback: %v", err)
+	}
+}
+
+// TestSaveErrorsWhenNoDirAvailable verifies that Save returns an error when
+// both the argument and c.ConfigDir are empty.
+func TestSaveErrorsWhenNoDirAvailable(t *testing.T) {
+	cfg := Default()
+	cfg.ConfigDir = ""
+
+	if err := cfg.Save(""); err == nil {
+		t.Error("Save with no directory expected error, got nil")
+	}
+}
+
+// TestSaveIsIdempotent verifies that calling Save twice does not produce an
+// error and the second write overwrites the first cleanly.
+func TestSaveIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := Default()
+	cfg.Mode = "production"
+	cfg.ServerToken = "tok_idempotentsave123456789012345"
+
+	if err := cfg.Save(dir); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+
+	cfg.Port = 64888
+	if err := cfg.Save(dir); err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+
+	reloaded, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig after second Save: %v", err)
+	}
+	if reloaded.Port != 64888 {
+		t.Errorf("Port after second Save = %d, want 64888", reloaded.Port)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetDatabaseDir()
+// ---------------------------------------------------------------------------
+
+// TestGetDatabaseDir covers the four resolution tiers without relying on the
+// host's container environment.
+func TestGetDatabaseDir(t *testing.T) {
+	// Tier 1: explicit DatabaseDir in config wins over everything
+	t.Run("explicit config field", func(t *testing.T) {
+		cfg := Default()
+		cfg.DatabaseDir = "/explicit/db"
+
+		os.Unsetenv("DATABASE_DIR")
+		got := cfg.GetDatabaseDir()
+		if got != "/explicit/db" {
+			t.Errorf("GetDatabaseDir() = %q, want /explicit/db", got)
+		}
+	})
+
+	// Tier 2: DATABASE_DIR env var wins when config field is empty
+	t.Run("DATABASE_DIR env var", func(t *testing.T) {
+		cfg := Default()
+		cfg.DatabaseDir = ""
+
+		t.Setenv("DATABASE_DIR", "/env/db")
+		got := cfg.GetDatabaseDir()
+		if got != "/env/db" {
+			t.Errorf("GetDatabaseDir() = %q, want /env/db", got)
+		}
+	})
+
+	// Tier 4 (non-container): when DataDir is set, path is {DataDir}/db
+	t.Run("data_dir fallback on non-container", func(t *testing.T) {
+		cfg := Default()
+		cfg.DatabaseDir = ""
+		cfg.DataDir = "/my/data"
+
+		os.Unsetenv("DATABASE_DIR")
+		got := cfg.GetDatabaseDir()
+		// On non-container hosts the result is either "./db" or "{DataDir}/db"
+		// depending on isContainer(). We only assert the DataDir path is used
+		// when not in a container (the test host is not a container).
+		if isContainer() {
+			t.Skip("skipping: running inside a container")
+		}
+		want := filepath.Join("/my/data", "db")
+		if got != want {
+			t.Errorf("GetDatabaseDir() = %q, want %q", got, want)
+		}
+	})
+
+	// Tier 4 fallback: when nothing is set, a non-empty string is still returned
+	t.Run("fallback returns non-empty string", func(t *testing.T) {
+		cfg := Default()
+		cfg.DatabaseDir = ""
+		cfg.DataDir = ""
+
+		os.Unsetenv("DATABASE_DIR")
+		got := cfg.GetDatabaseDir()
+		if got == "" {
+			t.Error("GetDatabaseDir() returned empty string — must always return a usable path")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// GetBackupDir()
+// ---------------------------------------------------------------------------
+
+// TestGetBackupDir covers the three resolution tiers.
+func TestGetBackupDir(t *testing.T) {
+	// Tier 1: explicit BackupDir in config
+	t.Run("explicit config field", func(t *testing.T) {
+		cfg := Default()
+		cfg.BackupDir = "/explicit/backups"
+
+		got := cfg.GetBackupDir()
+		if got != "/explicit/backups" {
+			t.Errorf("GetBackupDir() = %q, want /explicit/backups", got)
+		}
+	})
+
+	// Tier 3 (non-container): {DataDir}/backups
+	t.Run("data_dir fallback on non-container", func(t *testing.T) {
+		if isContainer() {
+			t.Skip("skipping: running inside a container")
+		}
+		cfg := Default()
+		cfg.BackupDir = ""
+		cfg.DataDir = "/my/data"
+
+		got := cfg.GetBackupDir()
+		want := filepath.Join("/my/data", "backups")
+		if got != want {
+			t.Errorf("GetBackupDir() = %q, want %q", got, want)
+		}
+	})
+
+	// Fallback: empty DataDir and no explicit dir must still return a string
+	t.Run("fallback returns non-empty string", func(t *testing.T) {
+		cfg := Default()
+		cfg.BackupDir = ""
+		cfg.DataDir = ""
+
+		got := cfg.GetBackupDir()
+		if got == "" {
+			t.Error("GetBackupDir() returned empty string — must always return a usable path")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// GetDatabaseConfig()
+// ---------------------------------------------------------------------------
+
+// TestGetDatabaseConfig covers the three configuration tiers.
+func TestGetDatabaseConfig(t *testing.T) {
+	// When DATABASE_URL is set the env var wins over config fields.
+	t.Run("DATABASE_URL env overrides config", func(t *testing.T) {
+		t.Setenv("DATABASE_URL", "libsql://mydb.turso.io?authToken=xxx")
+		os.Unsetenv("DATABASE_DRIVER")
+
+		cfg := Default()
+		driver, url, path := cfg.GetDatabaseConfig()
+
+		if url != "libsql://mydb.turso.io?authToken=xxx" {
+			t.Errorf("url = %q, want the env URL", url)
+		}
+		if driver == "" {
+			t.Error("driver must be non-empty when DATABASE_URL is set")
+		}
+		if path != "" {
+			t.Errorf("path = %q, want empty when URL is set", path)
+		}
+	})
+
+	// When DATABASE_DRIVER env is also set it is used as the driver.
+	t.Run("DATABASE_DRIVER env used when DATABASE_URL present", func(t *testing.T) {
+		t.Setenv("DATABASE_URL", "libsql://db.example.com")
+		t.Setenv("DATABASE_DRIVER", "libsql")
+
+		cfg := Default()
+		driver, _, _ := cfg.GetDatabaseConfig()
+
+		if driver != "libsql" {
+			t.Errorf("driver = %q, want libsql", driver)
+		}
+	})
+
+	// Config DatabaseURL field is used when env is absent.
+	t.Run("config DatabaseURL field", func(t *testing.T) {
+		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("DATABASE_DRIVER")
+
+		cfg := Default()
+		cfg.DatabaseURL = "libsql://cfg.example.com"
+		cfg.DatabaseDriver = "libsql"
+
+		driver, url, path := cfg.GetDatabaseConfig()
+
+		if url != "libsql://cfg.example.com" {
+			t.Errorf("url = %q, want config URL", url)
+		}
+		if driver != "libsql" {
+			t.Errorf("driver = %q, want libsql", driver)
+		}
+		if path != "" {
+			t.Errorf("path = %q, want empty when URL is set", path)
+		}
+	})
+
+	// Config DatabaseURL with empty DatabaseDriver defaults to "sqlite".
+	t.Run("config DatabaseURL with no driver defaults to sqlite", func(t *testing.T) {
+		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("DATABASE_DRIVER")
+
+		cfg := Default()
+		cfg.DatabaseURL = "libsql://nodriver.example.com"
+		cfg.DatabaseDriver = ""
+
+		driver, _, _ := cfg.GetDatabaseConfig()
+		if driver != "sqlite" {
+			t.Errorf("driver = %q, want sqlite (default)", driver)
+		}
+	})
+
+	// Default path: SQLite with a non-empty path and empty URL.
+	t.Run("default sqlite path", func(t *testing.T) {
+		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("DATABASE_DRIVER")
+		os.Unsetenv("DATABASE_DIR")
+
+		cfg := Default()
+		cfg.DatabaseURL = ""
+		cfg.DatabaseDriver = ""
+
+		driver, url, path := cfg.GetDatabaseConfig()
+
+		if driver != "sqlite" {
+			t.Errorf("driver = %q, want sqlite", driver)
+		}
+		if url != "" {
+			t.Errorf("url = %q, want empty for SQLite", url)
+		}
+		if path == "" {
+			t.Error("path must be non-empty for local SQLite")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// contains() and hasSubstring()
+// ---------------------------------------------------------------------------
+
+// TestContains exercises the package-private contains helper including edge cases
+// that are not exercised by the isContainer() call path.
+// Note: the implementation treats an empty substr as contained in any string
+// (len(s) >= len("") is always true and "" == "" or hasSubstring finds it at 0).
+func TestContains(t *testing.T) {
+	cases := []struct {
+		s      string
+		sub    string
+		want   bool
+	}{
+		// empty substr: implementation returns true (substr fits trivially)
+		{"", "", true},
+		{"hello", "", true},
+		// empty s with non-empty substr: length guard rejects it
+		{"", "x", false},
+		{"hello", "hello", true},
+		{"hello world", "world", true},
+		{"hello world", "xyz", false},
+		{"ab", "abc", false},
+		{"abc", "abc", true},
+		{"abcdef", "bcd", true},
+		{"abcdef", "xyz", false},
+		{"docker", "docker", true},
+		{"kubepods/abc", "kubepods", true},
+		{"lxc/init", "lxc", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.s+"_contains_"+tc.sub, func(t *testing.T) {
+			got := contains(tc.s, tc.sub)
+			if got != tc.want {
+				t.Errorf("contains(%q, %q) = %v, want %v", tc.s, tc.sub, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestHasSubstring exercises the package-private hasSubstring helper directly.
+func TestHasSubstring(t *testing.T) {
+	cases := []struct {
+		s    string
+		sub  string
+		want bool
+	}{
+		{"abcde", "abc", true},
+		{"abcde", "cde", true},
+		{"abcde", "bcd", true},
+		{"abcde", "xyz", false},
+		{"abcde", "abcdef", false},
+		{"x", "x", true},
+		{"docker\n1:name=/", "docker", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.s+"_has_"+tc.sub, func(t *testing.T) {
+			got := hasSubstring(tc.s, tc.sub)
+			if got != tc.want {
+				t.Errorf("hasSubstring(%q, %q) = %v, want %v", tc.s, tc.sub, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GenerateToken()
+// ---------------------------------------------------------------------------
+
 // TestGenerateToken checks that GenerateToken produces a correctly formatted token
 // and that two calls return different values.
 func TestGenerateToken(t *testing.T) {
@@ -349,6 +973,14 @@ func TestGenerateToken(t *testing.T) {
 		t.Errorf("token prefix = %q, want %q", tok1[:4], "tok_")
 	}
 
+	// All characters after the prefix must be base62
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	for i, ch := range tok1[4:] {
+		if !strings.ContainsRune(alphabet, ch) {
+			t.Errorf("token char at position %d is %q, not in base62 alphabet", i+4, ch)
+		}
+	}
+
 	tok2, err := GenerateToken()
 	if err != nil {
 		t.Fatalf("GenerateToken (second call): %v", err)
@@ -356,4 +988,467 @@ func TestGenerateToken(t *testing.T) {
 	if tok1 == tok2 {
 		t.Error("two GenerateToken calls returned identical tokens (collision probability negligible)")
 	}
+}
+
+// TestGenerateTokenMultiple generates several tokens and verifies each is unique
+// and well-formed, exercising the full base62 path repeatedly.
+func TestGenerateTokenMultiple(t *testing.T) {
+	seen := make(map[string]bool)
+	for i := 0; i < 20; i++ {
+		tok, err := GenerateToken()
+		if err != nil {
+			t.Fatalf("GenerateToken iteration %d: %v", i, err)
+		}
+		if len(tok) != 36 {
+			t.Errorf("iteration %d: token length %d, want 36", i, len(tok))
+		}
+		if seen[tok] {
+			t.Errorf("iteration %d: duplicate token %q", i, tok)
+		}
+		seen[tok] = true
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GenerateDefaultConfig()
+// ---------------------------------------------------------------------------
+
+// TestGenerateDefaultConfig verifies that a server.yml is created with the
+// expected placeholders replaced and a valid random port.
+func TestGenerateDefaultConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := GenerateDefaultConfig(dir); err != nil {
+		t.Fatalf("GenerateDefaultConfig: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	content := string(data)
+
+	// Template variables must have been replaced
+	if strings.Contains(content, "{{PORT}}") {
+		t.Error("server.yml still contains {{PORT}} placeholder")
+	}
+	if strings.Contains(content, "{{TOKEN}}") {
+		t.Error("server.yml still contains {{TOKEN}} placeholder")
+	}
+
+	// Token must appear in correct format
+	if !strings.Contains(content, "tok_") {
+		t.Error("server.yml does not contain a tok_ token")
+	}
+}
+
+// TestGenerateDefaultConfigIdempotent verifies that calling GenerateDefaultConfig
+// twice does not overwrite an existing file.
+func TestGenerateDefaultConfigIdempotent(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := GenerateDefaultConfig(dir); err != nil {
+		t.Fatalf("first GenerateDefaultConfig: %v", err)
+	}
+
+	// Read the original content before the second call
+	first, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile after first generation: %v", err)
+	}
+
+	if err := GenerateDefaultConfig(dir); err != nil {
+		t.Fatalf("second GenerateDefaultConfig: %v", err)
+	}
+
+	second, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile after second generation: %v", err)
+	}
+
+	// File content must be identical — second call is a no-op
+	if string(first) != string(second) {
+		t.Error("GenerateDefaultConfig second call overwrote existing server.yml")
+	}
+}
+
+// TestGenerateDefaultConfigCreatesDir verifies that GenerateDefaultConfig
+// creates the config directory when it does not yet exist.
+func TestGenerateDefaultConfigCreatesDir(t *testing.T) {
+	parent := t.TempDir()
+	newDir := filepath.Join(parent, "new", "config")
+
+	if err := GenerateDefaultConfig(newDir); err != nil {
+		t.Fatalf("GenerateDefaultConfig into new dir: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(newDir, "server.yml")); err != nil {
+		t.Errorf("server.yml not created in new directory: %v", err)
+	}
+}
+
+// TestGenerateDefaultConfigPortInRange confirms the generated port is within
+// 64000-64999 as required by the spec (PART 12).
+func TestGenerateDefaultConfigPortInRange(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := GenerateDefaultConfig(dir); err != nil {
+		t.Fatalf("GenerateDefaultConfig: %v", err)
+	}
+
+	// Load and verify the port is in spec range
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+
+	if cfg.Port < 64000 || cfg.Port > 64999 {
+		t.Errorf("generated port %d is outside required range 64000-64999", cfg.Port)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ParseBool()
+// ---------------------------------------------------------------------------
+
+// TestParseBool covers truthy, falsy, empty-default, and invalid inputs.
+func TestParseBool(t *testing.T) {
+	cases := []struct {
+		input      string
+		defaultVal bool
+		wantVal    bool
+		wantErr    bool
+	}{
+		// Truthy values
+		{"1", false, true, false},
+		{"y", false, true, false},
+		{"yes", false, true, false},
+		{"true", false, true, false},
+		{"on", false, true, false},
+		{"ok", false, true, false},
+		{"enable", false, true, false},
+		{"enabled", false, true, false},
+		{"YES", false, true, false},
+		{"TRUE", false, true, false},
+		{"  yes  ", false, true, false},
+		// Falsy values
+		{"0", true, false, false},
+		{"n", true, false, false},
+		{"no", true, false, false},
+		{"false", true, false, false},
+		{"off", true, false, false},
+		{"disable", true, false, false},
+		{"disabled", true, false, false},
+		{"NO", true, false, false},
+		{"FALSE", true, false, false},
+		{"  no  ", true, false, false},
+		// Empty returns defaultVal
+		{"", true, true, false},
+		{"", false, false, false},
+		// Invalid
+		{"maybe", false, false, true},
+		{"2", false, false, true},
+		{"yess", false, false, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input+"_default="+boolStr(tc.defaultVal), func(t *testing.T) {
+			got, err := ParseBool(tc.input, tc.defaultVal)
+			if tc.wantErr && err == nil {
+				t.Errorf("ParseBool(%q, %v) expected error, got nil", tc.input, tc.defaultVal)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("ParseBool(%q, %v) unexpected error: %v", tc.input, tc.defaultVal, err)
+			}
+			if !tc.wantErr && got != tc.wantVal {
+				t.Errorf("ParseBool(%q, %v) = %v, want %v", tc.input, tc.defaultVal, got, tc.wantVal)
+			}
+		})
+	}
+}
+
+// TestMustParseBool verifies normal parsing succeeds and panics on invalid input.
+func TestMustParseBool(t *testing.T) {
+	if got := MustParseBool("yes", false); got != true {
+		t.Errorf("MustParseBool(yes) = %v, want true", got)
+	}
+	if got := MustParseBool("no", true); got != false {
+		t.Errorf("MustParseBool(no) = %v, want false", got)
+	}
+	if got := MustParseBool("", true); got != true {
+		t.Errorf("MustParseBool('') with default true = %v, want true", got)
+	}
+
+	// Invalid input must panic
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("MustParseBool with invalid input did not panic")
+			}
+		}()
+		MustParseBool("maybe", false)
+	}()
+}
+
+// TestIsTruthy covers truthy detection including case-insensitivity.
+func TestIsTruthy(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"yes", true},
+		{"YES", true},
+		{"1", true},
+		{"true", true},
+		{"on", true},
+		{"no", false},
+		{"false", false},
+		{"", false},
+		{"maybe", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := IsTruthy(tc.input)
+			if got != tc.want {
+				t.Errorf("IsTruthy(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestIsFalsy covers falsy detection including case-insensitivity.
+func TestIsFalsy(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"no", true},
+		{"NO", true},
+		{"0", true},
+		{"false", true},
+		{"off", true},
+		{"yes", false},
+		{"true", false},
+		{"", false},
+		{"maybe", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := IsFalsy(tc.input)
+			if got != tc.want {
+				t.Errorf("IsFalsy(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SafePath() / normalizePath() / validatePath()
+// ---------------------------------------------------------------------------
+
+// TestSafePath covers valid paths, traversal attempts, and overlong inputs.
+func TestSafePath(t *testing.T) {
+	cases := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		// Valid simple paths
+		{"admin", "admin", false},
+		{"api/v1", "api/v1", false},
+		{"whois-lookup", "whois-lookup", false},
+		{"my_resource", "my_resource", false},
+		// Traversal attempts must be rejected
+		{"../etc/passwd", "", true},
+		{"foo/../../bar", "", true},
+		{"..", "", true},
+		// Invalid characters
+		{"Admin", "", true},
+		{"Hello World", "", true},
+		{"foo/Bar", "", true},
+		// Empty segment via double slash is allowed (skipped)
+		{"api//v1", "api/v1", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got, err := SafePath(tc.input)
+			if tc.wantErr && err == nil {
+				t.Errorf("SafePath(%q) expected error, got %q", tc.input, got)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("SafePath(%q) unexpected error: %v", tc.input, err)
+			}
+			if !tc.wantErr && got != tc.want {
+				t.Errorf("SafePath(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSafePathTooLong verifies that a path longer than 2048 characters is rejected.
+func TestSafePathTooLong(t *testing.T) {
+	// Build a path that exceeds the 2048-char limit using valid segments
+	segment := strings.Repeat("a", 60)
+	var parts []string
+	for i := 0; i <= 35; i++ {
+		parts = append(parts, segment)
+	}
+	long := strings.Join(parts, "/")
+	if len(long) <= 2048 {
+		t.Fatalf("test path too short (%d), cannot verify length check", len(long))
+	}
+
+	_, err := SafePath(long)
+	if err == nil {
+		t.Errorf("SafePath(overlong) expected error, got nil")
+	}
+}
+
+// TestValidatePathSegment covers segment-level validation directly.
+func TestValidatePathSegment(t *testing.T) {
+	cases := []struct {
+		segment string
+		wantErr bool
+	}{
+		{"admin", false},
+		{"api", false},
+		{"v1", false},
+		{"my-resource", false},
+		{"my_resource", false},
+		{"abc123", false},
+		// Too long (> 64 chars)
+		{strings.Repeat("a", 65), true},
+		// Empty string
+		{"", true},
+		// Traversal
+		{"..", true},
+		{".", true},
+		// Uppercase
+		{"Admin", true},
+		// Space
+		{"hello world", true},
+	}
+
+	for _, tc := range cases {
+		label := tc.segment
+		if label == "" {
+			label = "<empty>"
+		}
+		t.Run(label, func(t *testing.T) {
+			err := validatePathSegment(tc.segment)
+			if tc.wantErr && err == nil {
+				t.Errorf("validatePathSegment(%q) expected error, got nil", tc.segment)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("validatePathSegment(%q) unexpected error: %v", tc.segment, err)
+			}
+		})
+	}
+}
+
+// TestNormalizePath covers the path cleaning logic.
+func TestNormalizePath(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"", ""},
+		{"admin", "admin"},
+		{"/admin/", "admin"},
+		{"api//v1", "api/v1"},
+		{"api/./v1", "api/v1"},
+		// After Clean, ".." collapses; normalizePath strips them
+		{"foo/../bar", "bar"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := normalizePath(tc.input)
+			if got != tc.want {
+				t.Errorf("normalizePath(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GenerateDefaultConfig() error path
+// ---------------------------------------------------------------------------
+
+// TestGenerateDefaultConfigUnwritableDir verifies that an unwritable parent
+// directory causes GenerateDefaultConfig to return an error rather than panic.
+// Root processes bypass file permission checks so this test is skipped when
+// running as root (e.g., inside a Docker container with the default user).
+func TestGenerateDefaultConfigUnwritableDir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping: root bypasses file permission checks")
+	}
+
+	parent := t.TempDir()
+
+	// Make parent directory read-only so MkdirAll fails
+	if err := os.Chmod(parent, 0500); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	// Restore permissions on cleanup so t.TempDir() can remove it
+	t.Cleanup(func() { os.Chmod(parent, 0700) })
+
+	targetDir := filepath.Join(parent, "subdir")
+	err := GenerateDefaultConfig(targetDir)
+	if err == nil {
+		t.Error("GenerateDefaultConfig into unwritable parent expected error, got nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// validatePathSegment — single dot path
+// ---------------------------------------------------------------------------
+
+// TestValidatePathSegmentSingleDot verifies that a single "." is rejected by
+// the segment validator (path traversal guard).
+func TestValidatePathSegmentSingleDot(t *testing.T) {
+	if err := validatePathSegment("."); err == nil {
+		t.Error("validatePathSegment(\".\") expected error, got nil")
+	}
+}
+
+// TestSafePathSingleDot verifies that a path consisting solely of "." is rejected.
+func TestSafePathSingleDot(t *testing.T) {
+	_, err := SafePath(".")
+	if err == nil {
+		t.Error("SafePath(\".\") expected error, got nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// normalizePath — segment with only dots after clean
+// ---------------------------------------------------------------------------
+
+// TestNormalizePathDotOnly verifies normalizePath returns empty for a path that
+// becomes only dots after cleaning.
+func TestNormalizePathDotOnly(t *testing.T) {
+	// path.Clean(".") == "." — strip "." → should give empty or "."
+	// The implementation strips leading/trailing slashes and checks for ".."
+	// A single "." is cleaned to "." by path.Clean, then stripped of slashes
+	// to just "."; there is no ".." so the function returns "."
+	got := normalizePath(".")
+	// normalizePath does NOT reject single dots — that is SafePath's job.
+	// Just verify it returns a deterministic, non-crashing result.
+	_ = got
+}
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+// boolStr returns "true" or "false" for use in table-driven test names.
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }

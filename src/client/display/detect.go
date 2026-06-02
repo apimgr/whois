@@ -14,8 +14,11 @@ const (
 	ModePlain
 )
 
-// isTTY checks if stdout is connected to a terminal
-func isTTY() bool {
+// isTTYFunc is the TTY detection function; overridable in tests.
+var isTTYFunc = defaultIsTTY
+
+// defaultIsTTY checks if stdout is connected to a terminal
+func defaultIsTTY() bool {
 	fi, err := os.Stdout.Stat()
 	if err != nil {
 		return false
@@ -25,7 +28,7 @@ func isTTY() bool {
 
 // Detect returns the appropriate display mode based on terminal state and whether a command was given
 func Detect(hasCommand bool) Mode {
-	if !isTTY() {
+	if !isTTYFunc() {
 		return ModePlain
 	}
 	if hasCommand {

@@ -18,10 +18,16 @@ type CLIConfig struct {
 	Debug         bool   `yaml:"debug"`
 }
 
+// getOS returns the current operating system name; overridable in tests.
+var getOS = func() string { return runtime.GOOS }
+
+// readFile reads a file's contents; overridable in tests to inject errors.
+var readFile = os.ReadFile
+
 // ConfigPath returns the platform-appropriate config file path
 func ConfigPath() string {
 	var base string
-	if runtime.GOOS == "windows" {
+	if getOS() == "windows" {
 		base = os.Getenv("APPDATA")
 		if base == "" {
 			base = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
@@ -43,7 +49,7 @@ func Load() (*CLIConfig, error) {
 	}
 
 	path := ConfigPath()
-	data, err := os.ReadFile(path)
+	data, err := readFile(path)
 	if os.IsNotExist(err) {
 		return cfg, nil
 	}

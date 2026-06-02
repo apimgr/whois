@@ -354,6 +354,12 @@ func (s *Server) setupRoutes() http.Handler {
 	// Autodiscover endpoint (PART 32) — non-versioned, public
 	mux.HandleFunc("/api/autodiscover", s.handleAutodiscover)
 
+	// CLI binary download (PART 32) — public by default; streams prebuilt binaries
+	mux.HandleFunc("/cli/binaries/", s.handleCLIBinaryDownload)
+
+	// Locale JSON files (PART 30) — served for JS consumers; content from embedded i18n files
+	mux.HandleFunc("/locales/", s.handleLocaleJSON)
+
 	// API v1 - Utility (public)
 	mux.HandleFunc("/api/v1/whois-servers", s.handleWhoisServers)
 	mux.HandleFunc("/api/v1/server/stats", s.handleStats)

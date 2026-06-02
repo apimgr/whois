@@ -11,8 +11,9 @@ import (
 
 // DB represents a database connection with common operations
 type DB struct {
-	Server *sql.DB // Server database (server.db)
-	Driver string  // "sqlite"
+	Server     *sql.DB      // Server database (server.db)
+	Driver     string       // "sqlite"
+	closeHook  func() error // optional close override; used in tests to inject close errors
 }
 
 // DatabaseConfig holds database configuration
@@ -97,8 +98,12 @@ func Ping(ctx context.Context, db *sql.DB) error {
 // Close closes all database connections
 func (db *DB) Close() error {
 	if db.Server != nil {
-		if err := db.Server.Close(); err != nil {
-			return fmt.Errorf("close server db: %w", err)
+		closeErr := db.Server.Close()
+		if db.closeHook != nil {
+			closeErr = db.closeHook()
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close server db: %w", closeErr)
 		}
 	}
 	return nil

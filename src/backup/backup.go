@@ -93,36 +93,48 @@ func createBackupArchive(opts *BackupOptions) ([]byte, *Manifest, error) {
 		Encrypted:  false,
 	}
 
-	// Create tar.gz in memory
+	// Pass 1: build archive without manifest to compute checksum over content.
+	contentBuf, err := buildContentArchive(opts, manifest)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Compute checksum of the content-only archive.
+	checksum := sha256.Sum256(contentBuf)
+	manifest.Checksum = "sha256:" + hex.EncodeToString(checksum[:])
+
+	// Pass 2: rebuild archive with manifest.json (now containing the checksum) first.
+	finalBuf, err := buildFinalArchive(opts, manifest, contentBuf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return finalBuf, manifest, nil
+}
+
+// buildContentArchive assembles all backup entries except manifest.json and
+// returns the raw tar.gz bytes. It also populates manifest.Contents.
+func buildContentArchive(opts *BackupOptions, manifest *Manifest) ([]byte, error) {
 	var buf []byte
 	w := &memoryWriter{data: &buf}
 	gzw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gzw)
 
-	// Add manifest.json
-	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal manifest: %w", err)
-	}
-	if err := addFileToTar(tw, "manifest.json", manifestJSON); err != nil {
-		return nil, nil, err
-	}
-
 	// Add server.yml (always included)
 	if err := addPathToTar(tw, opts.ConfigDir, "server.yml", &manifest.Contents); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Add server.db (always included)
 	if err := addPathToTar(tw, opts.DataDir, "server.db", &manifest.Contents); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Add users.db if exists
 	usersDB := filepath.Join(opts.DataDir, "users.db")
 	if fileExists(usersDB) {
 		if err := addPathToTar(tw, opts.DataDir, "users.db", &manifest.Contents); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -130,7 +142,7 @@ func createBackupArchive(opts *BackupOptions) ([]byte, *Manifest, error) {
 	templatesDir := filepath.Join(opts.ConfigDir, "template")
 	if dirExists(templatesDir) {
 		if err := addDirToTar(tw, templatesDir, "template", &manifest.Contents); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -138,7 +150,7 @@ func createBackupArchive(opts *BackupOptions) ([]byte, *Manifest, error) {
 	themesDir := filepath.Join(opts.ConfigDir, "theme")
 	if dirExists(themesDir) {
 		if err := addDirToTar(tw, themesDir, "theme", &manifest.Contents); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -147,7 +159,7 @@ func createBackupArchive(opts *BackupOptions) ([]byte, *Manifest, error) {
 		sslDir := filepath.Join(opts.ConfigDir, "ssl")
 		if dirExists(sslDir) {
 			if err := addDirToTar(tw, sslDir, "ssl", &manifest.Contents); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 		}
 	}
@@ -156,27 +168,70 @@ func createBackupArchive(opts *BackupOptions) ([]byte, *Manifest, error) {
 	if opts.IncludeData {
 		if dirExists(opts.DataDir) {
 			if err := addDirToTar(tw, opts.DataDir, "data", &manifest.Contents); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 		}
 	}
 
-	// Update manifest with final contents
-	manifestJSON, _ = json.MarshalIndent(manifest, "", "  ")
-	
-	// Close tar and gzip writers
 	if err := tw.Close(); err != nil {
-		return nil, nil, fmt.Errorf("close tar writer: %w", err)
+		return nil, fmt.Errorf("close tar writer: %w", err)
 	}
 	if err := gzw.Close(); err != nil {
-		return nil, nil, fmt.Errorf("close gzip writer: %w", err)
+		return nil, fmt.Errorf("close gzip writer: %w", err)
 	}
 
-	// Calculate checksum
-	checksum := sha256.Sum256(buf)
-	manifest.Checksum = "sha256:" + hex.EncodeToString(checksum[:])
+	return buf, nil
+}
 
-	return buf, manifest, nil
+// buildFinalArchive builds the definitive tar.gz: manifest.json (with checksum)
+// first, followed by the content entries from contentBuf re-streamed.
+func buildFinalArchive(opts *BackupOptions, manifest *Manifest, contentBuf []byte) ([]byte, error) {
+	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal manifest: %w", err)
+	}
+
+	var buf []byte
+	w := &memoryWriter{data: &buf}
+	gzw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gzw)
+
+	// Write manifest first
+	if err := addFileToTar(tw, "manifest.json", manifestJSON); err != nil {
+		return nil, err
+	}
+
+	// Re-stream the content entries from the first-pass archive.
+	gzr, err := gzip.NewReader(&bytesReader{data: contentBuf})
+	if err != nil {
+		return nil, fmt.Errorf("open content archive: %w", err)
+	}
+	tr := tar.NewReader(gzr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("re-stream content: %w", err)
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return nil, fmt.Errorf("write re-stream header: %w", err)
+		}
+		if _, err := io.Copy(tw, tr); err != nil {
+			return nil, fmt.Errorf("copy re-stream entry: %w", err)
+		}
+	}
+	gzr.Close()
+
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("close final tar writer: %w", err)
+	}
+	if err := gzw.Close(); err != nil {
+		return nil, fmt.Errorf("close final gzip writer: %w", err)
+	}
+
+	return buf, nil
 }
 
 // encryptBackup encrypts backup data using AES-256-GCM with Argon2id key derivation
@@ -376,10 +431,6 @@ func VerifyBackup(backupFile string, password string) error {
 		archiveData = data
 	}
 
-	// Check 3: Checksum valid (calculate checksum of archive)
-	checksum := sha256.Sum256(archiveData)
-	checksumStr := "sha256:" + hex.EncodeToString(checksum[:])
-
 	// Check 5: Manifest readable & Check 6: Content extraction test
 	// Extract to temporary directory
 	tempDir, err := os.MkdirTemp("", "backup-verify-*")
@@ -404,6 +455,15 @@ func VerifyBackup(backupFile string, password string) error {
 	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return fmt.Errorf("parse manifest: %w", err)
 	}
+
+	// Check 3: Checksum valid — reconstruct content-only archive (no manifest.json)
+	// and compare against the stored checksum, matching how Create computes it.
+	contentBuf, err := rebuildContentArchive(archiveData)
+	if err != nil {
+		return fmt.Errorf("rebuild content archive for checksum: %w", err)
+	}
+	checksum := sha256.Sum256(contentBuf)
+	checksumStr := "sha256:" + hex.EncodeToString(checksum[:])
 
 	// Verify checksum matches
 	if manifest.Checksum != checksumStr {
@@ -495,6 +555,55 @@ func (r *bytesReader) Read(p []byte) (n int, err error) {
 	n = copy(p, r.data[r.pos:])
 	r.pos += n
 	return n, nil
+}
+
+// rebuildContentArchive re-streams a full backup archive, omitting the
+// manifest.json entry, and returns the resulting tar.gz bytes.
+// This mirrors buildContentArchive so VerifyBackup can reproduce the same
+// bytes that were hashed during Create.
+func rebuildContentArchive(archiveData []byte) ([]byte, error) {
+	gzr, err := gzip.NewReader(&bytesReader{data: archiveData})
+	if err != nil {
+		return nil, fmt.Errorf("open archive: %w", err)
+	}
+	defer gzr.Close()
+
+	var buf []byte
+	w := &memoryWriter{data: &buf}
+	gzw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gzw)
+
+	tr := tar.NewReader(gzr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read entry: %w", err)
+		}
+		if hdr.Name == "manifest.json" {
+			if _, err := io.Copy(io.Discard, tr); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return nil, err
+		}
+		if _, err := io.Copy(tw, tr); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("close tar: %w", err)
+	}
+	if err := gzw.Close(); err != nil {
+		return nil, fmt.Errorf("close gzip: %w", err)
+	}
+
+	return buf, nil
 }
 
 // verifyDatabaseIntegrity checks SQLite database integrity

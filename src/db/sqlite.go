@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // NewSQLite creates a SQLite database connection for server.db
@@ -21,7 +21,7 @@ func NewSQLite(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 
 	// Open server database (server.db)
 	serverPath := filepath.Join(cfg.Path, "server.db")
-	serverDB, err := sql.Open("sqlite3", serverPath+"?_journal_mode=WAL&_timeout=5000&_foreign_keys=ON")
+	serverDB, err := sql.Open("sqlite", serverPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)")
 	if err != nil {
 		return nil, fmt.Errorf("open server.db: %w", err)
 	}
