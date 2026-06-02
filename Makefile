@@ -39,7 +39,7 @@ GO_DOCKER := docker run --rm \
 	-v $(GODIR):/go \
 	-w /build \
 	-e CGO_ENABLED=0 \
-	golang:alpine
+	casjaysdev/go:latest
 
 .PHONY: build local release docker test dev clean
 

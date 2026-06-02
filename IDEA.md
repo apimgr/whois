@@ -48,14 +48,14 @@ maintainer_email:  casjay@yahoo.com
 
 **Data models:**
 
-- **whois_cache_meta**: query, query_type, whois_server, raw_response, cached_at, expires_at
-- **api_tokens**: token_hash (SHA-256), token_prefix, resource_type, resource_id, revoked_at, last_used_at
-- **rate_limits**: client_ip, window_start, request_count
-- **scheduler_tasks**: task_id, name, schedule, last_run, next_run, status
-- **scheduler_history**: task_id, ran_at, duration_ms, outcome, error
-- **backups**: filename, created_at, size_bytes, encrypted
-- **audit_log**: event, actor, target, detail, created_at
-- **config**: key, value (runtime-readable config mirror — not for mutation)
+- **config**: key, value (JSON-encoded), type, updated_at (KV store for runtime-readable config; no mutation via API)
+- **config_meta**: id (single-row), version (auto-incremented on any config change), updated_at
+- **rate_limits**: key, count, window_start, updated_at
+- **audit_log**: id, timestamp, level, category, action, actor_ip, target_type, target_id, details, success
+- **scheduler_tasks**: id, name, enabled, schedule, last_run, next_run, last_status, last_error, run_count, fail_count
+- **scheduler_history**: id, task_id → scheduler_tasks, started_at, finished_at, status, error, duration_ms
+- **backups**: id, filename, filepath, size_bytes, type, created_at, checksum, notes
+- **api_tokens**: id, token_hash (SHA-256), token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, revoked_reason
 
 **Business rules:**
 
