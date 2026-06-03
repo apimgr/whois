@@ -8,6 +8,84 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// LogFileConfig holds per-log-file settings from server.yml (AI.md PART 11).
+type LogFileConfig struct {
+	// Enabled controls whether this log file is written (false = discard).
+	Enabled  bool   `yaml:"enabled"`
+	Filename string `yaml:"filename"`
+	// Format selects the output format (apache/nginx/json for access; text/json for server/error).
+	Format   string `yaml:"format"`
+	Custom   string `yaml:"custom"`
+	// Rotate is the rotation policy: daily, weekly, monthly, yearly, NMB, NGB, or combined.
+	Rotate   string `yaml:"rotate"`
+	// Keep is the retention policy: none, N, Nd, Nw, Nm, forever.
+	Keep     string `yaml:"keep"`
+	// Compress rotated files (only useful when keep > 0).
+	Compress bool   `yaml:"compress"`
+}
+
+// LogsConfig mirrors the server.logs block in server.yml (AI.md PART 11).
+type LogsConfig struct {
+	// Level is the global log level: debug, info, warn, error.
+	Level    string       `yaml:"level"`
+	Access   LogFileConfig `yaml:"access"`
+	Server   LogFileConfig `yaml:"server"`
+	Error    LogFileConfig `yaml:"error"`
+	Audit    LogFileConfig `yaml:"audit"`
+	Security LogFileConfig `yaml:"security"`
+	Debug    LogFileConfig `yaml:"debug"`
+}
+
+// DefaultLogsConfig returns the spec-default logging configuration.
+func DefaultLogsConfig() LogsConfig {
+	return LogsConfig{
+		Level: "warn",
+		Access: LogFileConfig{
+			Enabled:  true,
+			Filename: "access.log",
+			Format:   "apache",
+			Rotate:   "monthly",
+			Keep:     "none",
+		},
+		Server: LogFileConfig{
+			Enabled:  true,
+			Filename: "server.log",
+			Format:   "text",
+			Rotate:   "weekly,50MB",
+			Keep:     "none",
+		},
+		Error: LogFileConfig{
+			Enabled:  true,
+			Filename: "error.log",
+			Format:   "text",
+			Rotate:   "weekly,50MB",
+			Keep:     "none",
+		},
+		Audit: LogFileConfig{
+			Enabled:  true,
+			Filename: "audit.log",
+			Format:   "json",
+			Rotate:   "daily",
+			Keep:     "none",
+			Compress: false,
+		},
+		Security: LogFileConfig{
+			Enabled:  true,
+			Filename: "security.log",
+			Format:   "fail2ban",
+			Rotate:   "weekly,50MB",
+			Keep:     "none",
+		},
+		Debug: LogFileConfig{
+			Enabled:  false,
+			Filename: "debug.log",
+			Format:   "text",
+			Rotate:   "weekly,50MB",
+			Keep:     "none",
+		},
+	}
+}
+
 // ServerConfig holds all server configuration
 type ServerConfig struct {
 	// Server settings
@@ -100,6 +178,9 @@ type ServerConfig struct {
 	EmailFromName  string `yaml:"email_from_name"`
 	EmailFromEmail string `yaml:"email_from_email"`
 
+	// Logging configuration (AI.md PART 11)
+	Logs LogsConfig `yaml:"logs"`
+
 	// Debug mode
 	Debug bool `yaml:"debug"`
 
@@ -174,6 +255,7 @@ func Default() *ServerConfig {
 		SMTPTLSMode:   "auto",
 		EmailFromName:  "",    // default: branding title
 		EmailFromEmail: "",    // default: no-reply@{fqdn}
+		Logs:                         DefaultLogsConfig(),
 		Debug:                        false,
 		ServerToken:         "", // auto-generated on first run
 		APITokens:           []string{},
