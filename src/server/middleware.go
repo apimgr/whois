@@ -2,9 +2,9 @@ package server
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/casapps/caswhois/src/config"
 	"github.com/casapps/caswhois/src/ratelimit"
@@ -124,50 +124,72 @@ func AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// LoggingMiddleware logs HTTP requests and records stats.
-// MUST be LAST in middleware chain (logs final request state)
+// LoggingMiddleware logs HTTP requests in Apache Combined Log Format to access.log
+// and records runtime stats.  MUST be LAST in middleware chain.
 func (s *Server) LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
 		s.stats.connOpen()
 		defer s.stats.connClose()
 		s.stats.recordRequest()
 
-		// Wrap ResponseWriter to capture status code
+		// Wrap ResponseWriter to capture status code and bytes written.
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-		// Process request
 		next.ServeHTTP(wrapped, r)
 
-		// Log request
-		duration := time.Since(start)
-		log.Printf("%s %s %d %s %s",
+		// Extract host without port for the Apache Combined remote-addr field.
+		remoteHost := r.RemoteAddr
+		if host, _, err := net.SplitHostPort(remoteHost); err == nil {
+			remoteHost = host
+		}
+
+		// Write Apache Combined Log Format line to access.log.
+		// Falls back silently when no logger / file is configured.
+		if s.logger != nil {
+			s.logger.WriteAccess(
+				remoteHost,
+				r.Method,
+				r.URL.RequestURI(),
+				r.Proto,
+				wrapped.statusCode,
+				wrapped.bytesWritten,
+				r.Referer(),
+				r.UserAgent(),
+			)
+		}
+
+		// Emit a compact summary to stderr/stdout for interactive use.
+		log.Printf("[%s] %s %s %d %dB",
 			r.Method,
 			r.URL.Path,
-			wrapped.statusCode,
-			duration,
 			r.RemoteAddr,
+			wrapped.statusCode,
+			wrapped.bytesWritten,
 		)
 	})
 }
 
-// responseWriter wraps http.ResponseWriter to capture status code
+
+// responseWriter wraps http.ResponseWriter to capture the status code and
+// total bytes written — both are needed for Apache Combined Log Format.
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode   int
+	bytesWritten int
 }
 
-// WriteHeader captures the status code
+// WriteHeader captures the status code.
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Write ensures status code is captured even if WriteHeader not called
+// Write captures bytes written and ensures status code is recorded.
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if rw.statusCode == 0 {
 		rw.statusCode = http.StatusOK
 	}
-	return rw.ResponseWriter.Write(b)
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
 }

@@ -1,0 +1,280 @@
+// Package logger opens and manages the four required log files for caswhois.
+// Log files per AI.md PART 11:
+//   access.log  — Apache Combined Log Format (HTTP requests)
+//   server.log  — Text format (application events)
+//   error.log   — Text format (error messages)
+//   audit.log   — JSON format (security events; machine-parseable)
+//   security.log — Fail2ban format (security/auth events)
+//
+// All log files are raw text only: no ANSI codes, no emojis, one event per line.
+package logger
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+// Logger owns file handles for all required log files.
+type Logger struct {
+	mu sync.Mutex
+
+	dir string
+
+	// File handles (nil when dir is empty or file could not be opened)
+	accessFile   *os.File
+	serverFile   *os.File
+	errorFile    *os.File
+	auditFile    *os.File
+	securityFile *os.File
+
+	// slog handler writing to serverFile; swapped on Rotate.
+	serverHandler slog.Handler
+	// slog handler writing to errorFile; swapped on Rotate.
+	errorHandler slog.Handler
+}
+
+// Open creates the log directory and opens all log files in append mode.
+// If dir is empty, Open is a no-op and all writes become no-ops.
+func Open(dir string) (*Logger, error) {
+	if dir == "" {
+		return &Logger{}, nil
+	}
+
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return nil, fmt.Errorf("logger: create log dir %s: %w", dir, err)
+	}
+
+	l := &Logger{dir: dir}
+	if err := l.openFiles(); err != nil {
+		l.Close()
+		return nil, err
+	}
+	return l, nil
+}
+
+// openFiles opens (or reopens) each log file.  Called by Open and Rotate.
+// Must be called with l.mu held OR before the logger is shared.
+func (l *Logger) openFiles() error {
+	files := []struct {
+		name string
+		dest **os.File
+	}{
+		{"access.log", &l.accessFile},
+		{"server.log", &l.serverFile},
+		{"error.log", &l.errorFile},
+		{"audit.log", &l.auditFile},
+		{"security.log", &l.securityFile},
+	}
+
+	for _, f := range files {
+		path := filepath.Join(l.dir, f.name)
+		fh, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+		if err != nil {
+			return fmt.Errorf("logger: open %s: %w", path, err)
+		}
+		*f.dest = fh
+	}
+
+	// Build slog handlers for server.log and error.log.
+	// Use the plain text (non-JSON) handler so lines match the spec format:
+	//   2024-10-10T13:55:36-04:00 [INFO] message key=value
+	l.serverHandler = newTextHandler(l.serverFile)
+	l.errorHandler = newTextHandler(l.errorFile)
+
+	return nil
+}
+
+// Close flushes and closes all open log file handles.
+func (l *Logger) Close() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.auditFile, l.securityFile} {
+		if fh != nil {
+			_ = fh.Close()
+		}
+	}
+}
+
+// Rotate reopens all log files (called on SIGUSR1 so external rotation tools
+// can truncate or rename the old files while the server keeps running).
+func (l *Logger) Rotate() error {
+	if l.dir == "" {
+		return nil
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Close existing handles silently.
+	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.auditFile, l.securityFile} {
+		if fh != nil {
+			_ = fh.Close()
+		}
+	}
+	l.accessFile = nil
+	l.serverFile = nil
+	l.errorFile = nil
+	l.auditFile = nil
+	l.securityFile = nil
+
+	return l.openFiles()
+}
+
+// AccessWriter returns the underlying writer for access.log.
+// The HTTP middleware writes pre-formatted Apache Combined Log lines directly.
+// Returns io.Discard when no file is open.
+func (l *Logger) AccessWriter() io.Writer {
+	if l.accessFile == nil {
+		return io.Discard
+	}
+	return l.accessFile
+}
+
+// WriteAccess writes a single Apache Combined Log Format line to access.log.
+//
+// Format: host ident authuser [time] "request" status bytes "referer" "agent"
+func (l *Logger) WriteAccess(remoteAddr, method, path, proto string, status, bytes int, referer, userAgent string) {
+	if l.accessFile == nil {
+		return
+	}
+
+	ident := "-"
+	authUser := "-"
+	timeStr := time.Now().Format("02/Jan/2006:15:04:05 -0700")
+	if referer == "" {
+		referer = "-"
+	}
+	if userAgent == "" {
+		userAgent = "-"
+	}
+
+	line := fmt.Sprintf("%s %s %s [%s] \"%s %s %s\" %d %d \"%s\" \"%s\"\n",
+		remoteAddr, ident, authUser, timeStr,
+		method, path, proto,
+		status, bytes,
+		referer, userAgent,
+	)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.accessFile != nil {
+		_, _ = l.accessFile.WriteString(line)
+	}
+}
+
+// Info writes an INFO-level event to server.log.
+func (l *Logger) Info(msg string, args ...any) {
+	l.writeText(l.serverHandler, slog.LevelInfo, msg, args...)
+}
+
+// Warn writes a WARN-level event to server.log.
+func (l *Logger) Warn(msg string, args ...any) {
+	l.writeText(l.serverHandler, slog.LevelWarn, msg, args...)
+}
+
+// Error writes an ERROR-level event to both error.log and server.log.
+func (l *Logger) Error(msg string, args ...any) {
+	l.writeText(l.errorHandler, slog.LevelError, msg, args...)
+	l.writeText(l.serverHandler, slog.LevelError, msg, args...)
+}
+
+// writeText emits a slog record through the given handler under l.mu.
+func (l *Logger) writeText(h slog.Handler, level slog.Level, msg string, args ...any) {
+	if h == nil {
+		return
+	}
+	r := slog.NewRecord(time.Now(), level, msg, 0)
+	for i := 0; i+1 < len(args); i += 2 {
+		key, ok := args[i].(string)
+		if !ok {
+			key = fmt.Sprintf("%v", args[i])
+		}
+		r.AddAttrs(slog.Any(key, args[i+1]))
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_ = h.Handle(context.Background(), r)
+}
+
+// AuditEntry is the JSON structure written to audit.log.
+type AuditEntry struct {
+	Time       string `json:"time"`
+	Level      string `json:"level"`
+	Category   string `json:"category"`
+	Action     string `json:"action"`
+	ActorIP    string `json:"actor_ip,omitempty"`
+	TargetType string `json:"target_type,omitempty"`
+	TargetID   string `json:"target_id,omitempty"`
+	Details    string `json:"details,omitempty"`
+	Success    bool   `json:"success"`
+}
+
+// WriteAudit appends a JSON audit entry to audit.log.
+func (l *Logger) WriteAudit(entry AuditEntry) {
+	if l.auditFile == nil {
+		return
+	}
+	if entry.Time == "" {
+		entry.Time = time.Now().Format(time.RFC3339)
+	}
+	if entry.Level == "" {
+		entry.Level = "INFO"
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.auditFile != nil {
+		_, _ = l.auditFile.Write(data)
+		_, _ = l.auditFile.WriteString("\n")
+	}
+}
+
+// WriteSecurity appends a Fail2ban-compatible line to security.log.
+//
+// Format: 2024-10-10T13:55:36-04:00 [security] message
+func (l *Logger) WriteSecurity(msg string) {
+	if l.securityFile == nil {
+		return
+	}
+
+	line := fmt.Sprintf("%s [security] %s\n", time.Now().Format(time.RFC3339), msg)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.securityFile != nil {
+		_, _ = l.securityFile.WriteString(line)
+	}
+}
+
+// newTextHandler builds a slog.Handler whose output matches the spec text format:
+//
+//	2024-10-10T13:55:36-04:00 [INFO] message key=value
+//
+// slog.NewTextHandler produces key=value logfmt which is close; we wrap it to
+// replace the default time key layout with the spec-required format.
+func newTextHandler(w io.Writer) slog.Handler {
+	opts := &slog.HandlerOptions{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			// Format time as RFC3339 with timezone offset.
+			if a.Key == slog.TimeKey {
+				a.Value = slog.StringValue(a.Value.Time().Format(time.RFC3339))
+			}
+			return a
+		},
+	}
+	return slog.NewTextHandler(w, opts)
+}

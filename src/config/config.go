@@ -302,17 +302,17 @@ func (c *ServerConfig) GetDatabaseDir() string {
 	return "./db"
 }
 
-// GetBackupDir returns the backup directory
-// Priority: Explicit config -> Container default -> Native default
+// GetBackupDir returns the backup directory.
+// Priority: Explicit config → Container default → Native default
 func (c *ServerConfig) GetBackupDir() string {
 	// 1. Explicit configuration
 	if c.BackupDir != "" {
 		return c.BackupDir
 	}
 
-	// 2. Container default: /data/backups
+	// 2. Container default: /data/backups/caswhois (AI.md PART 4)
 	if isContainer() {
-		return "/data/backups"
+		return "/data/backups/caswhois"
 	}
 
 	// 3. Native default: {data_dir}/backups
@@ -322,6 +322,28 @@ func (c *ServerConfig) GetBackupDir() string {
 
 	// Fallback to current directory
 	return "./backups"
+}
+
+// GetLogDir returns the log directory.
+// Priority: Explicit config → Container default → Native default
+func (c *ServerConfig) GetLogDir() string {
+	// 1. Explicit configuration or CLI --log flag override
+	if c.LogDir != "" {
+		return c.LogDir
+	}
+
+	// 2. Container default: /data/log/caswhois (AI.md PART 4)
+	if isContainer() {
+		return "/data/log/caswhois"
+	}
+
+	// 3. Native: use the data directory as a base when LogDir is not set
+	if c.DataDir != "" {
+		return filepath.Join(c.DataDir, "logs")
+	}
+
+	// Fallback
+	return "./logs"
 }
 
 // GetDatabaseConfig returns database configuration from environment and config
@@ -350,8 +372,8 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	return driver, "", path
 }
 
-// isContainer detects if running in a container
-func isContainer() bool {
+// IsContainer detects if running in a container (Docker, LXC, Kubernetes).
+func IsContainer() bool {
 	// Check for Docker
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		return true
@@ -367,6 +389,9 @@ func isContainer() bool {
 
 	return false
 }
+
+// isContainer is the unexported alias used internally.
+func isContainer() bool { return IsContainer() }
 
 // contains checks if string contains substring
 func contains(s, substr string) bool {

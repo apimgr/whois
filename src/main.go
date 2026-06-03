@@ -11,6 +11,7 @@ import (
 
 	"github.com/casapps/caswhois/src/config"
 	"github.com/casapps/caswhois/src/db"
+	"github.com/casapps/caswhois/src/logger"
 	"github.com/casapps/caswhois/src/server"
 	"github.com/casapps/caswhois/src/service"
 )
@@ -191,11 +192,22 @@ func main() {
 	}
 	defer database.Close()
 
+	// Initialize log file infrastructure (PART 11).
+	// GetLogDir() returns the correct OS/container-specific path.
+	lgr, err := logger.Open(cfg.GetLogDir())
+	if err != nil {
+		log.Printf("WARNING: could not open log files in %s: %v — logging to stderr only", cfg.GetLogDir(), err)
+		lgr = nil
+	}
+	if lgr != nil {
+		defer lgr.Close()
+	}
+
 	// Print startup banner
 	printStartupBanner(cfg)
 
 	// Create and start server
-	srv := server.New(cfg, database)
+	srv := server.New(cfg, database, lgr)
 	if err := srv.Start(); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
@@ -422,8 +434,17 @@ func initDatabase(cfg *config.ServerConfig) (*db.DB, error) {
 }
 
 func getDefaultConfigDir() string {
-	// Check if running as root (Unix) or Administrator (Windows)
-	// For now, use user directory (will implement privilege detection later)
+	// Container path per AI.md PART 4: /config/caswhois/
+	if config.IsContainer() {
+		return "/config/caswhois"
+	}
+
+	// Running as root on Linux/Unix: use system-wide path
+	if os.Getuid() == 0 {
+		return "/etc/casapps/caswhois"
+	}
+
+	// Non-root user: XDG-compatible per-user config directory
 	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Printf("Warning: Could not determine home directory: %v", err)

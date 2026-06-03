@@ -1,14 +1,14 @@
 # Multi-stage Dockerfile for caswhois
-# Build stage: golang:alpine
+# Build stage: casjaysdev/go:latest (AI.md PART 26)
 # Runtime stage: alpine:latest
 
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM golang:alpine AS builder
+FROM casjaysdev/go:latest AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git
+RUN apk add --no-cache git bash
 
 # Set working directory
 WORKDIR /build
@@ -23,13 +23,15 @@ RUN go mod download
 COPY src/ ./src/
 
 # Build arguments for version info (set via docker build --build-arg)
+# TARGETARCH is automatically set by docker buildx (amd64 or arm64)
+ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT_ID=unknown
 ARG BUILD_DATE=unknown
 ARG OFFICIAL_SITE=https://github.com/casapps/caswhois
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+# Build the binary (multi-arch via TARGETARCH per AI.md PART 26)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
     -ldflags="-s -w \
       -X 'main.Version=${VERSION}' \
       -X 'main.CommitID=${COMMIT_ID}' \
@@ -61,10 +63,18 @@ RUN apk add --no-cache \
 # Create non-root user
 RUN addgroup -S caswhois && adduser -S caswhois -G caswhois
 
-# Create directories.
-# Container layout per AI.md PART 4: /config (config), /data (data + databases),
-# /data/logs (logs), /data/backups (backups).
-RUN mkdir -p /config /data /data/logs /data/backups && \
+# Create directories per AI.md PART 4 container paths.
+# /config/caswhois — server.yml and runtime config
+# /data/caswhois   — application data
+# /data/log/caswhois — log files (access.log, server.log, error.log, audit.log)
+# /data/backups/caswhois — encrypted backup archives
+# /data/db/sqlite  — SQLite database directory
+RUN mkdir -p \
+      /config/caswhois \
+      /data/caswhois \
+      /data/log/caswhois \
+      /data/backups/caswhois \
+      /data/db/sqlite && \
     chown -R caswhois:caswhois /config /data
 
 # Copy binary from builder
@@ -86,9 +96,9 @@ ENV PORT=80
 # Expose the configured HTTP port (AI.md PART 26).
 EXPOSE 80
 
-# Container health check (AI.md PART 26).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- "http://localhost:${PORT}/server/healthz" >/dev/null 2>&1 || exit 1
+# Container health check (AI.md PART 26: --status exit code 0=healthy, 1=unhealthy).
+HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
+    CMD /usr/local/bin/caswhois --status || exit 1
 
 # Use caswhois user
 USER caswhois

@@ -17,6 +17,7 @@ import (
 	"github.com/casapps/caswhois/src/db"
 	"github.com/casapps/caswhois/src/email"
 	"github.com/casapps/caswhois/src/geoip"
+	caslogger "github.com/casapps/caswhois/src/logger"
 	"github.com/casapps/caswhois/src/metrics"
 	"github.com/casapps/caswhois/src/ratelimit"
 	runtimeinfo "github.com/casapps/caswhois/src/runtime"
@@ -39,14 +40,17 @@ type Server struct {
 	email      *email.EmailManager
 	metrics    *metrics.Collector
 	torService *castor.TorService
+	// logger manages the four required log files (PART 11).
+	logger *caslogger.Logger
 	// startTime is the server start time, used for uptime calculation.
 	startTime time.Time
 	// stats holds atomic runtime counters surfaced via /server/stats.
 	stats serverStats
 }
 
-// New creates a new Server instance
-func New(cfg *config.ServerConfig, database *db.DB) *Server {
+// New creates a new Server instance.
+// lgr may be nil; logging is silently disabled in that case.
+func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Server {
 	memCache := cache.NewMemoryCache(100*1024*1024, 5*time.Minute)
 	rateLimiter := ratelimit.New(60, 1*time.Minute)
 
@@ -139,6 +143,7 @@ func New(cfg *config.ServerConfig, database *db.DB) *Server {
 		geoip:     geoipMgr,
 		email:     emailMgr,
 		metrics:   metricsCollector,
+		logger:    lgr,
 		startTime: time.Now(),
 	}
 
@@ -172,9 +177,13 @@ func New(cfg *config.ServerConfig, database *db.DB) *Server {
 				return srv.torService.Health(ctx)
 			}
 		}
-		// SSLRenewHook and LogRotateHook stay nil until the SSL manager
-		// and logging package are integrated; the task handlers become
-		// no-ops in that case rather than reporting failure.
+		// Wire log-rotation hook if the logger is available (PART 11 / PART 18).
+		if lgr != nil {
+			sched.LogRotateHook = func(_ context.Context) error {
+				return lgr.Rotate()
+			}
+		}
+		// SSLRenewHook stays nil until the SSL manager is integrated.
 
 		if err := sched.RegisterBuiltInTasks(); err != nil {
 			log.Printf("WARN: Failed to register built-in tasks: %v", err)
@@ -284,6 +293,21 @@ func (s *Server) Start() error {
 	// Channel for OS signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+
+	// SIGUSR1 reopens log files so external rotation tools (logrotate) can work.
+	rotateSig := make(chan os.Signal, 1)
+	signal.Notify(rotateSig, syscall.SIGUSR1)
+	go func() {
+		for range rotateSig {
+			if s.logger != nil {
+				if err := s.logger.Rotate(); err != nil {
+					log.Printf("ERROR: log rotation failed: %v", err)
+				} else {
+					log.Printf("Log files reopened (SIGUSR1)")
+				}
+			}
+		}
+	}()
 
 	// Wait for shutdown signal or server error
 	select {
