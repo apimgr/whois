@@ -21,13 +21,16 @@ type Scheduler struct {
 	timezone    *time.Location
 	catchUpWind time.Duration
 
-	// Hooks let the server inject real implementations for the built-in tasks
-	// (ssl_renewal, backup_daily, backup_hourly, log_rotation). When nil, the
-	// task logs that it has nothing to do and returns nil rather than failing.
-	SSLRenewHook    func(context.Context) error
-	BackupDailyHook func(context.Context) error
-	BackupHourlyHook func(context.Context) error
-	LogRotateHook   func(context.Context) error
+	// Hooks let the server inject real implementations for built-in tasks.
+	// When nil the task logs a no-op message and returns nil rather than failing.
+	SSLRenewHook       func(context.Context) error
+	BackupDailyHook    func(context.Context) error
+	BackupHourlyHook   func(context.Context) error
+	LogRotateHook      func(context.Context) error
+	GeoIPUpdateHook    func(context.Context) error
+	BlocklistUpdateHook func(context.Context) error
+	CVEUpdateHook      func(context.Context) error
+	TorHealthHook      func(context.Context) error
 }
 
 // Task represents a scheduled task
@@ -53,8 +56,8 @@ type RetryPolicy struct {
 	Backoff    string
 }
 
-// New creates a new scheduler instance
-// See AI.md PART 19 for configuration requirements
+// New creates a new scheduler instance.
+// The scheduler uses the scheduler_tasks table created by the main DB schema (PART 10).
 func New(db *sql.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, error) {
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
@@ -73,35 +76,7 @@ func New(db *sql.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, 
 		catchUpWind: catchUpWindow,
 	}
 
-	// Initialize scheduler state table
-	if err := s.initSchema(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to initialize scheduler schema: %w", err)
-	}
-
 	return s, nil
-}
-
-// initSchema creates scheduler state table
-func (s *Scheduler) initSchema() error {
-	query := `
-	CREATE TABLE IF NOT EXISTS scheduler_state (
-		task_id TEXT PRIMARY KEY,
-		task_name TEXT NOT NULL,
-		schedule TEXT NOT NULL,
-		last_run TIMESTAMP,
-		last_status TEXT,
-		last_error TEXT,
-		next_run TIMESTAMP,
-		run_count INTEGER DEFAULT 0,
-		fail_count INTEGER DEFAULT 0,
-		enabled BOOLEAN DEFAULT TRUE,
-		locked_by TEXT,
-		locked_at TIMESTAMP
-	)`
-
-	_, err := s.db.Exec(query)
-	return err
 }
 
 // Register adds a task to the scheduler
@@ -123,13 +98,13 @@ func (s *Scheduler) Register(task *Task) error {
 	return nil
 }
 
-// loadTaskState loads task state from database
+// loadTaskState loads task state from the scheduler_tasks table (PART 10 schema).
 func (s *Scheduler) loadTaskState(task *Task) error {
 	query := `
-	SELECT task_name, schedule, last_run, last_status, last_error,
+	SELECT name, schedule, last_run, last_status, last_error,
 	       next_run, run_count, fail_count, enabled
-	FROM scheduler_state
-	WHERE task_id = ?`
+	FROM scheduler_tasks
+	WHERE id = ?`
 
 	row := s.db.QueryRow(query, task.ID)
 
@@ -165,11 +140,11 @@ func (s *Scheduler) loadTaskState(task *Task) error {
 	return nil
 }
 
-// saveTaskState saves task state to database
+// saveTaskState persists task state to the scheduler_tasks table (PART 10 schema).
 func (s *Scheduler) saveTaskState(task *Task) error {
 	query := `
-	INSERT OR REPLACE INTO scheduler_state
-	(task_id, task_name, schedule, last_run, last_status, last_error,
+	INSERT OR REPLACE INTO scheduler_tasks
+	(id, name, schedule, last_run, last_status, last_error,
 	 next_run, run_count, fail_count, enabled)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -391,9 +366,9 @@ func (s *Scheduler) EnableTask(id string) error {
 
 	task.Enabled = true
 
-	// Update in database
+	// Persist enabled state to scheduler_tasks
 	_, err := s.db.Exec(
-		"UPDATE scheduler_state SET enabled = TRUE WHERE task_id = ?",
+		"UPDATE scheduler_tasks SET enabled = 1 WHERE id = ?",
 		id,
 	)
 	return err
@@ -411,9 +386,9 @@ func (s *Scheduler) DisableTask(id string) error {
 
 	task.Enabled = false
 
-	// Update in database
+	// Persist disabled state to scheduler_tasks
 	_, err := s.db.Exec(
-		"UPDATE scheduler_state SET enabled = FALSE WHERE task_id = ?",
+		"UPDATE scheduler_tasks SET enabled = 0 WHERE id = ?",
 		id,
 	)
 	return err

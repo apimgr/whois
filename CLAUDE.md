@@ -101,11 +101,12 @@ Purpose:
 - Testing/docs/i18n: `.claude/rules/testing-rules.md` (PART 28, 29, 30)
 - Tor hidden service: `AI.md` PART 31 (no rules file yet)
 - CLI client (caswhois-cli): `AI.md` PART 32 (no rules file yet)
+- IDEA.md format: `AI.md` PART 33 (no rules file yet)
 
 ## Current Project State
 - Last read AI.md: 2026-06-02
-- Current task: Spec compliance — CLAUDE.md + IDEA.md + Makefile fixes
-- Relevant PARTs: 0, 1, 7, 8, 18, 25, 33
+- Current task: Spec compliance — schema, scheduler, server hooks
+- Relevant PARTs: 0, 1, 7, 8, 10, 18, 19, 25, 31, 33
 - Test coverage: below 100% target (make test enforces 100%)
 - Build image: casjaysdev/go:latest (NOT golang:alpine)
 - PART 27: Skipped — no CI/CD workflow files

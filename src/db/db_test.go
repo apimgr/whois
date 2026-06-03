@@ -411,13 +411,13 @@ func TestEnsureSchema_TablesExist(t *testing.T) {
 	// Every table defined in the schema must be queryable after open.
 	expectedTables := []string{
 		"config",
+		"config_meta",
 		"rate_limits",
 		"audit_log",
 		"scheduler_tasks",
 		"scheduler_history",
 		"backups",
 		"api_tokens",
-		"whois_cache_meta",
 	}
 
 	for _, table := range expectedTables {

@@ -95,6 +95,27 @@ func (s *TorService) GetHTTPClient(useTor bool) *http.Client {
 	}
 }
 
+// Health checks whether the Tor process is alive and, when outbound connections
+// are available, verifies the SOCKS dialer is still functional.
+// Returns nil when healthy, a non-nil error otherwise.
+func (s *TorService) Health(ctx context.Context) error {
+	if s.t == nil {
+		return fmt.Errorf("tor: process not initialized")
+	}
+	if s.dialer == nil {
+		// Hidden-service-only mode: process is up but no outbound dialer.
+		return nil
+	}
+	// Attempt a lightweight test connection through the SOCKS proxy to verify
+	// Tor circuit availability.
+	conn, err := s.dialer.DialContext(ctx, "tcp", "check.torproject.org:443")
+	if err != nil {
+		return fmt.Errorf("tor: outbound circuit check failed: %w", err)
+	}
+	conn.Close()
+	return nil
+}
+
 // Close shuts down the dedicated Tor process.
 func (s *TorService) Close() error {
 	if s.t != nil {

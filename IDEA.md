@@ -40,7 +40,7 @@ maintainer_email:  casjay@yahoo.com
 - **Backup/Restore**: Argon2id-encrypted backups; daily/hourly retention; --maintenance backup/restore
 - **Self-Update**: --update check/yes/branch for in-place binary replacement with SHA-256 verification
 - **Service Manager**: systemd/OpenRC/runit/s6 (Linux), launchd (macOS), SCM (Windows)
-- **Scheduler**: Built-in; no external cron; tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self
+- **Scheduler**: Built-in; no external cron; tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update, tor_health
 - **TLS/HTTPS**: Let's Encrypt auto-provisioning (HTTP-01/TLS-ALPN-01/DNS-01 challenges); auto-renewal at 30d before expiry
 - **Internationalization**: 7 languages (en/es/zh/fr/ar/de/ja); embedded at build; language cookie
 - **CLI Client**: caswhois-cli with TUI, setup wizard, --update, --lang, --color flags

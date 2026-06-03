@@ -49,104 +49,132 @@ func NewSQLite(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 // ensureSchema creates all tables if they don't exist (idempotent)
 func (db *DB) ensureSchema(ctx context.Context) error {
 	statements := []string{
-		// Configuration key-value store
+		// Configuration key-value store (dot-notation keys, JSON-encoded values)
 		`CREATE TABLE IF NOT EXISTS config (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_by TEXT
+			key        TEXT PRIMARY KEY,
+			value      TEXT NOT NULL,
+			type       TEXT NOT NULL DEFAULT 'string',
+			updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 		)`,
 
-		// Rate limiting sliding window counters
+		// Single-row config change-detection sentinel; version bumped by trigger
+		`CREATE TABLE IF NOT EXISTS config_meta (
+			id         INTEGER PRIMARY KEY CHECK (id = 1),
+			version    INTEGER NOT NULL DEFAULT 1,
+			updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+		)`,
+
+		// Seed the single config_meta row (idempotent)
+		`INSERT OR IGNORE INTO config_meta (id, version) VALUES (1, 1)`,
+
+		// Auto-increment config version on any config change
+		`CREATE TRIGGER IF NOT EXISTS config_version_bump
+		AFTER INSERT ON config
+		BEGIN
+			UPDATE config_meta SET version = version + 1,
+			updated_at = strftime('%s', 'now') WHERE id = 1;
+		END`,
+
+		`CREATE TRIGGER IF NOT EXISTS config_version_bump_upd
+		AFTER UPDATE ON config
+		BEGIN
+			UPDATE config_meta SET version = version + 1,
+			updated_at = strftime('%s', 'now') WHERE id = 1;
+		END`,
+
+		`CREATE TRIGGER IF NOT EXISTS config_version_bump_del
+		AFTER DELETE ON config
+		BEGIN
+			UPDATE config_meta SET version = version + 1,
+			updated_at = strftime('%s', 'now') WHERE id = 1;
+		END`,
+
+		// Rate limiting sliding-window counters
 		`CREATE TABLE IF NOT EXISTS rate_limits (
-			key TEXT PRIMARY KEY,
-			count INTEGER DEFAULT 0,
-			reset_at TIMESTAMP NOT NULL,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			key          TEXT PRIMARY KEY,
+			count        INTEGER NOT NULL DEFAULT 1,
+			window_start INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			updated_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 		)`,
 
 		// Audit log for config changes and security events
 		`CREATE TABLE IF NOT EXISTS audit_log (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			action TEXT NOT NULL,
-			resource_type TEXT,
-			resource_id TEXT,
-			details TEXT,
-			ip_address TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp   INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			level       TEXT NOT NULL DEFAULT 'info',
+			category    TEXT NOT NULL,
+			action      TEXT NOT NULL,
+			actor_ip    TEXT,
+			target_type TEXT,
+			target_id   TEXT,
+			details     TEXT,
+			success     INTEGER NOT NULL DEFAULT 1
 		)`,
 
-		// Scheduler task definitions
+		// Scheduler task definitions and state (see PART 18)
 		`CREATE TABLE IF NOT EXISTS scheduler_tasks (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			schedule TEXT NOT NULL,
-			enabled INTEGER DEFAULT 1,
-			last_run TIMESTAMP,
-			next_run TIMESTAMP,
+			id          TEXT PRIMARY KEY,
+			name        TEXT NOT NULL,
+			enabled     INTEGER NOT NULL DEFAULT 1,
+			schedule    TEXT NOT NULL,
+			last_run    INTEGER,
+			next_run    INTEGER,
 			last_status TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			last_error  TEXT,
+			run_count   INTEGER NOT NULL DEFAULT 0,
+			fail_count  INTEGER NOT NULL DEFAULT 0
 		)`,
 
-		// Scheduler execution history
+		// Per-run execution history for scheduler tasks
 		`CREATE TABLE IF NOT EXISTS scheduler_history (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			task_id TEXT NOT NULL,
-			started_at TIMESTAMP NOT NULL,
-			completed_at TIMESTAMP,
-			status TEXT NOT NULL,
-			error TEXT,
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			task_id     TEXT NOT NULL,
+			started_at  INTEGER NOT NULL,
+			finished_at INTEGER,
+			status      TEXT NOT NULL,
+			error       TEXT,
+			duration_ms INTEGER,
 			FOREIGN KEY (task_id) REFERENCES scheduler_tasks(id) ON DELETE CASCADE
 		)`,
 
-		// Backup metadata
+		// Backup file metadata (see PART 21)
 		`CREATE TABLE IF NOT EXISTS backups (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			filename TEXT NOT NULL,
-			size INTEGER NOT NULL,
-			type TEXT NOT NULL,
-			encrypted INTEGER DEFAULT 0,
-			checksum TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			status TEXT DEFAULT 'completed'
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			filename   TEXT NOT NULL UNIQUE,
+			filepath   TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			type       TEXT NOT NULL DEFAULT 'auto',
+			created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			checksum   TEXT,
+			notes      TEXT
 		)`,
 
-		// API tokens (SHA-256 hashes only — never plaintext)
-		// server.token from config is NOT stored here; it is validated
-		// directly via constant-time SHA-256 comparison.
+		// API tokens — SHA-256 hashes only; server.token is NOT stored here
 		`CREATE TABLE IF NOT EXISTS api_tokens (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			token_hash    TEXT NOT NULL UNIQUE,
-			token_prefix  TEXT NOT NULL,
-			name          TEXT,
-			resource_type TEXT,
-			resource_id   TEXT,
-			created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			expires_at    TIMESTAMP,
-			last_used_at  TIMESTAMP,
-			revoked_at    TIMESTAMP
-		)`,
-
-		// WHOIS query cache metadata
-		`CREATE TABLE IF NOT EXISTS whois_cache_meta (
-			query TEXT PRIMARY KEY,
-			query_type TEXT NOT NULL,
-			hits INTEGER DEFAULT 0,
-			last_hit TIMESTAMP,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			expires_at TIMESTAMP NOT NULL
+			id             INTEGER PRIMARY KEY AUTOINCREMENT,
+			token_hash     TEXT NOT NULL UNIQUE,
+			token_prefix   TEXT NOT NULL,
+			resource_type  TEXT NOT NULL,
+			resource_id    TEXT NOT NULL,
+			created_at     INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			expires_at     INTEGER,
+			last_used_at   INTEGER,
+			revoked_at     INTEGER,
+			revoked_reason TEXT
 		)`,
 
 		// Indexes
-		`CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at)`,
-		`CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_config_key ON config(key)`,
+		`CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON rate_limits(window_start)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_log_category ON audit_log(category)`,
 		`CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_tokens_hash     ON api_tokens(token_hash)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix   ON api_tokens(token_prefix)`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduler_history_started ON scheduler_history(started_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix ON api_tokens(token_prefix)`,
 		`CREATE INDEX IF NOT EXISTS idx_api_tokens_resource ON api_tokens(resource_type, resource_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_tokens_active   ON api_tokens(revoked_at) WHERE revoked_at IS NULL`,
-		`CREATE INDEX IF NOT EXISTS idx_whois_cache_expires ON whois_cache_meta(expires_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(revoked_at) WHERE revoked_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_backups_created ON backups(created_at)`,
 	}
 
 	for _, stmt := range statements {

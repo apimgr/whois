@@ -154,19 +154,30 @@ func New(cfg *config.ServerConfig, database *db.DB) *Server {
 			_, err := srv.runBackup("backup-hourly")
 			return err
 		}
+		// Wire GeoIP update hook if GeoIP is enabled (PART 19).
+		if geoipMgr != nil && geoipMgr.Enabled() {
+			geoCfg := geoip.DatabaseConfig{
+				ASN:     cfg.GeoIPDatabaseASN,
+				Country: cfg.GeoIPDatabaseCountry,
+				City:    cfg.GeoIPDatabaseCity,
+				WHOIS:   cfg.GeoIPDatabaseWHOIS,
+			}
+			sched.GeoIPUpdateHook = func(ctx context.Context) error {
+				return geoipMgr.UpdateDatabases(ctx, geoCfg)
+			}
+		}
+		// Wire Tor health hook if Tor is running (PART 31).
+		if srv.torService != nil {
+			sched.TorHealthHook = func(ctx context.Context) error {
+				return srv.torService.Health(ctx)
+			}
+		}
 		// SSLRenewHook and LogRotateHook stay nil until the SSL manager
 		// and logging package are integrated; the task handlers become
 		// no-ops in that case rather than reporting failure.
 
 		if err := sched.RegisterBuiltInTasks(); err != nil {
 			log.Printf("WARN: Failed to register built-in tasks: %v", err)
-		}
-
-		// Register GeoIP update task if GeoIP is enabled.
-		if geoipMgr != nil && geoipMgr.Enabled() {
-			if err := srv.registerGeoIPTask(); err != nil {
-				log.Printf("WARN: Failed to register GeoIP task: %v", err)
-			}
 		}
 	}
 
@@ -474,31 +485,6 @@ func (s *Server) getPIDFilePath() string {
 	return filepath.Join(homeDir, ".local", "share", "casapps", "caswhois", "caswhois.pid")
 }
 
-// registerGeoIPTask registers the GeoIP database update task
-// PART 20: Weekly on Sunday 03:00
-func (s *Server) registerGeoIPTask() error {
-	cfg := geoip.DatabaseConfig{
-		ASN:     s.config.GeoIPDatabaseASN,
-		Country: s.config.GeoIPDatabaseCountry,
-		City:    s.config.GeoIPDatabaseCity,
-		WHOIS:   s.config.GeoIPDatabaseWHOIS,
-	}
-
-	return s.scheduler.Register(&scheduler.Task{
-		ID:       "geoip_update",
-		Name:     "GeoIP Database Update",
-		Schedule: "0 3 * * 0", // Weekly on Sunday at 03:00 (cron format)
-		Enabled:  true,
-		Handler: func(ctx context.Context) error {
-			return s.geoip.UpdateDatabases(ctx, cfg)
-		},
-		RetryPolicy: &scheduler.RetryPolicy{
-			MaxRetries: 3,
-			RetryDelay: 30 * time.Minute,
-			Backoff:    "exponential",
-		},
-	})
-}
 
 // handleMetrics returns the Prometheus metrics handler
 // PART 21: /metrics endpoint (INTERNAL ONLY)

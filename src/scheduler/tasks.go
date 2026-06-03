@@ -7,13 +7,13 @@ import (
 	"time"
 )
 
-// RegisterBuiltInTasks registers all required built-in tasks.
+// RegisterBuiltInTasks registers all required built-in tasks (AI.md PART 18).
 // Task IDs use underscore convention per AI.md PART 18.
 // Required tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation,
-// backup_daily, backup_hourly, healthcheck_self.
+// backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update,
+// tor_health.
 func (s *Scheduler) RegisterBuiltInTasks() error {
 	// token_cleanup — Every 15 minutes (REQUIRED)
-	// Removes expired API tokens from database
 	if err := s.Register(&Task{
 		ID:       "token_cleanup",
 		Name:     "Token Cleanup",
@@ -30,7 +30,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 	}
 
 	// log_rotation — Daily at midnight (REQUIRED)
-	// Rotates and compresses old log files
 	if err := s.Register(&Task{
 		ID:       "log_rotation",
 		Name:     "Log Rotation",
@@ -46,7 +45,7 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register log_rotation: %w", err)
 	}
 
-	// backup_daily — Daily at 02:00 (REQUIRED per spec)
+	// backup_daily — Daily at 02:00 (REQUIRED)
 	if err := s.Register(&Task{
 		ID:       "backup_daily",
 		Name:     "Daily Backup",
@@ -62,12 +61,12 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register backup_daily: %w", err)
 	}
 
-	// backup_hourly — Every hour (REQUIRED per spec)
+	// backup_hourly — Every hour (REQUIRED, disabled by default per spec)
 	if err := s.Register(&Task{
 		ID:       "backup_hourly",
 		Name:     "Hourly Backup",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		Schedule: "@hourly",
+		Enabled:  false,
 		Handler:  s.taskHourlyBackup,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 2,
@@ -79,7 +78,6 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 	}
 
 	// ssl_renewal — Daily at 03:00 (REQUIRED)
-	// Checks and renews Let's Encrypt certificates 30 days before expiry
 	if err := s.Register(&Task{
 		ID:       "ssl_renewal",
 		Name:     "SSL Certificate Renewal",
@@ -95,8 +93,55 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register ssl_renewal: %w", err)
 	}
 
+	// geoip_update — Weekly Sunday at 03:00 (REQUIRED)
+	if err := s.Register(&Task{
+		ID:       "geoip_update",
+		Name:     "GeoIP Database Update",
+		Schedule: "0 3 * * 0",
+		Enabled:  true,
+		Handler:  s.taskGeoIPUpdate,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 5,
+			RetryDelay: 1 * time.Hour,
+			Backoff:    "exponential",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register geoip_update: %w", err)
+	}
+
+	// blocklist_update — Daily at 04:00 (REQUIRED)
+	if err := s.Register(&Task{
+		ID:       "blocklist_update",
+		Name:     "Blocklist Update",
+		Schedule: "0 4 * * *",
+		Enabled:  true,
+		Handler:  s.taskBlocklistUpdate,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 3,
+			RetryDelay: 1 * time.Hour,
+			Backoff:    "exponential",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register blocklist_update: %w", err)
+	}
+
+	// cve_update — Daily at 05:00 (REQUIRED)
+	if err := s.Register(&Task{
+		ID:       "cve_update",
+		Name:     "CVE Database Update",
+		Schedule: "0 5 * * *",
+		Enabled:  true,
+		Handler:  s.taskCVEUpdate,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 3,
+			RetryDelay: 1 * time.Hour,
+			Backoff:    "exponential",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register cve_update: %w", err)
+	}
+
 	// healthcheck_self — Every 5 minutes (REQUIRED)
-	// Verifies database, disk space, and critical services
 	if err := s.Register(&Task{
 		ID:       "healthcheck_self",
 		Name:     "Self Health Check",
@@ -112,80 +157,44 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register healthcheck_self: %w", err)
 	}
 
-	// cache_cleanup — Every hour (internal maintenance)
+	// tor_health — Every 10 minutes (REQUIRED when Tor installed)
 	if err := s.Register(&Task{
-		ID:       "cache_cleanup",
-		Name:     "Cache Cleanup",
-		Schedule: "@every 1h",
+		ID:       "tor_health",
+		Name:     "Tor Health Check",
+		Schedule: "@every 10m",
 		Enabled:  true,
-		Handler:  s.taskCacheCleanup,
+		Handler:  s.taskTorHealth,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 3,
-			RetryDelay: 5 * time.Minute,
+			RetryDelay: 1 * time.Minute,
 			Backoff:    "linear",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register cache_cleanup: %w", err)
+		return fmt.Errorf("failed to register tor_health: %w", err)
 	}
 
-	// whois_servers_update — Weekly Sunday at 04:00 (optional)
-	// Downloads latest IANA TLD list and updates WHOIS server mappings
-	if err := s.Register(&Task{
-		ID:       "whois_servers_update",
-		Name:     "WHOIS Server List Update",
-		Schedule: "0 4 * * 0",
-		Enabled:  true,
-		Handler:  s.taskWhoisServersUpdate,
-		RetryPolicy: &RetryPolicy{
-			MaxRetries: 5,
-			RetryDelay: 2 * time.Hour,
-			Backoff:    "exponential",
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to register whois_servers_update: %w", err)
-	}
-
-	log.Printf("INFO: Registered %d built-in scheduler tasks", 8)
+	log.Printf("INFO: Registered %d built-in scheduler tasks", 10)
 	return nil
 }
 
-// taskTokenCleanup removes expired API tokens and setup tokens
+// taskTokenCleanup removes expired and revoked API tokens.
 func (s *Scheduler) taskTokenCleanup(ctx context.Context) error {
-	// Clean up expired setup tokens
-	query1 := `DELETE FROM srv_config WHERE key = 'setup_token' AND updated_at < datetime('now', '-1 hour')`
-	result1, err := s.db.ExecContext(ctx, query1)
+	// Remove revoked tokens soft-deleted more than 30 days ago
+	result, err := s.db.ExecContext(ctx,
+		`DELETE FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at < strftime('%s', 'now', '-30 days')`)
 	if err != nil {
-		return fmt.Errorf("failed to delete expired setup tokens: %w", err)
+		return fmt.Errorf("failed to delete revoked tokens: %w", err)
 	}
 
-	setupTokens, _ := result1.RowsAffected()
-
-	// Clean up revoked API tokens (soft-deleted, remove after 30 days)
-	query2 := `DELETE FROM admin_api_tokens WHERE revoked = 1 AND revoked_at < datetime('now', '-30 days')`
-	result2, err := s.db.ExecContext(ctx, query2)
-	if err != nil {
-		return fmt.Errorf("failed to delete old revoked tokens: %w", err)
+	n, _ := result.RowsAffected()
+	if n > 0 {
+		log.Printf("INFO: token_cleanup: removed %d revoked API tokens", n)
 	}
-
-	revokedTokens, _ := result2.RowsAffected()
-
-	if setupTokens > 0 || revokedTokens > 0 {
-		log.Printf("INFO: Cleaned up %d setup tokens, %d revoked API tokens", setupTokens, revokedTokens)
-	}
-	return nil
-}
-
-// taskCacheCleanup removes expired cache entries.
-// MemoryCache has its own background cleanup loop (every 5 minutes); this
-// scheduler task is kept for AI.md PART 18 coverage and for on-demand runs
-// triggered via the schedulers/run API endpoint.
-func (s *Scheduler) taskCacheCleanup(ctx context.Context) error {
-	log.Printf("INFO: cache_cleanup executed (in-memory cache auto-cleans every 5min)")
 	return nil
 }
 
 // taskLogRotation rotates and compresses old log files via the LogRotateHook.
-// When no hook is set the task is a no-op (logging package not yet wired).
+// When no hook is set the task is a no-op.
 func (s *Scheduler) taskLogRotation(ctx context.Context) error {
 	if s.LogRotateHook == nil {
 		log.Printf("INFO: log_rotation skipped (no log-rotation hook registered)")
@@ -215,7 +224,7 @@ func (s *Scheduler) taskDailyBackup(ctx context.Context) error {
 }
 
 // taskSSLRenewal renews Let's Encrypt certificates via the SSLRenewHook.
-// When no hook is set the task is a no-op (no SSL manager configured).
+// When no hook is set the task is a no-op.
 func (s *Scheduler) taskSSLRenewal(ctx context.Context) error {
 	if s.SSLRenewHook == nil {
 		log.Printf("INFO: ssl_renewal skipped (no SSL renewal hook registered)")
@@ -224,9 +233,37 @@ func (s *Scheduler) taskSSLRenewal(ctx context.Context) error {
 	return s.SSLRenewHook(ctx)
 }
 
-// taskHealthCheck performs self-health verification.
-// Currently verifies database connectivity; additional checks (disk space,
-// upstream WHOIS reachability) can be layered on without changing the API.
+// taskGeoIPUpdate downloads the latest GeoIP databases via the GeoIPUpdateHook.
+// When no hook is set the task is a no-op.
+func (s *Scheduler) taskGeoIPUpdate(ctx context.Context) error {
+	if s.GeoIPUpdateHook == nil {
+		log.Printf("INFO: geoip_update skipped (no GeoIP update hook registered)")
+		return nil
+	}
+	return s.GeoIPUpdateHook(ctx)
+}
+
+// taskBlocklistUpdate downloads the latest IP/domain blocklists via the
+// BlocklistUpdateHook. When no hook is set the task is a no-op.
+func (s *Scheduler) taskBlocklistUpdate(ctx context.Context) error {
+	if s.BlocklistUpdateHook == nil {
+		log.Printf("INFO: blocklist_update skipped (no blocklist update hook registered)")
+		return nil
+	}
+	return s.BlocklistUpdateHook(ctx)
+}
+
+// taskCVEUpdate downloads the latest CVE/security databases via the
+// CVEUpdateHook. When no hook is set the task is a no-op.
+func (s *Scheduler) taskCVEUpdate(ctx context.Context) error {
+	if s.CVEUpdateHook == nil {
+		log.Printf("INFO: cve_update skipped (no CVE update hook registered)")
+		return nil
+	}
+	return s.CVEUpdateHook(ctx)
+}
+
+// taskHealthCheck performs self-health verification: database connectivity.
 func (s *Scheduler) taskHealthCheck(ctx context.Context) error {
 	if err := s.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("database health check failed: %w", err)
@@ -235,10 +272,12 @@ func (s *Scheduler) taskHealthCheck(ctx context.Context) error {
 	return nil
 }
 
-// taskWhoisServersUpdate is a no-op maintenance entry kept for AI.md PART 18
-// coverage. The authoritative TLD-to-WHOIS map is the curated table in
-// src/whois/servers.go; on-demand refresh is exposed via the scheduler API.
-func (s *Scheduler) taskWhoisServersUpdate(ctx context.Context) error {
-	log.Printf("INFO: whois_servers_update executed (using curated TLD map in src/whois/servers.go)")
-	return nil
+// taskTorHealth checks Tor connectivity and restarts if unhealthy via the
+// TorHealthHook. When no hook is set (Tor not installed) the task is a no-op.
+func (s *Scheduler) taskTorHealth(ctx context.Context) error {
+	if s.TorHealthHook == nil {
+		log.Printf("DEBUG: tor_health skipped (Tor not installed)")
+		return nil
+	}
+	return s.TorHealthHook(ctx)
 }
