@@ -86,6 +86,49 @@ func DefaultLogsConfig() LogsConfig {
 	}
 }
 
+// RateLimitEndpointConfig holds per-endpoint-class rate-limit settings (AI.md PART 12).
+type RateLimitEndpointConfig struct {
+	// Requests is the max number of requests allowed per window.
+	Requests int `yaml:"requests"`
+	// Window is the sliding window length in seconds.
+	Window int `yaml:"window"`
+}
+
+// RateLimitConfig holds rate-limiting settings for each endpoint class (AI.md PART 12).
+type RateLimitConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Read covers GET/HEAD endpoints.
+	Read RateLimitEndpointConfig `yaml:"read"`
+	// Write covers POST/PUT/PATCH/DELETE endpoints.
+	Write RateLimitEndpointConfig `yaml:"write"`
+	// Health covers /healthz, /readyz, /livez.
+	Health RateLimitEndpointConfig `yaml:"health"`
+	// GlobalBurst is the absolute per-IP ceiling across all endpoint types per minute.
+	GlobalBurst int `yaml:"global_burst"`
+}
+
+// ContactWebhooksConfig holds webhook delivery URLs for a contact role (AI.md PART 12).
+type ContactWebhooksConfig struct {
+	Telegram string `yaml:"telegram"`
+	Discord  string `yaml:"discord"`
+	Slack    string `yaml:"slack"`
+	Generic  string `yaml:"generic"`
+}
+
+// ContactRoleConfig holds the email address and webhooks for a single contact role.
+type ContactRoleConfig struct {
+	Email    string                `yaml:"email"`
+	Webhooks ContactWebhooksConfig `yaml:"webhooks"`
+}
+
+// ContactConfig mirrors the server.contact block in server.yml (AI.md PART 12).
+// Three roles: admin (server-internal alerts), security (vuln reports), general (contact form).
+type ContactConfig struct {
+	Admin    ContactRoleConfig `yaml:"admin"`
+	Security ContactRoleConfig `yaml:"security"`
+	General  ContactRoleConfig `yaml:"general"`
+}
+
 // ServerConfig holds all server configuration
 type ServerConfig struct {
 	// Server settings
@@ -117,10 +160,8 @@ type ServerConfig struct {
 	BrandingTheme       string `yaml:"branding_theme"`        // auto, light, dark
 	BrandingAccentColor string `yaml:"branding_accent_color"` // hex color
 
-	// Rate limiting settings
-	RateLimitEnabled  bool   `yaml:"rate_limit_enabled"`
-	RateLimitRequests int    `yaml:"rate_limit_requests"`
-	RateLimitWindow   string `yaml:"rate_limit_window"`
+	// Rate limiting settings (AI.md PART 12 — nested per endpoint class)
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
 
 	// GeoIP settings (PART 20)
 	GeoIPEnabled          bool   `yaml:"geoip_enabled"`
@@ -178,6 +219,9 @@ type ServerConfig struct {
 	EmailFromName  string `yaml:"email_from_name"`
 	EmailFromEmail string `yaml:"email_from_email"`
 
+	// Contact configuration (AI.md PART 12)
+	Contact ContactConfig `yaml:"contact"`
+
 	// Logging configuration (AI.md PART 11)
 	Logs LogsConfig `yaml:"logs"`
 
@@ -212,9 +256,13 @@ func Default() *ServerConfig {
 		BrandingDescription: "",
 		BrandingTheme:       "auto",
 		BrandingAccentColor: "#007bff",
-		RateLimitEnabled:    true,
-		RateLimitRequests:   120,
-		RateLimitWindow:     "1m",
+		RateLimit: RateLimitConfig{
+			Enabled:     true,
+			Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},
+			Write:       RateLimitEndpointConfig{Requests: 10, Window: 60},
+			Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
+			GlobalBurst: 240,
+		},
 		GeoIPEnabled:        true,
 		GeoIPDir:            "",  // Will be determined by OS ({config_dir}/security/geoip)
 		GeoIPDatabaseASN:    true,
@@ -255,8 +303,13 @@ func Default() *ServerConfig {
 		SMTPTLSMode:   "auto",
 		EmailFromName:  "",    // default: branding title
 		EmailFromEmail: "",    // default: no-reply@{fqdn}
-		Logs:                         DefaultLogsConfig(),
-		Debug:                        false,
+		Contact: ContactConfig{
+			Admin:    ContactRoleConfig{Email: ""},
+			Security: ContactRoleConfig{Email: ""},
+			General:  ContactRoleConfig{Email: ""},
+		},
+		Logs:  DefaultLogsConfig(),
+		Debug: false,
 		ServerToken:         "", // auto-generated on first run
 		APITokens:           []string{},
 	}
@@ -270,10 +323,19 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 
 	configPath := filepath.Join(configDir, "server.yml")
 
-	// If config doesn't exist, return defaults
+	// If config doesn't exist, write defaults to disk and return them (first-run experience).
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		cfg := Default()
 		cfg.ConfigDir = configDir
+		// Generate server token on first run.
+		tok, genErr := GenerateToken()
+		if genErr == nil {
+			cfg.ServerToken = tok
+		}
+		// Write the default config so the operator can inspect and edit it.
+		if saveErr := cfg.Save(configDir); saveErr != nil {
+			fmt.Printf("WARNING: could not write default config to %s: %v\n", configPath, saveErr)
+		}
 		return cfg, nil
 	}
 

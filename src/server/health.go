@@ -9,13 +9,16 @@ import (
 	"time"
 )
 
-// HealthResponse represents the /healthz response (per AI.md PART 13)
+// HealthResponse represents the /healthz response (per AI.md PART 13).
+// Field order matches the canonical spec order.
 type HealthResponse struct {
 	// 1. Project identification (from config branding)
 	Project ProjectInfo `json:"project"`
 
 	// 2. Overall status
-	Status string `json:"status"` // "healthy", "unhealthy", "degraded"
+	Status         string   `json:"status"`                    // "healthy", "degraded", "unhealthy"
+	PendingRestart bool     `json:"pending_restart,omitempty"` // true if a restart is needed to apply a config change
+	RestartReason  []string `json:"restart_reason,omitempty"`  // settings that changed and require restart
 
 	// 3. Version & build info
 	Version   string    `json:"version"`
@@ -27,7 +30,7 @@ type HealthResponse struct {
 	Mode      string    `json:"mode"`
 	Timestamp time.Time `json:"timestamp"`
 
-	// 5. Features (caswhois-specific)
+	// 5. Features (non-negotiable first, then caswhois app-specific)
 	Features FeaturesInfo `json:"features"`
 
 	// 6. Component health checks
@@ -60,13 +63,17 @@ type TorInfo struct {
 	Hostname string `json:"hostname,omitempty"`
 }
 
-// FeaturesInfo - caswhois features (AI.md PART 13)
+// FeaturesInfo - public features status (AI.md PART 13).
+// Non-negotiable fields come first; caswhois app-specific fields follow.
 type FeaturesInfo struct {
-	RateLimiting bool    `json:"rate_limiting"`
-	Caching      bool    `json:"caching"`
-	GeoIP        bool    `json:"geoip"`
-	Email        bool    `json:"email"`
-	Tor          TorInfo `json:"tor"`
+	// PART 31: Tor hidden service
+	Tor TorInfo `json:"tor"`
+	// PART 19: GeoIP database
+	GeoIP bool `json:"geoip"`
+	// caswhois app-specific features
+	RateLimiting bool `json:"rate_limiting"`
+	Caching      bool `json:"caching"`
+	Email        bool `json:"email"`
 }
 
 // ChecksInfo - component health (ok/error only, AI.md PART 13)
@@ -134,13 +141,20 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		description = "Domain, IP, and ASN WHOIS lookup service"
 	}
 
+	checks := ChecksInfo{
+		Database:  s.checkDatabase(),
+		Cache:     "ok",
+		Disk:      "ok",
+		Scheduler: s.checkScheduler(),
+	}
+
 	return HealthResponse{
 		Project: ProjectInfo{
 			Name:        name,
 			Tagline:     tagline,
 			Description: description,
 		},
-		Status:    "healthy",
+		Status:    getOverallStatus(checks),
 		Version:   Version,
 		GoVersion: runtime.Version(),
 		Build: BuildInfo{
@@ -151,18 +165,13 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Mode:      s.config.Mode,
 		Timestamp: time.Now().UTC(),
 		Features: FeaturesInfo{
+			Tor:          s.buildTorInfo(),
+			GeoIP:        s.geoip != nil && s.geoip.Enabled(),
 			RateLimiting: true,
 			Caching:      true,
-			GeoIP:        s.geoip != nil && s.geoip.Enabled(),
 			Email:        s.email != nil && s.email.IsEnabled(),
-			Tor:          s.buildTorInfo(),
 		},
-		Checks: ChecksInfo{
-			Database:  s.checkDatabase(),
-			Cache:     "ok",
-			Disk:      "ok",
-			Scheduler: s.checkScheduler(),
-		},
+		Checks: checks,
 		Stats: StatsInfo{
 			RequestsTotal:   s.stats.requestsTotal.Load(),
 			Requests24h:     s.stats.requests24h.Load(),
@@ -239,6 +248,29 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "stats.domain_queries: %d\n", response.Stats.DomainQueries)
 	fmt.Fprintf(w, "stats.ip_queries: %d\n", response.Stats.IPQueries)
 	fmt.Fprintf(w, "stats.asn_queries: %d\n", response.Stats.ASNQueries)
+}
+
+// getOverallStatus derives the overall service status from per-component check results.
+// Returns "unhealthy" if any check is "error", "degraded" if any is "warn",
+// and "healthy" when all checks pass.
+func getOverallStatus(checks ChecksInfo) string {
+	values := []string{checks.Database, checks.Cache, checks.Disk, checks.Scheduler}
+	if checks.Tor != "" {
+		values = append(values, checks.Tor)
+	}
+	degraded := false
+	for _, v := range values {
+		if v == "error" {
+			return "unhealthy"
+		}
+		if v == "warn" {
+			degraded = true
+		}
+	}
+	if degraded {
+		return "degraded"
+	}
+	return "healthy"
 }
 
 // checkDatabase verifies the database connection is alive

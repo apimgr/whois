@@ -11,7 +11,9 @@ import (
 
 	"github.com/casapps/caswhois/src/cache"
 	"github.com/casapps/caswhois/src/config"
+	"github.com/casapps/caswhois/src/db"
 	"github.com/casapps/caswhois/src/ratelimit"
+	"github.com/casapps/caswhois/src/scheduler"
 )
 
 // addContextValue adds a plain-string key/value pair to a context.
@@ -23,15 +25,30 @@ func addContextValue(ctx context.Context, key, val string) context.Context {
 }
 
 // newTestServer builds the minimal *Server needed for handler unit tests.
-// It does not start a listener, scheduler, or database connection.
-// Handlers that reference s.database, s.scheduler, s.geoip, s.email, or
-// s.metrics are NOT tested here — only handlers that work with the fields set.
+// It wires up a real in-memory SQLite database and scheduler so all health
+// checks return accurate status rather than hard-coded strings.
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
+	database, err := db.New(context.Background(), &db.DatabaseConfig{
+		Driver: "sqlite",
+		Path:   t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("newTestServer: create db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	sched, schedErr := scheduler.New(database.Server, "America/New_York", 0)
+	if schedErr != nil {
+		t.Fatalf("newTestServer: create scheduler: %v", schedErr)
+	}
+
 	return &Server{
 		config:    config.Default(),
 		cache:     cache.NewMemoryCache(1*1024*1024, 5*time.Minute),
 		ratelimit: ratelimit.New(60, time.Minute),
+		database:  database,
+		scheduler: sched,
 		startTime: time.Now(),
 	}
 }

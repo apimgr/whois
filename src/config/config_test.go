@@ -45,8 +45,8 @@ func TestDefault(t *testing.T) {
 	}
 
 	// Rate limiting enabled by default
-	if !cfg.RateLimitEnabled {
-		t.Error("Default().RateLimitEnabled = false, want true")
+	if !cfg.RateLimit.Enabled {
+		t.Error("Default().RateLimit.Enabled = false, want true")
 	}
 
 	// APITokens must be an empty slice, not nil (avoid JSON null)
@@ -69,14 +69,24 @@ func TestDefault(t *testing.T) {
 		t.Error("Default().BrandingAccentColor is empty")
 	}
 
-	// Rate limit window must be non-empty
-	if cfg.RateLimitWindow == "" {
-		t.Error("Default().RateLimitWindow is empty")
+	// Rate limit read window must be non-zero
+	if cfg.RateLimit.Read.Window <= 0 {
+		t.Errorf("Default().RateLimit.Read.Window = %d, want > 0", cfg.RateLimit.Read.Window)
 	}
 
-	// Rate limit request count must be > 0
-	if cfg.RateLimitRequests <= 0 {
-		t.Errorf("Default().RateLimitRequests = %d, want > 0", cfg.RateLimitRequests)
+	// Rate limit read request count must be > 0
+	if cfg.RateLimit.Read.Requests <= 0 {
+		t.Errorf("Default().RateLimit.Read.Requests = %d, want > 0", cfg.RateLimit.Read.Requests)
+	}
+
+	// Rate limit write request count must be > 0
+	if cfg.RateLimit.Write.Requests <= 0 {
+		t.Errorf("Default().RateLimit.Write.Requests = %d, want > 0", cfg.RateLimit.Write.Requests)
+	}
+
+	// Global burst must be > 0
+	if cfg.RateLimit.GlobalBurst <= 0 {
+		t.Errorf("Default().RateLimit.GlobalBurst = %d, want > 0", cfg.RateLimit.GlobalBurst)
 	}
 
 	// GeoIP defaults: all four databases enabled
@@ -462,8 +472,8 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	if cfg.UpdateChannel != "stable" {
 		t.Errorf("cfg.UpdateChannel = %q, want %q (default)", cfg.UpdateChannel, "stable")
 	}
-	if cfg.RateLimitRequests != 120 {
-		t.Errorf("cfg.RateLimitRequests = %d, want 120 (default)", cfg.RateLimitRequests)
+	if cfg.RateLimit.Read.Requests != 120 {
+		t.Errorf("cfg.RateLimit.Read.Requests = %d, want 120 (default)", cfg.RateLimit.Read.Requests)
 	}
 }
 

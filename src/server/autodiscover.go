@@ -95,7 +95,7 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 		Features: AutodiscoverFeatures{
 			WHOIS:        true,
 			BulkLookup:   true,
-			RateLimiting: s.config.RateLimitEnabled,
+			RateLimiting: s.config.RateLimit.Enabled,
 			Caching:      true,
 			GeoIP:        s.config.GeoIPEnabled,
 			Metrics:      s.config.MetricsEnabled,
