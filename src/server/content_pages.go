@@ -5,15 +5,35 @@ import (
 	"net/http"
 )
 
+// AboutPageData holds the dynamic data for the /about and /server/about pages.
+// Content is sourced from branding config (which defaults to IDEA.md values) per AI.md PART 16.
+type AboutPageData struct {
+	Name        string
+	Tagline     string
+	Description string
+	Version     string
+	BuildDate   string
+	OfficialSite string
+}
+
+// DocsPageData holds the dynamic data for the /docs and /server/docs pages.
+type DocsPageData struct {
+	Name        string
+	Tagline     string
+	APIVersion  string
+	RateLimitRead int
+	OfficialSite string
+}
+
 // aboutTmpl is the template for the /about page.
-// Content sourced from IDEA.md per AI.md PART 16.
+// Content sourced from branding config (defaults to IDEA.md values) per AI.md PART 16.
 var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="About caswhois — a WHOIS lookup service for domains, IP addresses, and ASNs.">
-<title>About — caswhois</title>
+<meta name="description" content="About {{.Name}} — {{.Tagline}}">
+<title>About — {{.Name}}</title>
 <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
@@ -22,7 +42,7 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 
 <nav id="navigation" class="site-nav" aria-label="Site navigation">
   <div class="nav-inner">
-    <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
       <li><a href="/about" aria-current="page">About</a></li>
       <li><a href="/docs">API Docs</a></li>
@@ -39,30 +59,20 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 <main id="main-content">
   <header class="page-header">
     <div class="container">
-      <h1>About caswhois</h1>
-      <p>A WHOIS lookup service that provides comprehensive information about domain names,
-         IP addresses, and ASN (Autonomous System Numbers).</p>
+      <h1>About {{.Name}}</h1>
+      <p class="tagline">{{.Tagline}}</p>
     </div>
   </header>
 
   <div class="container about-content">
 
-    <section class="card" aria-labelledby="what-is-whois">
-      <h2 id="what-is-whois">What is WHOIS?</h2>
-      <p>
-        WHOIS is a query-and-response protocol used to query databases that store the registered
-        users or assignees of an Internet resource — domain names, IP address blocks, and
-        autonomous system numbers (ASNs).
-      </p>
-      <p>
-        caswhois provides a fast, reliable interface to query WHOIS data from registrars and
-        Regional Internet Registries (RIRs) worldwide, with built-in caching, rate limiting,
-        and multi-format output.
-      </p>
+    <section class="card" aria-labelledby="about-description">
+      <h2 id="about-description">About</h2>
+      <p>{{.Description}}</p>
     </section>
 
     <section class="card" aria-labelledby="who-uses">
-      <h2 id="who-uses">Who uses caswhois?</h2>
+      <h2 id="who-uses">Who uses {{.Name}}?</h2>
       <ul class="check-list">
         <li><strong>Sysadmins &amp; network engineers</strong> — investigate IP ownership, routing, and registrar details quickly.</li>
         <li><strong>Security researchers</strong> — gather reconnaissance data on domains and infrastructure.</li>
@@ -122,7 +132,7 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 
 <footer class="site-footer">
   <p>
-    <a href="/">caswhois</a> &mdash;
+    <a href="/">{{.Name}}</a> &mdash;
     <a href="/about">About</a> &middot;
     <a href="/docs">API Docs</a> &middot;
     <a href="/server/healthz">Health</a>
@@ -139,8 +149,8 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="caswhois REST API documentation — endpoints, authentication, and response formats.">
-<title>API Documentation — caswhois</title>
+<meta name="description" content="{{.Name}} REST API documentation — endpoints, authentication, and response formats.">
+<title>API Documentation — {{.Name}}</title>
 <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
@@ -149,7 +159,7 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 
 <nav id="navigation" class="site-nav" aria-label="Site navigation">
   <div class="nav-inner">
-    <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
       <li><a href="/about">About</a></li>
       <li><a href="/docs" aria-current="page">API Docs</a></li>
@@ -166,7 +176,7 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 <main id="main-content">
   <header class="page-header">
     <div class="container">
-      <h1>API Documentation</h1>
+      <h1>{{.Name}} API Documentation</h1>
       <p>RESTful WHOIS API — all endpoints are free, rate-limited, and require no account.</p>
     </div>
   </header>
@@ -192,8 +202,8 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 
       <section class="card" id="base-url" aria-labelledby="h-base-url">
         <h2 id="h-base-url">Base URL</h2>
-        <pre class="code-block"><code>/api/v1</code></pre>
-        <p>All API endpoints are versioned and prefixed with <code>/api/v1</code>.</p>
+        <pre class="code-block"><code>/api/{{.APIVersion}}</code></pre>
+        <p>All API endpoints are versioned and prefixed with <code>/api/{{.APIVersion}}</code>.</p>
       </section>
 
       <section class="card" id="auth" aria-labelledby="h-auth">
@@ -363,8 +373,8 @@ Content-Type: application/json
               <tr><th>Caller</th><th>Limit</th></tr>
             </thead>
             <tbody>
-              <tr><td>Anonymous</td><td>60 requests / minute</td></tr>
-              <tr><td>Authenticated (server token)</td><td>600 requests / minute</td></tr>
+              <tr><td>Anonymous (read)</td><td>{{.RateLimitRead}} requests / minute</td></tr>
+              <tr><td>Authenticated (server token)</td><td>Higher limits — no account required</td></tr>
             </tbody>
           </table>
         </div>
@@ -402,7 +412,7 @@ Content-Type: application/json
 
 <footer class="site-footer">
   <p>
-    <a href="/">caswhois</a> &mdash;
+    <a href="/">{{.Name}}</a> &mdash;
     <a href="/about">About</a> &middot;
     <a href="/docs">API Docs</a> &middot;
     <a href="/server/healthz">Health</a>
@@ -414,19 +424,52 @@ Content-Type: application/json
 </html>`))
 
 // handleAboutPage serves the about page.
+// Content is sourced from branding config (defaults to IDEA.md values) per AI.md PART 16.
 // GET /about, /server/about
 func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
+	name := s.config.BrandingTitle
+	if name == "" {
+		name = "caswhois"
+	}
+	tagline := s.config.BrandingTagline
+	if tagline == "" {
+		tagline = "Self-hosted WHOIS lookup service"
+	}
+	description := s.config.BrandingDescription
+	if description == "" {
+		description = "caswhois is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
+	}
+	data := AboutPageData{
+		Name:         name,
+		Tagline:      tagline,
+		Description:  description,
+		Version:      Version,
+		BuildDate:    BuildDate,
+		OfficialSite: s.config.FQDN,
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := aboutTmpl.Execute(w, nil); err != nil {
+	if err := aboutTmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
 	}
 }
 
 // handleDocsPage serves the API documentation page.
+// Content uses branding config and live config values (rate limits, API version) per AI.md PART 16.
 // GET /docs, /server/docs
 func (s *Server) handleDocsPage(w http.ResponseWriter, r *http.Request) {
+	name := s.config.BrandingTitle
+	if name == "" {
+		name = "caswhois"
+	}
+	data := DocsPageData{
+		Name:          name,
+		Tagline:       s.config.BrandingTagline,
+		APIVersion:    "v1",
+		RateLimitRead: s.config.RateLimit.Read.Requests,
+		OfficialSite:  s.config.FQDN,
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := docsTmpl.Execute(w, nil); err != nil {
+	if err := docsTmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
 	}
 }
