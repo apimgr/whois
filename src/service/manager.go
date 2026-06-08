@@ -221,6 +221,10 @@ func (sm *ServiceManager) isSystemServiceInstalled() bool {
 		if _, err := os.Stat("/etc/systemd/system/" + sm.Name + ".service"); err == nil {
 			return true
 		}
+		// Check OpenRC
+		if _, err := os.Stat("/etc/init.d/" + sm.Name); err == nil {
+			return true
+		}
 		// Check runit
 		if _, err := os.Stat("/etc/sv/" + sm.Name); err == nil {
 			return true

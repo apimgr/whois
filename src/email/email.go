@@ -1,5 +1,5 @@
-// Package email provides email notification support with SMTP auto-detection
-// Implements AI.md PART 18: EMAIL & NOTIFICATIONS
+// Package email provides email notification support with SMTP auto-detection.
+// Implements AI.md PART 17: EMAIL & NOTIFICATIONS
 package email
 
 import (
@@ -250,7 +250,7 @@ func (em *EmailManager) SendEmail(to, templateName string, data EmailData) error
 	em.mu.RUnlock()
 
 	if !enabled {
-		// Email disabled - silently skip (AI.md PART 18: never log "would have sent")
+		// Email disabled - silently skip (AI.md PART 17: never log "would have sent")
 		return nil
 	}
 

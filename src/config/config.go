@@ -163,23 +163,27 @@ type ServerConfig struct {
 	// Rate limiting settings (AI.md PART 12 — nested per endpoint class)
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 
-	// GeoIP settings (PART 20)
+	// GeoIP settings (AI.md PART 19)
 	GeoIPEnabled          bool   `yaml:"geoip_enabled"`
 	GeoIPDir              string `yaml:"geoip_dir"`
 	GeoIPDatabaseASN      bool   `yaml:"geoip_database_asn"`
 	GeoIPDatabaseCountry  bool   `yaml:"geoip_database_country"`
 	GeoIPDatabaseCity     bool   `yaml:"geoip_database_city"`
 	GeoIPDatabaseWHOIS    bool   `yaml:"geoip_database_whois"`
+	// GeoIPDenyCountries blocks requests from listed countries (ISO 3166-1 alpha-2).
 	GeoIPDenyCountries    []string `yaml:"geoip_deny_countries"`
+	// GeoIPAllowCountries allows only requests from listed countries; takes precedence over deny list.
+	// Empty = allowlist mode disabled (all countries allowed unless in deny list).
+	GeoIPAllowCountries   []string `yaml:"geoip_allow_countries"`
 
-	// Metrics settings (PART 21)
+	// Metrics settings (AI.md PART 20)
 	MetricsEnabled        bool   `yaml:"metrics_enabled"`
 	MetricsEndpoint       string `yaml:"metrics_endpoint"`
 	MetricsIncludeSystem  bool   `yaml:"metrics_include_system"`
 	MetricsIncludeRuntime bool   `yaml:"metrics_include_runtime"`
 	MetricsToken          string `yaml:"metrics_token"`
 
-	// Backup settings (PART 22)
+	// Backup settings (AI.md PART 21)
 	BackupDir              string `yaml:"backup_dir"`              // Backup directory
 	BackupEncryptionEnabled bool   `yaml:"backup_encryption_enabled"` // Encryption enabled
 	BackupMaxBackups       int    `yaml:"backup_max_backups"`        // Daily full backups to keep (≥1)
@@ -187,7 +191,7 @@ type ServerConfig struct {
 	BackupKeepMonthly      int    `yaml:"backup_keep_monthly"`       // Monthly backups (1st) - 0 = disabled
 	BackupKeepYearly       int    `yaml:"backup_keep_yearly"`        // Yearly backups (Jan 1st) - 0 = disabled
 
-	// Compliance settings (PART 22)
+	// Compliance settings (AI.md PART 21)
 	ComplianceEnabled bool `yaml:"compliance_enabled"` // HIPAA, SOC2, etc. - requires encrypted backups
 
 	// Update settings (PART 23)
@@ -270,6 +274,7 @@ func Default() *ServerConfig {
 		GeoIPDatabaseCity:   true,
 		GeoIPDatabaseWHOIS:  true,
 		GeoIPDenyCountries:  []string{},
+		GeoIPAllowCountries: []string{},
 		MetricsEnabled:        true,
 		MetricsEndpoint:       "/metrics",
 		MetricsIncludeSystem:  true,

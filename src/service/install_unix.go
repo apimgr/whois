@@ -18,6 +18,8 @@ func (sm *ServiceManager) installSystemService() error {
 	switch manager {
 	case "systemd":
 		return sm.installSystemd()
+	case "openrc":
+		return sm.installOpenRC()
 	case "runit":
 		return sm.installRunit()
 	case "rcd":
@@ -149,6 +151,57 @@ WantedBy=default.target
 	fmt.Printf("User service installed and started: %s\n", sm.Name)
 	fmt.Printf("Status: systemctl --user status %s\n", sm.Name)
 	fmt.Printf("Logs: journalctl --user -u %s -f\n", sm.Name)
+	return nil
+}
+
+// installOpenRC installs an OpenRC init.d service (Alpine, Gentoo, Devuan).
+// Installation path: /etc/init.d/{name} per AI.md PART 24.
+func (sm *ServiceManager) installOpenRC() error {
+	initPath := "/etc/init.d/" + sm.Name
+
+	content := fmt.Sprintf(`#!/sbin/openrc-run
+# Service identity: %s
+name="%s"
+description="%s"
+command="%s"
+command_args=""
+command_user="%s:%s"
+pidfile="/var/run/casapps/%s.pid"
+command_background=true
+output_log="/var/log/casapps/%s/server.log"
+error_log="/var/log/casapps/%s/error.log"
+
+depend() {
+    need net
+    after firewall
+    use dns logger
+}
+
+start_pre() {
+    checkpath -d -m 0755 -o %s:%s /var/run/casapps
+    checkpath -d -m 0755 -o %s:%s /var/log/casapps/%s
+}
+`, sm.Name, sm.Name, sm.DisplayName, sm.BinaryPath,
+		sm.Name, sm.Name, sm.Name, sm.Name, sm.Name,
+		sm.Name, sm.Name, sm.Name, sm.Name, sm.Name)
+
+	if err := os.WriteFile(initPath, []byte(content), 0755); err != nil {
+		return fmt.Errorf("writing OpenRC init script: %w", err)
+	}
+
+	// Enable at boot
+	if err := exec.Command("rc-update", "add", sm.Name, "default").Run(); err != nil {
+		return fmt.Errorf("enabling OpenRC service: %w", err)
+	}
+
+	// Start service
+	if err := exec.Command("rc-service", sm.Name, "start").Run(); err != nil {
+		return fmt.Errorf("starting OpenRC service: %w", err)
+	}
+
+	fmt.Printf("Service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: rc-service %s status\n", sm.Name)
+	fmt.Printf("Logs: tail -f /var/log/casapps/%s/server.log\n", sm.Name)
 	return nil
 }
 
@@ -349,6 +402,8 @@ func (sm *ServiceManager) uninstall() error {
 	switch manager {
 	case "systemd":
 		return sm.uninstallSystemd()
+	case "openrc":
+		return sm.uninstallOpenRC()
 	case "launchd":
 		return sm.uninstallLaunchd()
 	case "runit":
@@ -379,6 +434,15 @@ func (sm *ServiceManager) uninstallSystemd() error {
 		}
 	}
 
+	fmt.Printf("Service uninstalled: %s\n", sm.Name)
+	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
+	return nil
+}
+
+// uninstallOpenRC removes an OpenRC init.d service.
+func (sm *ServiceManager) uninstallOpenRC() error {
+	exec.Command("rc-update", "del", sm.Name, "default").Run()
+	os.Remove("/etc/init.d/" + sm.Name)
 	fmt.Printf("Service uninstalled: %s\n", sm.Name)
 	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
 	return nil
@@ -460,6 +524,8 @@ func (sm *ServiceManager) disable() error {
 			return exec.Command("systemctl", "disable", sm.Name).Run()
 		}
 		return exec.Command("systemctl", "--user", "disable", sm.Name).Run()
+	case "openrc":
+		return exec.Command("rc-update", "del", sm.Name, "default").Run()
 	case "launchd":
 		// Launchd unload
 		plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"

@@ -91,7 +91,18 @@ func DetectServiceManager() string {
 		return "s6"
 	}
 
-	// SysV init: /etc/init.d script, no systemd
+	// OpenRC: /sbin/openrc-run binary present, or RC_SVCNAME env is set
+	if _, err := os.Stat("/sbin/openrc-run"); err == nil {
+		return "openrc"
+	}
+	if _, err := os.Stat("/usr/sbin/openrc-run"); err == nil {
+		return "openrc"
+	}
+	if os.Getenv("RC_SVCNAME") != "" {
+		return "openrc"
+	}
+
+	// SysV init: /etc/init.d script, no systemd, no OpenRC
 	if ppid == 1 {
 		if _, err := os.Stat("/etc/init.d"); err == nil {
 			if _, err := os.Stat("/run/systemd/system"); os.IsNotExist(err) {
