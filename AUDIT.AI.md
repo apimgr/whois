@@ -2,7 +2,7 @@
 
 Started: 2026-06-02
 
-## Pass 7: Spec Compliance (PART 8, 20, 25)
+## Pass 8: Spec Compliance (PART 17, 19, 24)
 
 All open violations resolved.
 
@@ -40,3 +40,14 @@ All open violations resolved.
 - PART 14: All required API routes registered (whois, domain, ip, asn, validate, bulk, whois-servers, stats, schedulers, backups); rate limiting applied globally via middleware chain
 - PART 25: Makefile has exactly 7 required targets (build, local, release, docker, test, dev, clean); uses casjaysdev/go:latest; enforces 100% test coverage
 - PART 32: CLI client (caswhois-cli) in src/client/ with --server, --token, --lang, --color, --update, --debug, --version flags
+- src/email/email.go: PART reference corrected from PART 18 to PART 17 (PART 18 is Scheduler)
+- src/config/config.go: GeoIPAllowCountries field added (PART 19 — allowlist mode takes precedence over deny list)
+- src/config/config.go: PART comments corrected (GeoIP PART 19, Backup/Compliance PART 21, Metrics PART 20)
+- src/service/daemon.go: OpenRC detection added (/sbin/openrc-run binary + RC_SVCNAME env) before SysVinit check (PART 24)
+- src/service/install_unix.go: installOpenRC(), uninstallOpenRC(), disable case "openrc" added (PART 24 — Alpine/Gentoo/Devuan)
+- src/service/manager.go: isSystemServiceInstalled() now checks /etc/init.d/{name} for OpenRC (PART 24)
+
+## Verified Compliant (PART 17, 19, 21 specifics)
+- PART 17: SMTP auto-detection is TCP handshake to 127.0.0.1/172.17.0.1/gateway/fqdn on ports 25,465,587 — spec-compliant; no binary (sendmail/msmtp) detection required
+- PART 19: City MMDB uses dbip-city-ipv4.mmdb — correct per spec; spec lists IPv4-only city URL
+- PART 21: BackupMaxBackups default of 1 is correct per spec (spec table shows Default: 1)
