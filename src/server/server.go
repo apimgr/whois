@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"net/http"
@@ -510,19 +511,20 @@ func (s *Server) getPIDFilePath() string {
 }
 
 
-// handleMetrics returns the Prometheus metrics handler
-// PART 21: /metrics endpoint (INTERNAL ONLY)
+// handleMetrics returns the Prometheus metrics handler.
+// PART 20: /metrics endpoint (INTERNAL ONLY — never proxy to public).
+// When metrics.token is set the Authorization header is validated with
+// constant-time comparison (AI.md PART 11) to prevent timing attacks.
 func (s *Server) handleMetrics() http.Handler {
 	handler := promhttp.Handler()
 
-	// If token is configured, require bearer authentication
+	// If token is configured, require bearer authentication.
 	if s.config.MetricsToken != "" {
+		expected := []byte("Bearer " + s.config.MetricsToken)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Check Authorization header
-			authHeader := r.Header.Get("Authorization")
-			expectedAuth := "Bearer " + s.config.MetricsToken
-
-			if authHeader != expectedAuth {
+			// Constant-time comparison prevents timing oracle on the token.
+			got := []byte(r.Header.Get("Authorization"))
+			if subtle.ConstantTimeCompare(got, expected) != 1 {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="Metrics"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return

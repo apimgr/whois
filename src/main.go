@@ -74,7 +74,7 @@ func main() {
 	flag.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
 	flag.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
 	flag.StringVar(&serviceCmd, "service", "", "Service management (install|uninstall|disable|start|stop|restart|reload|status|help)")
-	flag.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|help)")
+	flag.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|mode|setup|update|help)")
 	flag.StringVar(&updateCmd, "update", "", "Update operations (check|yes|branch|help)")
 
 	flag.Parse()
@@ -337,7 +337,7 @@ func printHelp(binaryName string) {
 	fmt.Printf("Service Management:\n")
 	fmt.Printf("      --service CMD                 Service management (install|uninstall|start|stop|restart|reload|status|help)\n\n")
 	fmt.Printf("Maintenance:\n")
-	fmt.Printf("      --maintenance CMD             Maintenance operations (backup|restore|update|help)\n\n")
+	fmt.Printf("      --maintenance CMD             Maintenance operations (backup|restore|mode|setup|update|help)\n\n")
 	fmt.Printf("Update:\n")
 	fmt.Printf("      --update [CMD]                Check/perform updates (check|yes|branch|help)\n\n")
 	fmt.Printf("Run '%s <command> --help' for detailed help on any command.\n", binaryName)

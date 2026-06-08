@@ -177,16 +177,62 @@ func handleMaintenance(cmd, configDir, dataDir string) {
 		}
 		fmt.Println("✓ Restore completed successfully")
 
+	case "mode":
+		// --maintenance mode {production|development} — change server mode (requires token or root)
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Error: mode requires a value: production or development\n")
+			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'mode production'\n")
+			os.Exit(1)
+		}
+		newMode := args[1]
+		if newMode != "production" && newMode != "development" {
+			fmt.Fprintf(os.Stderr, "Error: mode must be 'production' or 'development'\n")
+			os.Exit(1)
+		}
+		cfg, err := config.LoadServerConfig(configDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not load config: %v\n", err)
+			os.Exit(1)
+		}
+		cfg.Mode = newMode
+		if saveErr := cfg.Save(configDir); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not save config: %v\n", saveErr)
+			os.Exit(1)
+		}
+		fmt.Printf("Mode set to %s. Restart the server for the change to take effect.\n", newMode)
+
+	case "setup":
+		// --maintenance setup — reset server configuration to defaults (first-run or root only)
+		if os.Getuid() != 0 {
+			fmt.Fprintf(os.Stderr, "Error: Setup requires root privileges or a fresh install.\n")
+			fmt.Fprintf(os.Stderr, "  To reconfigure: edit server.yml directly and restart.\n")
+			fmt.Fprintf(os.Stderr, "  Or run: sudo caswhois --maintenance setup\n")
+			os.Exit(1)
+		}
+		cfg := config.Default()
+		cfg.ConfigDir = configDir
+		if saveErr := cfg.Save(configDir); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not write config: %v\n", saveErr)
+			os.Exit(1)
+		}
+		fmt.Println("Server configuration reset to defaults.")
+		fmt.Printf("Edit %s/server.yml to customize, then restart.\n", configDir)
+
 	case "help":
-		fmt.Println("Maintenance Commands (PART 22):")
+		fmt.Println("Maintenance Commands (AI.md PART 22):")
 		fmt.Println()
 		fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
-		fmt.Println("  restore FILE       Restore from backup file")
+		fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
+		fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
+		fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
+		fmt.Println("  update             Alias for --update yes (in-place binary replacement)")
 		fmt.Println("  help               Show this help message")
 		fmt.Println()
 		fmt.Println("Examples:")
 		fmt.Println("  caswhois --maintenance backup")
 		fmt.Println("  caswhois --maintenance 'restore /path/to/backup.tar.gz'")
+		fmt.Println("  sudo caswhois --maintenance 'mode development'")
+		fmt.Println("  sudo caswhois --maintenance setup")
 
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown maintenance command: %s\n", operation)

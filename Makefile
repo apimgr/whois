@@ -87,20 +87,6 @@ build: clean
 		done; \
 	fi
 
-	# Build agent for all platforms (if exists)
-	@if [ -d "src/agent" ]; then \
-		for platform in $(PLATFORMS); do \
-			OS=$${platform%/*}; \
-			ARCH=$${platform#*/}; \
-			OUTPUT=$(BINDIR)/$(PROJECTNAME)-agent-$$OS-$$ARCH; \
-			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
-			echo "Building agent $$OS/$$ARCH..."; \
-			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-				go build -ldflags \"$(LDFLAGS)\" \
-				-o $$OUTPUT ./src/agent" || exit 1; \
-		done; \
-	fi
-
 	@echo "Build complete: $(BINDIR)/"
 
 # =============================================================================
@@ -126,13 +112,6 @@ local: clean
 		echo "Building $(PROJECTNAME)-cli..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
 			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli ./src/client"; \
-	fi
-
-	# Build agent binary (if exists)
-	@if [ -d "src/agent" ]; then \
-		echo "Building $(PROJECTNAME)-agent..."; \
-		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-agent ./src/agent"; \
 	fi
 
 	@echo "Local build complete: $(BINDIR)/"
@@ -220,7 +199,7 @@ test:
 # DEV - Quick build for local development/testing (to random temp dir)
 # =============================================================================
 # Fast: local platform only, no ldflags, random temp dir for isolation
-# Builds server + CLI + agent (if they exist)
+# Builds server + CLI (if they exist)
 dev:
 	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod tidy
@@ -234,11 +213,6 @@ dev:
 			$(GO_DOCKER) go build -o /build/.tmp-cli ./src/client && \
 			mv .tmp-cli $$BUILD_DIR/$(PROJECTNAME)-cli && \
 			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-cli"; \
-		fi && \
-		if [ -d "src/agent" ]; then \
-			$(GO_DOCKER) go build -o /build/.tmp-agent ./src/agent && \
-			mv .tmp-agent $$BUILD_DIR/$(PROJECTNAME)-agent && \
-			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-agent"; \
 		fi && \
 		echo "Test:  docker run --rm -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
 
