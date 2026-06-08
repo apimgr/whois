@@ -2,7 +2,7 @@
 
 Started: 2026-06-02
 
-## Pass 6: Spec Compliance (PART 12, 13, 16)
+## Pass 7: Spec Compliance (PART 8, 20, 25)
 
 All open violations resolved.
 
@@ -28,3 +28,15 @@ All open violations resolved.
 - src/server/health.go: getOverallStatus(checks ChecksInfo) implemented — derives "unhealthy"/"degraded"/"healthy" from component checks (PART 13)
 - src/server/handlers_test.go: newTestServer wired with real SQLite db and scheduler so health checks return accurate status in tests
 - src/server/content_pages.go: /about and /docs templates now source name, tagline, description, API version, and rate limits from branding config (IDEA.md via server.yml) per PART 16
+- src/server/server.go: metrics token comparison switched from plain != to subtle.ConstantTimeCompare (PART 11 constant-time comparison requirement)
+- src/server/server.go: handleMetrics comment corrected from PART 21 to PART 20
+- src/status.go: handleMaintenance now handles `mode` (change production/development mode) and `setup` (reset config to defaults, requires root) subcommands per PART 8 spec
+- src/main.go: --maintenance flag description and help text updated to list all six subcommands per PART 8
+- Makefile: removed dead src/agent build blocks from build, local, and dev targets (PART 25 — spec defines server + client only, no agent binary)
+
+## Verified Compliant (no violations found)
+- PART 9: Error codes (BAD_REQUEST, VALIDATION_FAILED, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, METHOD_NOT_ALLOWED, CONFLICT, RATE_LIMITED, SERVER_ERROR, MAINTENANCE) all present
+- PART 10: Database schema tables (config, config_meta, rate_limits, audit_log, scheduler_tasks, scheduler_history, backups, api_tokens) all present with correct indexes
+- PART 14: All required API routes registered (whois, domain, ip, asn, validate, bulk, whois-servers, stats, schedulers, backups); rate limiting applied globally via middleware chain
+- PART 25: Makefile has exactly 7 required targets (build, local, release, docker, test, dev, clean); uses casjaysdev/go:latest; enforces 100% test coverage
+- PART 32: CLI client (caswhois-cli) in src/client/ with --server, --token, --lang, --color, --update, --debug, --version flags
