@@ -2,7 +2,7 @@
 
 Started: 2026-06-02
 
-## Pass 8: Spec Compliance (PART 17, 19, 24)
+## Pass 9: Spec Compliance (PART 15, additional)
 
 All open violations resolved.
 
@@ -46,6 +46,13 @@ All open violations resolved.
 - src/service/daemon.go: OpenRC detection added (/sbin/openrc-run binary + RC_SVCNAME env) before SysVinit check (PART 24)
 - src/service/install_unix.go: installOpenRC(), uninstallOpenRC(), disable case "openrc" added (PART 24 — Alpine/Gentoo/Devuan)
 - src/service/manager.go: isSystemServiceInstalled() now checks /etc/init.d/{name} for OpenRC (PART 24)
+- src/ssl/ssl.go: DNS-01 challenge now wired via lego factory (legodns.NewDNSChallengeProviderByName) — was a stub error (PART 15)
+- go.mod/go.sum: updated (go mod tidy) for lego DNS provider dependencies
+
+## Verified Compliant (PART 15, 22, 31)
+- PART 15: SSL — HTTP-01, TLS-ALPN-01, DNS-01 all wired via lego; auto-renewal at 30d before expiry; min TLS 1.2
+- PART 22: Update command — --update check/yes/branch implemented with SHA-256 verification; --maintenance update is alias for --update yes
+- PART 31: Tor hidden service — implemented via cretz/bine; v3 onion (ed25519); ADD_ONION; CGO_ENABLED=0 compatible
 
 ## Verified Compliant (PART 17, 19, 21 specifics)
 - PART 17: SMTP auto-detection is TCP handshake to 127.0.0.1/172.17.0.1/gateway/fqdn on ports 25,465,587 — spec-compliant; no binary (sendmail/msmtp) detection required
