@@ -24,6 +24,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge/http01"
 	"github.com/go-acme/lego/v4/challenge/tlsalpn01"
 	"github.com/go-acme/lego/v4/lego"
+	legodns "github.com/go-acme/lego/v4/providers/dns"
 	"github.com/go-acme/lego/v4/registration"
 )
 
@@ -335,9 +336,18 @@ func (cm *CertManager) RequestNewCertificate() error {
 		}
 	case "dns-01":
 		if cm.dnsProvider == "" {
-			return fmt.Errorf("DNS-01 requires a configured provider; set one with SetDNSProvider")
+			return fmt.Errorf("DNS-01 requires a configured provider; set server.tls.dns_provider in server.yml")
 		}
-		return fmt.Errorf("DNS-01 provider %q is not yet wired; configure a supported provider", cm.dnsProvider)
+		// Use lego's provider factory — credentials come from environment variables
+		// named per the lego convention (e.g. CF_API_TOKEN for cloudflare).
+		// See https://go-acme.github.io/lego/dns/ for the full provider list.
+		dnsProvider, dnsErr := legodns.NewDNSChallengeProviderByName(cm.dnsProvider)
+		if dnsErr != nil {
+			return fmt.Errorf("DNS-01 provider %q: %w", cm.dnsProvider, dnsErr)
+		}
+		if err := client.Challenge.SetDNS01Provider(dnsProvider); err != nil {
+			return fmt.Errorf("failed to set DNS-01 provider %q: %w", cm.dnsProvider, err)
+		}
 	default:
 		return fmt.Errorf("unsupported challenge type: %s", cm.challengeType)
 	}
