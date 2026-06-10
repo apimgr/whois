@@ -358,6 +358,18 @@ func loadConfig(configDir, mode, address string, port int, debug bool) (*config.
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
+	// Apply platform-specific directory defaults when not set in config (AI.md PART 4).
+	// CLI flag overrides are applied after this block.
+	if cfg.DataDir == "" {
+		cfg.DataDir = getDefaultDataDir()
+	}
+	if cfg.LogDir == "" {
+		cfg.LogDir = getDefaultLogDir()
+	}
+	if cfg.BackupDir == "" {
+		cfg.BackupDir = getDefaultBackupDir()
+	}
+
 	// Override with CLI flags
 	if mode != "" {
 		cfg.Mode = mode
@@ -452,6 +464,60 @@ func getDefaultConfigDir() string {
 	}
 
 	return filepath.Join(home, ".config", "casapps", "caswhois")
+}
+
+// getDefaultDataDir returns the platform-specific data directory (AI.md PART 4).
+func getDefaultDataDir() string {
+	// Container path per AI.md PART 4: /data/caswhois/
+	if config.IsContainer() {
+		return "/data/caswhois"
+	}
+
+	if os.Getuid() == 0 {
+		return "/var/lib/casapps/caswhois"
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".local", "share", "casapps", "caswhois")
+}
+
+// getDefaultLogDir returns the platform-specific log directory (AI.md PART 4).
+func getDefaultLogDir() string {
+	// Container path per AI.md PART 4: /data/log/caswhois/
+	if config.IsContainer() {
+		return "/data/log/caswhois"
+	}
+
+	if os.Getuid() == 0 {
+		return "/var/log/casapps/caswhois"
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".local", "log", "casapps", "caswhois")
+}
+
+// getDefaultBackupDir returns the platform-specific backup directory (AI.md PART 4).
+func getDefaultBackupDir() string {
+	// Container path per AI.md PART 4: /data/backups/caswhois/
+	if config.IsContainer() {
+		return "/data/backups/caswhois"
+	}
+
+	if os.Getuid() == 0 {
+		return "/mnt/Backups/casapps/caswhois"
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".local", "share", "Backups", "casapps", "caswhois")
 }
 
 func printStartupBanner(cfg *config.ServerConfig) {

@@ -129,6 +129,14 @@ type ContactConfig struct {
 	General  ContactRoleConfig `yaml:"general"`
 }
 
+// SchedulerConfig holds scheduler settings (AI.md PART 18).
+type SchedulerConfig struct {
+	// Timezone for scheduled tasks (IANA timezone name, e.g. "America/New_York")
+	Timezone string `yaml:"timezone"`
+	// CatchUpWindow is how far back the scheduler replays missed tasks on restart ("1h", "30m", etc.)
+	CatchUpWindow string `yaml:"catch_up_window"`
+}
+
 // ServerConfig holds all server configuration
 type ServerConfig struct {
 	// Server settings
@@ -229,6 +237,9 @@ type ServerConfig struct {
 	// Logging configuration (AI.md PART 11)
 	Logs LogsConfig `yaml:"logs"`
 
+	// Scheduler configuration (AI.md PART 18)
+	Scheduler SchedulerConfig `yaml:"scheduler"`
+
 	// Debug mode
 	Debug bool `yaml:"debug"`
 
@@ -268,7 +279,7 @@ func Default() *ServerConfig {
 			GlobalBurst: 240,
 		},
 		GeoIPEnabled:        true,
-		GeoIPDir:            "",  // Will be determined by OS ({config_dir}/security/geoip)
+		GeoIPDir:            "",  // Will be determined by OS ({data_dir}/security/geoip)
 		GeoIPDatabaseASN:    true,
 		GeoIPDatabaseCountry: true,
 		GeoIPDatabaseCity:   true,
@@ -313,8 +324,12 @@ func Default() *ServerConfig {
 			Security: ContactRoleConfig{Email: ""},
 			General:  ContactRoleConfig{Email: ""},
 		},
-		Logs:  DefaultLogsConfig(),
-		Debug: false,
+		Logs: DefaultLogsConfig(),
+		Scheduler: SchedulerConfig{
+			Timezone:      "America/New_York",
+			CatchUpWindow: "1h",
+		},
+		Debug:               false,
 		ServerToken:         "", // auto-generated on first run
 		APITokens:           []string{},
 	}
@@ -442,19 +457,28 @@ func (c *ServerConfig) GetDatabaseDir() string {
 		return "/data/db/sqlite"
 	}
 
-	// 4. Native default: {data_dir}/db/
+	// 4. Native default derived from DataDir when explicitly set
 	if c.DataDir != "" {
 		return filepath.Join(c.DataDir, "db")
 	}
 
-	// Fallback to current directory
-	return "./db"
+	// 5. Root native: /var/lib/casapps/caswhois/db (AI.md PART 4)
+	if os.Getuid() == 0 {
+		return "/var/lib/casapps/caswhois/db"
+	}
+
+	// 6. User native: ~/.local/share/casapps/caswhois/db (AI.md PART 4)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "./db"
+	}
+	return filepath.Join(home, ".local", "share", "casapps", "caswhois", "db")
 }
 
-// GetBackupDir returns the backup directory.
-// Priority: Explicit config → Container default → Native default
+// GetBackupDir returns the backup directory per AI.md PART 4.
+// Priority: Explicit config → Container default → Root native → User native
 func (c *ServerConfig) GetBackupDir() string {
-	// 1. Explicit configuration
+	// 1. Explicit configuration (server.yml backup_dir or --backup CLI flag)
 	if c.BackupDir != "" {
 		return c.BackupDir
 	}
@@ -464,19 +488,23 @@ func (c *ServerConfig) GetBackupDir() string {
 		return "/data/backups/caswhois"
 	}
 
-	// 3. Native default: {data_dir}/backups
-	if c.DataDir != "" {
-		return filepath.Join(c.DataDir, "backups")
+	// 3. Root native: /mnt/Backups/casapps/caswhois (AI.md PART 4)
+	if os.Getuid() == 0 {
+		return "/mnt/Backups/casapps/caswhois"
 	}
 
-	// Fallback to current directory
-	return "./backups"
+	// 4. User native: ~/.local/share/Backups/casapps/caswhois (AI.md PART 4)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "./backups"
+	}
+	return filepath.Join(home, ".local", "share", "Backups", "casapps", "caswhois")
 }
 
-// GetLogDir returns the log directory.
-// Priority: Explicit config → Container default → Native default
+// GetLogDir returns the log directory per AI.md PART 4.
+// Priority: Explicit config → Container default → Root native → User native
 func (c *ServerConfig) GetLogDir() string {
-	// 1. Explicit configuration or CLI --log flag override
+	// 1. Explicit configuration (server.yml log_dir or --log CLI flag)
 	if c.LogDir != "" {
 		return c.LogDir
 	}
@@ -486,13 +514,17 @@ func (c *ServerConfig) GetLogDir() string {
 		return "/data/log/caswhois"
 	}
 
-	// 3. Native: use the data directory as a base when LogDir is not set
-	if c.DataDir != "" {
-		return filepath.Join(c.DataDir, "logs")
+	// 3. Root native: /var/log/casapps/caswhois (AI.md PART 4)
+	if os.Getuid() == 0 {
+		return "/var/log/casapps/caswhois"
 	}
 
-	// Fallback
-	return "./logs"
+	// 4. User native: ~/.local/log/casapps/caswhois (AI.md PART 4)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "./logs"
+	}
+	return filepath.Join(home, ".local", "log", "casapps", "caswhois")
 }
 
 // GetDatabaseConfig returns database configuration from environment and config

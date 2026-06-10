@@ -55,19 +55,27 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 	memCache := cache.NewMemoryCache(100*1024*1024, 5*time.Minute)
 	rateLimiter := ratelimit.New(60, 1*time.Minute)
 
-	// Initialize scheduler with database
-	// Timezone defaults to America/New_York per AI.md PART 19
-	// Catch-up window is 1 hour
-	sched, err := scheduler.New(database.Server, "America/New_York", 1*time.Hour)
+	// Initialize scheduler with configurable timezone and catch-up window (AI.md PART 18).
+	schedTimezone := cfg.Scheduler.Timezone
+	if schedTimezone == "" {
+		schedTimezone = "America/New_York"
+	}
+	schedCatchUp := 1 * time.Hour
+	if cfg.Scheduler.CatchUpWindow != "" {
+		if d, parseErr := time.ParseDuration(cfg.Scheduler.CatchUpWindow); parseErr == nil {
+			schedCatchUp = d
+		}
+	}
+	sched, err := scheduler.New(database.Server, schedTimezone, schedCatchUp)
 	if err != nil {
 		log.Printf("WARN: Failed to initialize scheduler: %v", err)
 		sched = nil
 	}
 
-	// Initialize GeoIP (PART 20)
+	// Initialize GeoIP (PART 19) — security DBs live under data_dir, not config_dir (AI.md PART 4)
 	var geoipMgr *geoip.GeoIPManager
 	if cfg.GeoIPDir == "" {
-		cfg.GeoIPDir = filepath.Join(cfg.ConfigDir, "security", "geoip")
+		cfg.GeoIPDir = filepath.Join(cfg.DataDir, "security", "geoip")
 	}
 	geoipCfg := geoip.GeoIPConfig{
 		Enabled: cfg.GeoIPEnabled,
@@ -85,7 +93,7 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		geoipMgr = nil
 	}
 
-	// Initialize Metrics (PART 21)
+	// Initialize Metrics (PART 20)
 	metricsCfg := metrics.MetricsConfig{
 		Enabled:        cfg.MetricsEnabled,
 		Endpoint:       cfg.MetricsEndpoint,

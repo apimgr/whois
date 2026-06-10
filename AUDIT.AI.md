@@ -2,6 +2,28 @@
 
 Started: 2026-06-02
 
+## Pass 10: Spec Compliance (PART 4, 18, 19)
+
+Violations found and fixed:
+
+- VIOLATION [PART 4]: `src/main.go` — `DataDir`, `LogDir`, `BackupDir` had no platform-specific
+  defaults; all fell through to `./data`, `./logs`, `./backups`. Added `getDefaultDataDir()`,
+  `getDefaultLogDir()`, `getDefaultBackupDir()` returning correct PART 4 paths for container /
+  root / user contexts. Applied in `loadConfig()` before CLI override block.
+- VIOLATION [PART 4]: `src/config/config.go` `GetLogDir()` — fallback used `{data_dir}/logs`
+  instead of PART 4 native paths (`/var/log/casapps/caswhois` root, `~/.local/log/...` user).
+  Fixed with per-OS resolution matching PART 4 tables.
+- VIOLATION [PART 4]: `src/config/config.go` `GetBackupDir()` — fallback used `{data_dir}/backups`
+  instead of PART 4 native paths (`/mnt/Backups/casapps/caswhois` root, `~/.local/share/Backups/...`
+  user). Fixed with per-OS resolution matching PART 4 tables.
+- VIOLATION [PART 4]: `src/config/config.go` `GetDatabaseDir()` — fallback `./db` bypassed PART 4
+  native paths. Added root (`/var/lib/casapps/caswhois/db`) and user (`~/.local/share/...`) steps.
+- VIOLATION [PART 19]: `src/server/server.go` — GeoIP default dir used `{config_dir}/security/geoip`
+  but PART 4 says security DBs live under `{data_dir}/security/`. Fixed to `cfg.DataDir/security/geoip`.
+- VIOLATION [PART 18]: No scheduler config in `ServerConfig` — timezone and catch-up window were
+  hardcoded. Added `SchedulerConfig` struct with `timezone` and `catch_up_window` YAML fields;
+  defaults `America/New_York` / `1h` per PART 18. `server.go` now reads from config with fallback.
+
 ## Pass 9: Spec Compliance (PART 15, additional)
 
 All open violations resolved.
