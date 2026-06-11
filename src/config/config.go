@@ -129,6 +129,38 @@ type ContactConfig struct {
 	General  ContactRoleConfig `yaml:"general"`
 }
 
+// LimitsConfig holds request size and timeout settings (AI.md PART 12).
+type LimitsConfig struct {
+	// MaxBodySize is the maximum allowed request body (e.g. "10MB").
+	MaxBodySize string `yaml:"max_body_size"`
+	// ReadTimeout is the HTTP read timeout (e.g. "30s").
+	ReadTimeout string `yaml:"read_timeout"`
+	// WriteTimeout is the HTTP write timeout (e.g. "30s").
+	WriteTimeout string `yaml:"write_timeout"`
+	// IdleTimeout is the HTTP idle connection timeout (e.g. "120s").
+	IdleTimeout string `yaml:"idle_timeout"`
+}
+
+// CompressionConfig holds response compression settings (AI.md PART 12).
+type CompressionConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Level is 1–9 (1=fastest, 9=best compression).
+	Level int      `yaml:"level"`
+	Types []string `yaml:"types"`
+}
+
+// TrustedProxiesConfig holds trusted reverse-proxy settings (AI.md PART 12).
+type TrustedProxiesConfig struct {
+	// Additional is a list of IP addresses, CIDRs, or DNS names to trust for X-Forwarded headers.
+	Additional []string `yaml:"additional"`
+}
+
+// I18nConfig holds internationalization settings (AI.md PART 12).
+type I18nConfig struct {
+	DefaultLanguage string   `yaml:"default_language"`
+	Supported       []string `yaml:"supported"`
+}
+
 // SchedulerConfig holds scheduler settings (AI.md PART 18).
 type SchedulerConfig struct {
 	// Timezone for scheduled tasks (IANA timezone name, e.g. "America/New_York")
@@ -146,6 +178,8 @@ type ServerConfig struct {
 	FQDN      string `yaml:"fqdn"`
 	Daemonize bool   `yaml:"daemonize"`
 	PIDFile   bool   `yaml:"pidfile"`
+	// BaseURL is the URL path prefix for all routes (AI.md PART 12 — baseurl).
+	BaseURL string `yaml:"baseurl"`
 
 	// Path settings.
 	ConfigDir string `yaml:"config_dir"`
@@ -167,6 +201,18 @@ type ServerConfig struct {
 	BrandingDescription string `yaml:"branding_description"`
 	BrandingTheme       string `yaml:"branding_theme"`        // auto, light, dark
 	BrandingAccentColor string `yaml:"branding_accent_color"` // hex color
+
+	// Request size and timeout limits (AI.md PART 12)
+	Limits LimitsConfig `yaml:"limits"`
+
+	// Response compression settings (AI.md PART 12)
+	Compression CompressionConfig `yaml:"compression"`
+
+	// Trusted reverse-proxy settings (AI.md PART 12)
+	TrustedProxies TrustedProxiesConfig `yaml:"trusted_proxies"`
+
+	// Internationalization settings (AI.md PART 12)
+	I18n I18nConfig `yaml:"i18n"`
 
 	// Rate limiting settings (AI.md PART 12 — nested per endpoint class)
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
@@ -266,11 +312,36 @@ func Default() *ServerConfig {
 		DatabaseDir:         "", // Will be determined by OS
 		DatabaseDriver:      "", // Auto-detect: sqlite or libsql from DATABASE_URL
 		DatabaseURL:         "", // From DATABASE_URL env var
+		BaseURL:             "/",
 		BrandingTitle:       "caswhois",
 		BrandingTagline:     "",
 		BrandingDescription: "",
 		BrandingTheme:       "auto",
 		BrandingAccentColor: "#007bff",
+		Limits: LimitsConfig{
+			MaxBodySize:  "10MB",
+			ReadTimeout:  "30s",
+			WriteTimeout: "30s",
+			IdleTimeout:  "120s",
+		},
+		Compression: CompressionConfig{
+			Enabled: true,
+			Level:   5,
+			Types: []string{
+				"text/html",
+				"text/css",
+				"text/javascript",
+				"application/json",
+				"application/xml",
+			},
+		},
+		TrustedProxies: TrustedProxiesConfig{
+			Additional: []string{},
+		},
+		I18n: I18nConfig{
+			DefaultLanguage: "en",
+			Supported:       []string{"en"},
+		},
 		RateLimit: RateLimitConfig{
 			Enabled:     true,
 			Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},

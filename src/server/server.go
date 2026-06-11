@@ -228,14 +228,17 @@ func (s *Server) Start() error {
 	handler := s.setupRoutes()
 	handler = s.setupMiddleware(handler)
 
-	// Create HTTP server
+	// Create HTTP server with configurable timeouts from server.limits (AI.md PART 12).
 	addr := fmt.Sprintf("%s:%d", s.config.Address, s.config.Port)
+	readTimeout := parseDurationDefault(s.config.Limits.ReadTimeout, 30*time.Second)
+	writeTimeout := parseDurationDefault(s.config.Limits.WriteTimeout, 30*time.Second)
+	idleTimeout := parseDurationDefault(s.config.Limits.IdleTimeout, 120*time.Second)
 	s.server = &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
 	}
 
 	// Log runtime information
@@ -638,3 +641,16 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, content)
 }
 
+
+// parseDurationDefault parses a duration string (e.g. "30s", "2m") and returns
+// fallback if the string is empty or invalid.
+func parseDurationDefault(s string, fallback time.Duration) time.Duration {
+	if s == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
+}

@@ -2,6 +2,24 @@
 
 Started: 2026-06-02
 
+## Pass 12: Spec Compliance (PART 3 .gitignore, PART 12 config fields)
+
+Violations found and fixed:
+
+- VIOLATION [PART 3]: `.gitignore` — missing required 2-line header (line 1: creation
+  timestamp, line 2: `ignoredirmessage`). Also missing `volumes/` and `CLAUDE.local.md`
+  entries; duplicate `**/.build_failed*`. Rewrote file with correct header, deduped
+  entries, added missing project-specific entries.
+- VIOLATION [PART 12]: `src/config/config.go` — `baseurl`, `limits` (max_body_size,
+  read_timeout, write_timeout, idle_timeout), `compression`, `trusted_proxies`, and
+  `i18n` config sections absent. Added `LimitsConfig`, `CompressionConfig`,
+  `TrustedProxiesConfig`, `I18nConfig` structs; wired into `ServerConfig` with spec
+  defaults (30s/30s/120s timeouts, gzip compression enabled at level 5, i18n en).
+- VIOLATION [PART 12]: `src/server/server.go` — HTTP timeouts hardcoded (15s/15s/60s)
+  instead of reading from `server.limits.*`. Spec defaults are 30s/30s/120s. Fixed
+  using `parseDurationDefault()` helper that falls back to spec defaults when config
+  field is empty or invalid.
+
 ## Pass 11: Spec Compliance (PART 6 — Debug Endpoints)
 
 Violations found and fixed:

@@ -1,60 +1,4 @@
-# Binaries
-binaries/
-releases/
-*.exe
-*.dll
-*.so
-*.dylib
-caswhois
-caswhois-*
-!caswhois-*/
-
-# Test binaries
-*.test
-
-# Build artifacts
-*.o
-*.a
-*.out
-
-# Go workspace
-go.work
-go.work.sum
-
-# Runtime data (docker-compose creates these)
-rootfs/
-
-# Temporary files
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# IDE/Editor files
-.vscode/
-.idea/
-*.iml
-
-# AI assistant configs (regenerated from AI.md)
-.claude/
-.cursor/
-.aider/
-.ai/
-.windsurf/
-
-# Logs
-*.log
-
-# Coverage
-*.out
-coverage.html
-
-# Environment files (if accidentally created - we don't use .env)
-.env
-.env.*
-
-# Disable reminder in prompt
+# gitignore created on 06/02/26 at 00:00
 ignoredirmessage
 
 # ignore .build_failed files
@@ -62,6 +6,7 @@ ignoredirmessage
 
 # OS generated files
 ### Linux ###
+*~
 
 # temporary files which can be created if a process still has a handle open of a deleted file
 .fuse_hidden*
@@ -106,6 +51,7 @@ Temporary Items
 
 ### Windows ###
 # Windows thumbnail cache files
+Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
@@ -136,9 +82,6 @@ $RECYCLE.BIN/
 # ignore commit message
 **/.gitcommit
 
-# ignore .build_failed files
-**/.build_failed*
-
 # ignore .bak files
 **/*.bak
 
@@ -155,3 +98,66 @@ $RECYCLE.BIN/
 **/*.rewrite.sh
 **/*.refactor.sh
 
+# ============================================
+# PROJECT-SPECIFIC (add below default section)
+# ============================================
+
+# Build output
+binaries/
+releases/
+
+# Runtime volume data (NEVER commit)
+volumes/
+
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+caswhois
+caswhois-*
+!caswhois-*/
+
+# Test binaries
+*.test
+
+# Build artifacts
+*.o
+*.a
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Runtime data (docker-compose creates these)
+rootfs/
+
+# Temporary files
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# AI config directories (regenerated from AI.md rules, not committed)
+.claude/
+.cursor/
+.aider/
+.ai/
+.windsurf/
+
+# Claude Code personal files (always gitignored)
+CLAUDE.local.md
+
+# Logs
+*.log
+
+# Coverage
+coverage.html
+
+# Environment files (if accidentally created - we don't use .env)
+.env
+.env.*
