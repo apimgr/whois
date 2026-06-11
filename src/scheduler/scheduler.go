@@ -393,3 +393,40 @@ func (s *Scheduler) DisableTask(id string) error {
 	)
 	return err
 }
+
+// TaskStatus holds the current status snapshot of a single task.
+type TaskStatus struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Schedule   string    `json:"schedule"`
+	Enabled    bool      `json:"enabled"`
+	LastRun    time.Time `json:"last_run"`
+	LastStatus string    `json:"last_status"`
+	LastError  string    `json:"last_error,omitempty"`
+	NextRun    time.Time `json:"next_run"`
+	RunCount   int64     `json:"run_count"`
+	FailCount  int64     `json:"fail_count"`
+}
+
+// Status returns a snapshot of all registered task statuses.
+func (s *Scheduler) Status() []TaskStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make([]TaskStatus, 0, len(s.tasks))
+	for _, t := range s.tasks {
+		out = append(out, TaskStatus{
+			ID:         t.ID,
+			Name:       t.Name,
+			Schedule:   t.Schedule,
+			Enabled:    t.Enabled,
+			LastRun:    t.LastRun,
+			LastStatus: t.LastStatus,
+			LastError:  t.LastError,
+			NextRun:    t.NextRun,
+			RunCount:   t.RunCount,
+			FailCount:  t.FailCount,
+		})
+	}
+	return out
+}

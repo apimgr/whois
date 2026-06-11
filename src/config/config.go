@@ -589,6 +589,40 @@ func hasSubstring(s, substr string) bool {
 }
 
 // Save writes the configuration to server.yml
+// IsDebug returns true when debug mode is active (--debug flag or DEBUG env var).
+func (c *ServerConfig) IsDebug() bool {
+	return c.Debug
+}
+
+// IsProduction returns true when the server is running in production mode.
+func (c *ServerConfig) IsProduction() bool {
+	return c.Mode == "" || c.Mode == "production" || c.Mode == "prod"
+}
+
+// IsDevelopment returns true when the server is running in development mode.
+func (c *ServerConfig) IsDevelopment() bool {
+	return c.Mode == "development" || c.Mode == "dev"
+}
+
+// Sanitized returns a copy of the config with sensitive values redacted.
+func (c *ServerConfig) Sanitized() map[string]any {
+	return map[string]any{
+		"address":            c.Address,
+		"port":               c.Port,
+		"mode":               c.Mode,
+		"debug":              c.Debug,
+		"data_dir":           c.DataDir,
+		"log_dir":            c.LogDir,
+		"backup_dir":         c.BackupDir,
+		"smtp_tls_mode":      c.SMTPTLSMode,
+		"metrics_enabled":    c.MetricsEnabled,
+		"metrics_endpoint":   c.MetricsEndpoint,
+		"rate_limit_enabled": c.RateLimit.Enabled,
+		"server_token":       "xxxxx",
+		"api_tokens":         "[redacted]",
+	}
+}
+
 func (c *ServerConfig) Save(configDir string) error {
 	if configDir == "" {
 		configDir = c.ConfigDir

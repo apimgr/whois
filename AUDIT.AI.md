@@ -2,6 +2,20 @@
 
 Started: 2026-06-02
 
+## Pass 11: Spec Compliance (PART 6 — Debug Endpoints)
+
+Violations found and fixed:
+
+- VIOLATION [PART 6]: `src/server/debug.go` — file did not exist. Debug endpoints
+  (`/debug/pprof/*`, `/debug/vars`, `/debug/config`, `/debug/routes`, `/debug/cache`,
+  `/debug/db`, `/debug/scheduler`, `/debug/memory`, `/debug/goroutines`) are required
+  when `--debug`/`DEBUG=true` is active and must return 404 otherwise. Created full
+  implementation; registered via `s.registerDebugRoutes(mux)` in `setupRoutes()`.
+- VIOLATION [PART 6]: `src/config/config.go` — `IsDebug()`, `IsProduction()`,
+  `IsDevelopment()`, and `Sanitized()` methods missing. Added all four.
+- VIOLATION [PART 6]: `src/scheduler/scheduler.go` — `Status()` method missing
+  (required by `/debug/scheduler`). Added `TaskStatus` struct and `Status()` method.
+
 ## Pass 10: Spec Compliance (PART 4, 18, 19)
 
 Violations found and fixed:

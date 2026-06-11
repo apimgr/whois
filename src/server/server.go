@@ -430,6 +430,9 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/server/backups", s.requireToken(s.handleBackupStatus))
 	mux.HandleFunc("/api/v1/server/backups/run", s.requireToken(s.handleBackupRun))
 
+	// Debug endpoints (PART 6) — registered only when --debug / DEBUG=true
+	s.registerDebugRoutes(mux)
+
 	return mux
 }
 
