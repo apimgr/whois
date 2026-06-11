@@ -389,6 +389,11 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
 
+	// PWA support (PART 16) — manifest, service worker, offline fallback
+	mux.HandleFunc("/manifest.json", s.handleManifest)
+	mux.HandleFunc("/sw.js", s.handleServiceWorker)
+	mux.HandleFunc("/offline.html", s.handleOfflinePage)
+
 	// Public web interface — exact root only (Go 1.22+ /{$} syntax)
 	mux.HandleFunc("/{$}", s.handlePublicWHOISPage)
 
@@ -461,6 +466,9 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	handler = SecurityHeadersMiddleware(handler)
 	// 2. Path validation / traversal block.
 	handler = PathSecurityMiddleware(handler)
+	// 1a. CORS headers for API paths — before URL normalization so preflight
+	//     OPTIONS returns correct headers without entering route handlers.
+	handler = CORSMiddleware(s.config.Web.CORS)(handler)
 	// 1. URL normalization — runs first.
 	handler = URLNormalizeMiddleware(handler)
 	return handler

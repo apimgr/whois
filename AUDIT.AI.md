@@ -2,6 +2,24 @@
 
 Started: 2026-06-02
 
+## Pass 13: Spec Compliance (PART 16 — CORS, PWA)
+
+Violations found and fixed:
+
+- VIOLATION [PART 16]: No CORS headers on API routes. Spec requires
+  `Access-Control-Allow-Origin: *` by default with OPTIONS preflight support.
+  Added `CORSMiddleware(cors string)` in middleware.go; applies to `/api/`,
+  `/metrics`, `/debug/` paths only; handles OPTIONS 204 preflight; wired into
+  `setupMiddleware()`. Added `WebConfig{CORS}` field to config with default `"*"`.
+- VIOLATION [PART 16]: PWA support absent — no `/manifest.json`, `/sw.js`, or
+  `/offline.html`. Created `src/server/pwa.go` with three handlers dynamically
+  generating the manifest (using branding config), service worker (with install/
+  activate/fetch lifecycle and skipWaiting update flow), and offline fallback page.
+  Routes wired in `setupRoutes()`. Added `<link rel="manifest">`, `theme-color`
+  meta, and `<link rel="apple-touch-icon">` to all four HTML templates
+  (public_handler.go ×2, content_pages.go ×2). Added SW registration + update
+  banner to `static/js/main.js`.
+
 ## Pass 12: Spec Compliance (PART 3 .gitignore, PART 12 config fields)
 
 Violations found and fixed:

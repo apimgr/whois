@@ -193,3 +193,61 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	rw.bytesWritten += n
 	return n, err
 }
+
+// CORSMiddleware adds CORS headers to API routes (AI.md PART 16).
+// Applies only to paths under /api/ and /metrics; handles OPTIONS preflight.
+// cors value: "*" = wildcard (no credentials); specific origin = credentials allowed; "" = no CORS.
+func CORSMiddleware(cors string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if cors == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Only apply CORS to API and metrics paths.
+			path := r.URL.Path
+			isAPIPath := strings.HasPrefix(path, "/api/") ||
+				strings.HasPrefix(path, "/metrics") ||
+				strings.HasPrefix(path, "/debug/")
+
+			if !isAPIPath {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			origin := r.Header.Get("Origin")
+			allowed := cors
+
+			if cors == "*" {
+				// Wildcard: allow any origin, credentials NOT allowed.
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else {
+				// Specific origins: allow only matching origin; credentials allowed.
+				origins := strings.Split(cors, ",")
+				for _, o := range origins {
+					if strings.TrimSpace(o) == origin {
+						allowed = origin
+						break
+					}
+				}
+				w.Header().Set("Access-Control-Allow-Origin", allowed)
+				if allowed == origin {
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+				}
+			}
+
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+
+			// Handle preflight.
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}

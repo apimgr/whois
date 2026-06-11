@@ -141,6 +141,13 @@ type LimitsConfig struct {
 	IdleTimeout string `yaml:"idle_timeout"`
 }
 
+// WebConfig holds web-layer settings (AI.md PART 16) — CORS, CSRF, etc.
+type WebConfig struct {
+	// CORS is a comma-separated list of allowed origins.
+	// "*" = allow all (default); "" = no CORS headers (same-origin only).
+	CORS string `yaml:"cors"`
+}
+
 // CompressionConfig holds response compression settings (AI.md PART 12).
 type CompressionConfig struct {
 	Enabled bool `yaml:"enabled"`
@@ -201,6 +208,9 @@ type ServerConfig struct {
 	BrandingDescription string `yaml:"branding_description"`
 	BrandingTheme       string `yaml:"branding_theme"`        // auto, light, dark
 	BrandingAccentColor string `yaml:"branding_accent_color"` // hex color
+
+	// Web-layer settings (AI.md PART 16 — CORS, CSRF)
+	Web WebConfig `yaml:"web"`
 
 	// Request size and timeout limits (AI.md PART 12)
 	Limits LimitsConfig `yaml:"limits"`
@@ -313,6 +323,9 @@ func Default() *ServerConfig {
 		DatabaseDriver:      "", // Auto-detect: sqlite or libsql from DATABASE_URL
 		DatabaseURL:         "", // From DATABASE_URL env var
 		BaseURL:             "/",
+		Web: WebConfig{
+			CORS: "*",
+		},
 		BrandingTitle:       "caswhois",
 		BrandingTagline:     "",
 		BrandingDescription: "",

@@ -76,3 +76,24 @@
     });
   });
 })();
+
+// PWA service worker registration (AI.md PART 16)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(function(reg) {
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              var banner = document.createElement('div');
+              banner.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--color-accent,#007bff);color:#fff;padding:.75rem 1.5rem;border-radius:.5rem;display:flex;gap:1rem;align-items:center;z-index:9999;';
+              banner.innerHTML = '<span>Update available</span><button onclick="navigator.serviceWorker.ready.then(function(r){if(r.waiting)r.waiting.postMessage({type:\'SKIP_WAITING\'})});this.closest(\'[style]\').remove()" style="background:rgba(0,0,0,.2);border:none;color:#fff;padding:.25rem .75rem;border-radius:.25rem;cursor:pointer;">Update</button>';
+              document.body.appendChild(banner);
+            }
+          });
+        });
+      })
+      .catch(function(err) { console.warn('SW registration failed:', err); });
+  });
+}

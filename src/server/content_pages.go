@@ -35,6 +35,9 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 <meta name="description" content="About {{.Name}} — {{.Tagline}}">
 <title>About — {{.Name}}</title>
 <link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -152,6 +155,9 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 <meta name="description" content="{{.Name}} REST API documentation — endpoints, authentication, and response formats.">
 <title>API Documentation — {{.Name}}</title>
 <link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>

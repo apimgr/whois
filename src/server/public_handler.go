@@ -18,6 +18,9 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 <meta name="description" content="Look up domain names, IP addresses, and ASN information — fast, free, and accurate.">
 <title>caswhois — WHOIS Lookup</title>
 <link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -170,6 +173,9 @@ var whoisPageTmpl = template.Must(template.New("whois-page").Parse(`<!DOCTYPE ht
 <meta name="description" content="WHOIS result for {{.Query}}">
 <title>{{.Query}} — caswhois</title>
 <link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
