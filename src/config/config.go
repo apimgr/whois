@@ -168,6 +168,26 @@ type I18nConfig struct {
 	Supported       []string `yaml:"supported"`
 }
 
+// GeoIPDatabasesConfig holds which MMDB databases to enable (AI.md PART 19).
+type GeoIPDatabasesConfig struct {
+	ASN     bool `yaml:"asn"`
+	Country bool `yaml:"country"`
+	City    bool `yaml:"city"`
+	WHOIS   bool `yaml:"whois"`
+}
+
+// GeoIPConfig holds GeoIP settings (AI.md PART 19 — server.geoip.*).
+type GeoIPConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	// Dir is the directory for downloaded MMDB files (defaults to {data_dir}/security/geoip).
+	Dir     string `yaml:"dir"`
+	// DenyCountries lists ISO 3166-1 alpha-2 country codes to block.
+	DenyCountries  []string             `yaml:"deny_countries"`
+	// AllowCountries allows ONLY listed countries; takes precedence over DenyCountries when both set.
+	AllowCountries []string             `yaml:"allow_countries"`
+	Databases      GeoIPDatabasesConfig `yaml:"databases"`
+}
+
 // TLSConfig holds Let's Encrypt / TLS settings (AI.md PART 15).
 type TLSConfig struct {
 	// Enabled activates TLS. When true, the server requests a cert on startup if
@@ -284,18 +304,8 @@ type ServerConfig struct {
 	// Rate limiting settings (AI.md PART 12 — nested per endpoint class)
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 
-	// GeoIP settings (AI.md PART 19)
-	GeoIPEnabled          bool   `yaml:"geoip_enabled"`
-	GeoIPDir              string `yaml:"geoip_dir"`
-	GeoIPDatabaseASN      bool   `yaml:"geoip_database_asn"`
-	GeoIPDatabaseCountry  bool   `yaml:"geoip_database_country"`
-	GeoIPDatabaseCity     bool   `yaml:"geoip_database_city"`
-	GeoIPDatabaseWHOIS    bool   `yaml:"geoip_database_whois"`
-	// GeoIPDenyCountries blocks requests from listed countries (ISO 3166-1 alpha-2).
-	GeoIPDenyCountries    []string `yaml:"geoip_deny_countries"`
-	// GeoIPAllowCountries allows only requests from listed countries; takes precedence over deny list.
-	// Empty = allowlist mode disabled (all countries allowed unless in deny list).
-	GeoIPAllowCountries   []string `yaml:"geoip_allow_countries"`
+	// GeoIP settings (AI.md PART 19 — server.geoip.*)
+	GeoIP GeoIPConfig `yaml:"geoip"`
 
 	// Metrics settings (AI.md PART 20)
 	MetricsEnabled        bool   `yaml:"metrics_enabled"`
@@ -417,14 +427,18 @@ func Default() *ServerConfig {
 			Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
 			GlobalBurst: 240,
 		},
-		GeoIPEnabled:        true,
-		GeoIPDir:            "",  // Will be determined by OS ({data_dir}/security/geoip)
-		GeoIPDatabaseASN:    true,
-		GeoIPDatabaseCountry: true,
-		GeoIPDatabaseCity:   true,
-		GeoIPDatabaseWHOIS:  true,
-		GeoIPDenyCountries:  []string{},
-		GeoIPAllowCountries: []string{},
+		GeoIP: GeoIPConfig{
+			Enabled:        true,
+			Dir:            "",    // Applied at runtime: {data_dir}/security/geoip (AI.md PART 4)
+			DenyCountries:  []string{},
+			AllowCountries: []string{},
+			Databases: GeoIPDatabasesConfig{
+				ASN:     true,
+				Country: true,
+				City:    true,
+				WHOIS:   true,
+			},
+		},
 		MetricsEnabled:        true,
 		MetricsEndpoint:       "/metrics",
 		MetricsIncludeSystem:  true,

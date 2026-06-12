@@ -72,19 +72,20 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		sched = nil
 	}
 
-	// Initialize GeoIP (PART 19) — security DBs live under data_dir, not config_dir (AI.md PART 4)
+	// Initialize GeoIP (AI.md PART 19 — server.geoip.*).
+	// Security DBs live under data_dir, not config_dir (AI.md PART 4).
 	var geoipMgr *geoip.GeoIPManager
-	if cfg.GeoIPDir == "" {
-		cfg.GeoIPDir = filepath.Join(cfg.DataDir, "security", "geoip")
+	if cfg.GeoIP.Dir == "" {
+		cfg.GeoIP.Dir = filepath.Join(cfg.DataDir, "security", "geoip")
 	}
 	geoipCfg := geoip.GeoIPConfig{
-		Enabled: cfg.GeoIPEnabled,
-		Dir:     cfg.GeoIPDir,
+		Enabled: cfg.GeoIP.Enabled,
+		Dir:     cfg.GeoIP.Dir,
 		Databases: geoip.DatabaseConfig{
-			ASN:     cfg.GeoIPDatabaseASN,
-			Country: cfg.GeoIPDatabaseCountry,
-			City:    cfg.GeoIPDatabaseCity,
-			WHOIS:   cfg.GeoIPDatabaseWHOIS,
+			ASN:     cfg.GeoIP.Databases.ASN,
+			Country: cfg.GeoIP.Databases.Country,
+			City:    cfg.GeoIP.Databases.City,
+			WHOIS:   cfg.GeoIP.Databases.WHOIS,
 		},
 	}
 	geoipMgr, err = geoip.NewGeoIPManager(geoipCfg)
@@ -173,10 +174,10 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		// Wire GeoIP update hook if GeoIP is enabled (PART 19).
 		if geoipMgr != nil && geoipMgr.Enabled() {
 			geoCfg := geoip.DatabaseConfig{
-				ASN:     cfg.GeoIPDatabaseASN,
-				Country: cfg.GeoIPDatabaseCountry,
-				City:    cfg.GeoIPDatabaseCity,
-				WHOIS:   cfg.GeoIPDatabaseWHOIS,
+				ASN:     cfg.GeoIP.Databases.ASN,
+				Country: cfg.GeoIP.Databases.Country,
+				City:    cfg.GeoIP.Databases.City,
+				WHOIS:   cfg.GeoIP.Databases.WHOIS,
 			}
 			sched.GeoIPUpdateHook = func(ctx context.Context) error {
 				return geoipMgr.UpdateDatabases(ctx, geoCfg)

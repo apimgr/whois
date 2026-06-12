@@ -90,21 +90,21 @@ func TestDefault(t *testing.T) {
 	}
 
 	// GeoIP defaults: all four databases enabled
-	if !cfg.GeoIPEnabled {
+	if !cfg.GeoIP.Enabled {
 		t.Error("Default().GeoIPEnabled = false, want true")
 	}
-	if !cfg.GeoIPDatabaseASN {
+	if !cfg.GeoIP.Databases.ASN {
 		t.Error("Default().GeoIPDatabaseASN = false, want true")
 	}
-	if !cfg.GeoIPDatabaseCountry {
+	if !cfg.GeoIP.Databases.Country {
 		t.Error("Default().GeoIPDatabaseCountry = false, want true")
 	}
-	if !cfg.GeoIPDatabaseCity {
+	if !cfg.GeoIP.Databases.City {
 		t.Error("Default().GeoIPDatabaseCity = false, want true")
 	}
 
 	// GeoIPDenyCountries must be non-nil empty slice
-	if cfg.GeoIPDenyCountries == nil {
+	if cfg.GeoIP.DenyCountries == nil {
 		t.Error("Default().GeoIPDenyCountries = nil, want empty slice")
 	}
 

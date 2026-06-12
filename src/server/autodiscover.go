@@ -97,7 +97,7 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 			BulkLookup:   true,
 			RateLimiting: s.config.RateLimit.Enabled,
 			Caching:      true,
-			GeoIP:        s.config.GeoIPEnabled,
+			GeoIP:        s.config.GeoIP.Enabled,
 			Metrics:      s.config.MetricsEnabled,
 			TorHidden:    onionAddr != "",
 		},
