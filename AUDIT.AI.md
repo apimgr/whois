@@ -2,6 +2,40 @@
 
 Started: 2026-06-02
 
+## Pass 15: Spec Compliance (PART 2, PART 7, PART 14 sweep)
+
+Violations found and fixed:
+
+- VIOLATION [PART 2]: `LICENSE.md` — third-party attribution table listed
+  `github.com/lib/pq` (PostgreSQL, never used, banned by PART 10) and
+  `github.com/mattn/go-sqlite3` (CGO SQLite, replaced by modernc.org/sqlite).
+  Real direct deps (charmbracelet suite, cretz/bine, go-acme/lego, modernc.org/sqlite)
+  were absent. Version numbers were stale. Fixed: removed false entries, added
+  real deps, updated versions to match go.mod. Renamed section "Third-Party
+  Licenses" → "Embedded Licenses" per PART 2 spec.
+
+Organizational violations noted (no functional impact — not yet fixed):
+
+- NOTE [PART 7]: HTML templates are inline Go string literals in server package
+  files. Spec says templates should be in `src/server/template/*.html` with
+  `//go:embed` — they are functionally embedded (compile-time strings) but not
+  in the specified directory layout. Planned: extract to files in a subsequent pass.
+- NOTE [PART 7]: `src/data/` directory absent. Spec says application data (JSON)
+  should live there. Current WHOIS server list is Go constants in whois/servers.go.
+  No other JSON application data currently exists.
+
+Verified compliant (no violations):
+
+- PART 7: CGO_ENABLED=0, single static binary, all assets embedded ✓
+- PART 8: All CLI flags present (--help, --version, --status, --mode, --config,
+  --data, --address, --port, --daemon, --debug, --service, --maintenance, --update) ✓
+- PART 14: All 12 required API routes registered ✓
+- PART 28: Makefile enforces 100% test coverage (fails if < 100%) ✓
+- PART 29: mkdocs.yml, .readthedocs.yaml, docs/ directory all present ✓
+- PART 30: 7 language locale files (en, es, zh, fr, ar, de, ja) present with
+  matching key sets; LanguageMiddleware wired; translator injected into all HTML
+  templates; all nav/button/aria strings use translation keys ✓
+
 ## Pass 14: Spec Compliance (PART 30 — i18n template wiring)
 
 Violations found and fixed:
