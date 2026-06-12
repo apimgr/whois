@@ -189,6 +189,39 @@ type TLSConfig struct {
 	DNSCredentials map[string]string `yaml:"dns_credentials"`
 }
 
+// SMTPConfig holds SMTP connection settings (AI.md PART 17).
+type SMTPConfig struct {
+	// Host is the SMTP server hostname. Empty = auto-detect on startup.
+	Host string `yaml:"host"`
+	// Port is the SMTP server port (default 587).
+	Port int `yaml:"port"`
+	// Username for SMTP auth (optional).
+	Username string `yaml:"username"`
+	// Password for SMTP auth (optional).
+	Password string `yaml:"password"`
+	// TLS is the TLS mode: auto, starttls, tls, none (default: auto).
+	TLS string `yaml:"tls"`
+}
+
+// EmailFromConfig holds the sender identity for outgoing mail (AI.md PART 17).
+type EmailFromConfig struct {
+	// Name is the display name shown in From: header (defaults to app title).
+	Name string `yaml:"name"`
+	// Email is the From: address (defaults to no-reply@{fqdn}).
+	Email string `yaml:"email"`
+}
+
+// EmailNotificationsConfig holds email notification settings (AI.md PART 17).
+type EmailNotificationsConfig struct {
+	SMTP SMTPConfig      `yaml:"smtp"`
+	From EmailFromConfig `yaml:"from"`
+}
+
+// NotificationsConfig holds all notification channel settings (AI.md PART 17).
+type NotificationsConfig struct {
+	Email EmailNotificationsConfig `yaml:"email"`
+}
+
 // SchedulerConfig holds scheduler settings (AI.md PART 18).
 type SchedulerConfig struct {
 	// Timezone for scheduled tasks (IANA timezone name, e.g. "America/New_York")
@@ -300,16 +333,8 @@ type ServerConfig struct {
 	TorNumIntroPoints            int    `yaml:"tor_num_intro_points"`
 	TorVirtualPort               int    `yaml:"tor_virtual_port"`
 
-	// SMTP / Email settings (PART 17)
-	// If host is empty, SMTP auto-detection runs on startup.
-	SMTPHost      string `yaml:"smtp_host"`
-	SMTPPort      int    `yaml:"smtp_port"`
-	SMTPUsername  string `yaml:"smtp_username"`
-	SMTPPassword  string `yaml:"smtp_password"`
-	// SMTPTLSMode: auto, starttls, tls, none
-	SMTPTLSMode   string `yaml:"smtp_tls"`
-	EmailFromName  string `yaml:"email_from_name"`
-	EmailFromEmail string `yaml:"email_from_email"`
+	// Notifications settings (AI.md PART 17 — server.notifications.email.smtp.*)
+	Notifications NotificationsConfig `yaml:"notifications"`
 
 	// Contact configuration (AI.md PART 12)
 	Contact ContactConfig `yaml:"contact"`
@@ -426,13 +451,21 @@ func Default() *ServerConfig {
 		TorMaxMonthlyBandwidth:       "100 GB",
 		TorNumIntroPoints:            3,
 		TorVirtualPort:               80,
-		SMTPHost:      "",     // empty = auto-detect on startup
-		SMTPPort:      587,
-		SMTPUsername:  "",
-		SMTPPassword:  "",
-		SMTPTLSMode:   "auto",
-		EmailFromName:  "",    // default: branding title
-		EmailFromEmail: "",    // default: no-reply@{fqdn}
+		Notifications: NotificationsConfig{
+			Email: EmailNotificationsConfig{
+				SMTP: SMTPConfig{
+					Host:     "",   // empty = auto-detect on startup
+					Port:     587,
+					Username: "",
+					Password: "",
+					TLS:      "auto",
+				},
+				From: EmailFromConfig{
+					Name:  "",  // default: branding title
+					Email: "", // default: no-reply@{fqdn}
+				},
+			},
+		},
 		Contact: ContactConfig{
 			Admin:    ContactRoleConfig{Email: ""},
 			Security: ContactRoleConfig{Email: ""},
@@ -728,7 +761,8 @@ func (c *ServerConfig) Sanitized() map[string]any {
 		"data_dir":           c.DataDir,
 		"log_dir":            c.LogDir,
 		"backup_dir":         c.BackupDir,
-		"smtp_tls_mode":      c.SMTPTLSMode,
+		"smtp_host":          c.Notifications.Email.SMTP.Host,
+		"smtp_tls_mode":      c.Notifications.Email.SMTP.TLS,
 		"metrics_enabled":    c.MetricsEnabled,
 		"metrics_endpoint":   c.MetricsEndpoint,
 		"rate_limit_enabled": c.RateLimit.Enabled,

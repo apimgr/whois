@@ -108,25 +108,27 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		log.Println("[Metrics] Initialized")
 	}
 
-	// Initialize Email manager (PART 17)
+	// Initialize Email manager (AI.md PART 17 — server.notifications.email.smtp.*).
 	emailMgr := email.NewEmailManager(cfg.ConfigDir)
-	if cfg.SMTPHost != "" {
-		// Explicit SMTP configured — apply settings and test connection
+	smtp := cfg.Notifications.Email.SMTP
+	from := cfg.Notifications.Email.From
+	if smtp.Host != "" {
+		// Explicit SMTP configured — apply settings and test connection.
 		emailMgr.Configure(
-			cfg.SMTPHost,
-			cfg.SMTPPort,
-			cfg.SMTPUsername,
-			cfg.SMTPPassword,
-			cfg.SMTPTLSMode,
-			cfg.EmailFromName,
-			cfg.EmailFromEmail,
+			smtp.Host,
+			smtp.Port,
+			smtp.Username,
+			smtp.Password,
+			smtp.TLS,
+			from.Name,
+			from.Email,
 		)
 		if err := emailMgr.TestConnection(); err != nil {
 			log.Printf("[Email] SMTP connection test failed: %v — email features disabled", err)
 			emailMgr.Disable()
 		} else {
 			emailMgr.Enable()
-			log.Printf("[Email] SMTP configured and reachable at %s:%d", cfg.SMTPHost, cfg.SMTPPort)
+			log.Printf("[Email] SMTP configured and reachable at %s:%d", smtp.Host, smtp.Port)
 		}
 	} else {
 		// No explicit SMTP — attempt auto-detection in background

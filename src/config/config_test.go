@@ -25,13 +25,13 @@ func TestDefault(t *testing.T) {
 	}
 
 	// SMTP port must default to 587 (STARTTLS, PART 17)
-	if cfg.SMTPPort != 587 {
-		t.Errorf("Default().SMTPPort = %d, want 587", cfg.SMTPPort)
+	if cfg.Notifications.Email.SMTP.Port != 587 {
+		t.Errorf("Default().SMTPPort = %d, want 587", cfg.Notifications.Email.SMTP.Port)
 	}
 
 	// SMTP TLS mode must default to "auto" (PART 17)
-	if cfg.SMTPTLSMode != "auto" {
-		t.Errorf("Default().SMTPTLSMode = %q, want %q", cfg.SMTPTLSMode, "auto")
+	if cfg.Notifications.Email.SMTP.TLS != "auto" {
+		t.Errorf("Default().SMTPTLSMode = %q, want %q", cfg.Notifications.Email.SMTP.TLS, "auto")
 	}
 
 	// Update channel must default to "stable" (PART 22)
@@ -380,8 +380,8 @@ func TestLoadServerConfigMissingFile(t *testing.T) {
 	}
 
 	// SMTPPort falls back to 587
-	if cfg.SMTPPort != 587 {
-		t.Errorf("cfg.SMTPPort = %d, want 587", cfg.SMTPPort)
+	if cfg.Notifications.Email.SMTP.Port != 587 {
+		t.Errorf("cfg.Notifications.Email.SMTP.Port = %d, want 587", cfg.Notifications.Email.SMTP.Port)
 	}
 }
 
@@ -402,7 +402,10 @@ func TestLoadServerConfigWithValidYAML(t *testing.T) {
 	// Write a minimal valid server.yml that sets a few well-known fields.
 	yaml := `mode: development
 port: 64123
-smtp_port: 465
+notifications:
+  email:
+    smtp:
+      port: 465
 update_channel: beta
 server_token: tok_testtoken12345678901234567890123
 `
@@ -421,8 +424,8 @@ server_token: tok_testtoken12345678901234567890123
 	if cfg.Port != 64123 {
 		t.Errorf("cfg.Port = %d, want 64123", cfg.Port)
 	}
-	if cfg.SMTPPort != 465 {
-		t.Errorf("cfg.SMTPPort = %d, want 465", cfg.SMTPPort)
+	if cfg.Notifications.Email.SMTP.Port != 465 {
+		t.Errorf("cfg.Notifications.Email.SMTP.Port = %d, want 465", cfg.Notifications.Email.SMTP.Port)
 	}
 	if cfg.UpdateChannel != "beta" {
 		t.Errorf("cfg.UpdateChannel = %q, want %q", cfg.UpdateChannel, "beta")
@@ -466,8 +469,8 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	}
 
 	// Unset field retains its default
-	if cfg.SMTPPort != 587 {
-		t.Errorf("cfg.SMTPPort = %d, want 587 (default)", cfg.SMTPPort)
+	if cfg.Notifications.Email.SMTP.Port != 587 {
+		t.Errorf("cfg.Notifications.Email.SMTP.Port = %d, want 587 (default)", cfg.Notifications.Email.SMTP.Port)
 	}
 	if cfg.UpdateChannel != "stable" {
 		t.Errorf("cfg.UpdateChannel = %q, want %q (default)", cfg.UpdateChannel, "stable")
@@ -582,7 +585,7 @@ func TestSaveAndReload(t *testing.T) {
 	original.Port = 64321
 	original.Mode = "development"
 	original.UpdateChannel = "beta"
-	original.SMTPPort = 465
+	original.Notifications.Email.SMTP.Port = 465
 	// Provide a token so LoadServerConfig does not try to generate+persist a new one.
 	original.ServerToken = "tok_savereloadtoken1234567890123456"
 
@@ -604,8 +607,8 @@ func TestSaveAndReload(t *testing.T) {
 	if reloaded.UpdateChannel != original.UpdateChannel {
 		t.Errorf("UpdateChannel: saved %q, reloaded %q", original.UpdateChannel, reloaded.UpdateChannel)
 	}
-	if reloaded.SMTPPort != original.SMTPPort {
-		t.Errorf("SMTPPort: saved %d, reloaded %d", original.SMTPPort, reloaded.SMTPPort)
+	if reloaded.Notifications.Email.SMTP.Port != original.Notifications.Email.SMTP.Port {
+		t.Errorf("SMTPPort: saved %d, reloaded %d", original.Notifications.Email.SMTP.Port, reloaded.Notifications.Email.SMTP.Port)
 	}
 }
 
