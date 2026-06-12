@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"strings"
 )
@@ -113,19 +112,8 @@ func respondText(w http.ResponseWriter, status int, data interface{}) {
 	fmt.Fprintf(w, "%s\n", text)
 }
 
-// htmlResponseTmpl is the template for generic data HTML responses.
-var htmlResponseTmpl = template.Must(template.New("response").Parse(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>caswhois</title>
-</head>
-<body>
-<pre>{{.}}</pre>
-</body>
-</html>
-`))
+// htmlResponseTmpl is the generic response template (AI.md PART 7 — loaded from src/server/template/).
+var htmlResponseTmpl = mustParseTemplate("response", "response.html")
 
 // respondHTML sends an HTML response using a server-side template.
 // The data value is HTML-escaped by html/template before rendering.
