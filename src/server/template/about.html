@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="About {{.Name}} — {{.Tagline}}">
+<title>About — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about" aria-current="page">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <header class="page-header">
+    <div class="container">
+      <h1>About {{.Name}}</h1>
+      <p class="tagline">{{.Tagline}}</p>
+    </div>
+  </header>
+
+  <div class="container about-content">
+
+    <section class="card" aria-labelledby="about-description">
+      <h2 id="about-description">About</h2>
+      <p>{{.Description}}</p>
+    </section>
+
+    <section class="card" aria-labelledby="who-uses">
+      <h2 id="who-uses">Who uses {{.Name}}?</h2>
+      <ul class="check-list">
+        <li><strong>Sysadmins &amp; network engineers</strong> — investigate IP ownership, routing, and registrar details quickly.</li>
+        <li><strong>Security researchers</strong> — gather reconnaissance data on domains and infrastructure.</li>
+        <li><strong>Domain investors</strong> — check registration and expiry dates before acquisition.</li>
+        <li><strong>Developers</strong> — integrate WHOIS data into scripts and applications via the REST API.</li>
+      </ul>
+    </section>
+
+    <section class="card" aria-labelledby="features">
+      <h2 id="features">Features</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Domain WHOIS</h3>
+          <p>Registrar, registrant, name servers, creation date, expiry, and status for any registered domain.</p>
+        </div>
+        <div class="feature-card">
+          <h3>IP WHOIS</h3>
+          <p>Network block ownership, CIDR notation, RIR assignment data for IPv4 and IPv6 addresses.</p>
+        </div>
+        <div class="feature-card">
+          <h3>ASN WHOIS</h3>
+          <p>Autonomous system name, description, and routing policy for any AS number.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Multi-format output</h3>
+          <p>JSON, XML, and plain text — all via content negotiation or a <code>?format=</code> parameter.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Caching</h3>
+          <p>In-memory cache with per-type TTLs: 24 h for domains, 7 days for IPs and ASNs.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Rate limiting</h3>
+          <p>60 requests/minute for anonymous callers; higher limits for authenticated API tokens.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="tech-stack">
+      <h2 id="tech-stack">Technology</h2>
+      <ul class="check-list">
+        <li><strong>Go</strong> — single static binary, zero runtime dependencies, CGO disabled.</li>
+        <li><strong>SQLite</strong> — embedded database for caching metadata and audit logs.</li>
+        <li><strong>Built-in scheduler</strong> — GeoIP updates, token cleanup, log rotation, and backups — no external cron required.</li>
+        <li><strong>Docker</strong> — multi-arch images for linux/amd64 and linux/arm64.</li>
+        <li><strong>MIT licence</strong> — free for any use, commercial or otherwise.</li>
+      </ul>
+    </section>
+
+    <nav class="about-nav" aria-label="Page navigation">
+      <a href="/" class="btn-primary">New lookup</a>
+      <a href="/docs" class="btn-secondary">API documentation</a>
+    </nav>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  <p>
+    <a href="/">{{.Name}}</a> &mdash;
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
+  </p>
+</footer>
+
+<script src="/static/js/main.js" defer></script>
+</body>
+</html>

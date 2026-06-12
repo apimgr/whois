@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Look up domain names, IP addresses, and ASN information — fast, free, and accurate.">
+<title>caswhois — WHOIS Lookup</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <section class="search-section" aria-labelledby="search-heading">
+    <div class="container">
+      <div class="card search-card">
+        <div class="search-hero">
+          <h1 id="search-heading">{{call .T "whois.title"}}</h1>
+          <p>{{call .T "whois.subtitle"}}</p>
+        </div>
+
+        <form id="whois-form" class="search-form-wrap" action="/whois" method="GET" novalidate>
+          <div class="search-row">
+            <label for="q" class="sr-only">{{call .T "whois.query_label"}}</label>
+            <input
+              id="q" name="q" type="text"
+              class="search-input"
+              placeholder="{{call .T "whois.placeholder"}}"
+              autocomplete="off" autocorrect="off" autocapitalize="none"
+              spellcheck="false"
+              value="{{.Query}}"
+              aria-label="{{call .T "whois.query_label"}}"
+              required
+            >
+            <button type="submit" class="btn-primary" aria-label="{{call .T "whois.aria_lookup"}}">
+              {{call .T "whois.button"}}
+            </button>
+          </div>
+        </form>
+
+        <div class="examples" aria-label="{{call .T "whois.try_example"}}">
+          <div class="examples-label">{{call .T "whois.try_example"}}</div>
+          <div class="example-chips">
+            <a href="/whois?q=example.com"   class="example-chip" data-query="example.com">example.com</a>
+            <a href="/whois?q=8.8.8.8"       class="example-chip" data-query="8.8.8.8">8.8.8.8</a>
+            <a href="/whois?q=1.1.1.1"       class="example-chip" data-query="1.1.1.1">1.1.1.1</a>
+            <a href="/whois?q=2001%3A4860%3A4860%3A%3A8888" class="example-chip" data-query="2001:4860:4860::8888">2001:4860:4860::8888</a>
+            <a href="/whois?q=AS15169"        class="example-chip" data-query="AS15169">AS15169</a>
+            <a href="/whois?q=AS13335"        class="example-chip" data-query="AS13335">AS13335</a>
+          </div>
+        </div>
+
+        {{/* Loading indicator — hidden until JS shows it */}}
+        <div id="js-loading" class="state-loading result-area" hidden aria-live="polite" aria-busy="true">
+          <span class="spinner" role="status" aria-label="{{call .T "common.loading"}}"></span>
+          <span>{{call .T "whois.loading"}}</span>
+        </div>
+
+        {{/* JS-rendered result */}}
+        <div id="js-result" class="result-area" hidden aria-live="polite">
+          <div class="result-meta">
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_query"}}</div>
+              <div id="r-query" class="meta-value long-string"></div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_type"}}</div>
+              <div id="r-type" class="meta-value"><span class="type-badge"></span></div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_server"}}</div>
+              <div id="r-server" class="meta-value long-string"></div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_timestamp"}}</div>
+              <div id="r-ts" class="meta-value"></div>
+            </div>
+          </div>
+          <pre id="r-raw" class="whois-raw" aria-label="{{call .T "whois.result_raw"}}"></pre>
+        </div>
+
+        {{/* JS error */}}
+        <div id="js-error" class="state-box state-error result-area" role="alert" hidden></div>
+
+        {{/* Server-side result (no-JS path) */}}
+        {{if .Result}}
+        <div class="server-result" aria-label="{{call .T "whois.result_raw"}}">
+          <div class="result-meta">
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_query"}}</div>
+              <div class="meta-value long-string">{{.Result.Query}}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_type"}}</div>
+              <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_server"}}</div>
+              <div class="meta-value long-string">{{.Result.Server}}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">{{call .T "whois.result_timestamp"}}</div>
+              <div class="meta-value"><time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time></div>
+            </div>
+          </div>
+          <pre class="whois-raw" aria-label="{{call .T "whois.result_raw"}}">{{.Result.Raw}}</pre>
+        </div>
+        {{end}}
+
+        {{/* Server-side error (no-JS path) */}}
+        {{if .Err}}
+        <div class="state-box state-error" role="alert">
+          {{.Err}}
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p>
+    <a href="/">caswhois</a> &mdash;
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
+  </p>
+</footer>
+
+<script src="/static/js/main.js" defer></script>
+</body>
+</html>

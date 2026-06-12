@@ -2,6 +2,23 @@
 
 Started: 2026-06-02
 
+## Pass 16: Spec Compliance (PART 33 — IDEA.md)
+
+Violations found and fixed:
+
+- VIOLATION [PART 33/PART 0]: `IDEA.md` `## Business logic` section was missing
+  all 6 required subsections (AI.md PART 0 lines 198–212):
+  - `### Product scope & non-goals` — ADDED (features, non-goals, endpoint list)
+  - `### Roles & permissions` — ADDED (anonymous vs operator, token rules)
+  - `### Data model & sensitivity` — ADDED (all 9 tables, sensitivity table)
+  - `### Trust boundaries & external services` — ADDED (trusted/untrusted inputs,
+    all 7 external services with trust level and failure mode, SSRF prevention note)
+  - `### Threat model & abuse cases` — ADDED (primary assets, trusted vs untrusted
+    inputs, 6 attacker goals, defenses per threat, explicit non-goals)
+  - `### Security decisions & exceptions` — ADDED (8 intentional decisions with
+    rationale: no admin UI, no sessions, token storage, anonymous GET, upstream
+    result acceptance, port randomization, parameterized queries, Argon2id)
+
 ## Pass 15: Spec Compliance (PART 2, PART 7, PART 14 sweep)
 
 Violations found and fixed:
