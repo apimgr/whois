@@ -16,6 +16,7 @@ Purpose:
 - **Never guess** — if the answer cannot be determined from `AI.md`, `IDEA.md`, the codebase, or repo state **and** the missing information materially changes behavior, scope, or safety, ASK
 - **Do NOT ask for permission to keep going** — continue until the task is complete, blocked by a real decision, or the user explicitly asks to pause
 - **Question mark = question** — when user ends with `?`, answer/clarify, don't execute
+- **Use AskUserQuestion wizard** — presents one question at a time with options + "Other" for custom input + Submit/Cancel; less overwhelming than plain text questions
 
 **Ask only when at least one of these is true:**
 1. A required business/product decision is missing
@@ -54,16 +55,16 @@ Purpose:
 6. Store config/backup passwords plaintext → Argon2id (API tokens use SHA-256)
 7. Create premium tiers → All features free, no paywalls
 8. Use Makefile in CI/CD → Explicit commands only
-9. Guess or assume values a command can produce → Run the command or read spec
+9. Guess or assume values that a command can produce → Run the command (`date`, `basename "$PWD"`, `git config user.email`, `git rev-parse --short HEAD`, `uname -m`, etc.) — when no command applies, read spec or ask user
 10. Skip platforms → Build all 8 (linux/darwin/windows × amd64/arm64)
 11. Client-side rendering (React/Vue) → Server-side Go templates
 12. Require JavaScript for core features → Progressive enhancement only
 13. Let long strings break mobile → Use word-break CSS
 14. Skip validation → Server validates EVERYTHING
 15. Implement without reading spec → Read relevant PART first
-16. Modify AI.md content → READ-ONLY SPEC; project changes go in IDEA.md
-17. Edit `## Project variables` in IDEA.md without confirming with the user
-18. Read an image larger than 1000×1000 directly → Resize first
+16. Modify TEMPLATE.md or AI.md content → READ-ONLY SPEC. Project changes go in IDEA.md.
+17. Edit `## Project variables` in IDEA.md without confirming with the user → Variables drive placeholder resolution used by AI.md; wrong values silently corrupt every reference
+18. Read an image larger than 1000×1000 directly into context → Resize to ≤1000×1000 first via the fallback chain (`magick` → `convert` → `gm convert` → `vipsthumbnail` → `sips` → `ffmpeg`). If none are available, do NOT read the image — tell the user which tool to install.
 19. Use a non-conforming IDEA.md → Migrate it before doing anything else
 
 ## ALWAYS Do — NON-NEGOTIABLE
@@ -73,9 +74,9 @@ Purpose:
 4. All features work without JavaScript
 5. Tor hidden service support (auto-enabled if Tor found)
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
-7. All settings configurable via config file (server.yml)
+7. All settings configurable via API and config file (server.yml)
 8. Client binary for ALL projects
-9. Commit often via `gitcommit --dir {dir} all` — small, focused commits
+9. Commit often via `gitcommit --dir {dir} all` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. Do NOT hoard unrelated changes. Subagents do not commit — parent instance reviews diff and owns the commit.
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
@@ -99,14 +100,16 @@ Purpose:
 - Docker: `.claude/rules/docker-rules.md` (PART 26)
 - CI/CD: `.claude/rules/cicd-rules.md` (PART 27 — SKIPPED until user says otherwise)
 - Testing/docs/i18n: `.claude/rules/testing-rules.md` (PART 28, 29, 30)
-- Tor hidden service: `AI.md` PART 31 (no rules file yet)
-- CLI client (caswhois-cli): `AI.md` PART 32 (no rules file yet)
-- IDEA.md format: `AI.md` PART 33 (no rules file yet)
+- Tor hidden service: `AI.md` PART 31
+- CLI client (caswhois-cli): `AI.md` PART 32
+- IDEA.md format: `AI.md` PART 33
 
 ## Current Project State
-- Last read AI.md: 2026-06-02
-- Current task: Spec compliance — schema, scheduler, server hooks
-- Relevant PARTs: 0, 1, 7, 8, 10, 18, 19, 25, 31, 33
-- Test coverage: below 100% target (make test enforces 100%)
+- Last read AI.md: 2026-06-12
+- Current task: Spec compliance audit — continuous passes against AI.md
+- Relevant PARTs: All (multi-pass compliance audit in progress)
+- Test coverage: 100% enforced by `make test`
 - Build image: casjaysdev/go:latest (NOT golang:alpine)
 - PART 27: Skipped — no CI/CD workflow files
+- Templates: `src/server/template/` (file-based embed, not inline strings)
+- Application data: `src/data/` (JSON, embedded via //go:embed)
