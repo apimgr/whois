@@ -102,7 +102,6 @@ maintainer_email:  casjay@yahoo.com
 - **scheduler_history**: id, task_id → scheduler_tasks, started_at, finished_at, status, error, duration_ms
 - **backups**: id, filename, filepath, size_bytes, type, created_at, checksum, notes
 - **api_tokens**: id, token_hash (SHA-256), token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, revoked_reason
-- **whois_cache_meta**: query, type, server, cached_at, expires_at, hit_count
 
 **Sensitivity classification:**
 
