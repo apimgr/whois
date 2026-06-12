@@ -5,9 +5,17 @@ import (
 	"net/http"
 )
 
+// translatablePageData embeds a translation function into page data structs.
+// All page data structs that render HTML should embed this (AI.md PART 30).
+type translatablePageData struct {
+	// T is the translation function for the request's detected language.
+	T func(string) string
+}
+
 // AboutPageData holds the dynamic data for the /about and /server/about pages.
 // Content is sourced from branding config (which defaults to IDEA.md values) per AI.md PART 16.
 type AboutPageData struct {
+	translatablePageData
 	Name        string
 	Tagline     string
 	Description string
@@ -18,6 +26,7 @@ type AboutPageData struct {
 
 // DocsPageData holds the dynamic data for the /docs and /server/docs pages.
 type DocsPageData struct {
+	translatablePageData
 	Name        string
 	Tagline     string
 	APIVersion  string
@@ -40,18 +49,18 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
-<a class="skip-link" href="#main-content">Skip to main content</a>
-<a class="skip-link" href="#navigation">Skip to navigation</a>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
 
-<nav id="navigation" class="site-nav" aria-label="Site navigation">
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
-      <li><a href="/about" aria-current="page">About</a></li>
-      <li><a href="/docs">API Docs</a></li>
+      <li><a href="/about" aria-current="page">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
     </ul>
     <div class="nav-actions">
-      <button id="theme-toggle" class="btn-theme" aria-label="Toggle colour scheme">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
         <span class="icon-sun" aria-hidden="true">&#9788;</span>
         <span class="icon-moon" aria-hidden="true">&#9790;</span>
       </button>
@@ -136,9 +145,9 @@ var aboutTmpl = template.Must(template.New("about").Parse(`<!DOCTYPE html>
 <footer class="site-footer">
   <p>
     <a href="/">{{.Name}}</a> &mdash;
-    <a href="/about">About</a> &middot;
-    <a href="/docs">API Docs</a> &middot;
-    <a href="/server/healthz">Health</a>
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
   </p>
 </footer>
 
@@ -160,18 +169,18 @@ var docsTmpl = template.Must(template.New("docs").Parse(`<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
-<a class="skip-link" href="#main-content">Skip to main content</a>
-<a class="skip-link" href="#navigation">Skip to navigation</a>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
 
-<nav id="navigation" class="site-nav" aria-label="Site navigation">
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
-      <li><a href="/about">About</a></li>
-      <li><a href="/docs" aria-current="page">API Docs</a></li>
+      <li><a href="/about">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs" aria-current="page">{{call .T "nav.docs"}}</a></li>
     </ul>
     <div class="nav-actions">
-      <button id="theme-toggle" class="btn-theme" aria-label="Toggle colour scheme">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
         <span class="icon-sun" aria-hidden="true">&#9788;</span>
         <span class="icon-moon" aria-hidden="true">&#9790;</span>
       </button>
@@ -419,9 +428,9 @@ Content-Type: application/json
 <footer class="site-footer">
   <p>
     <a href="/">{{.Name}}</a> &mdash;
-    <a href="/about">About</a> &middot;
-    <a href="/docs">API Docs</a> &middot;
-    <a href="/server/healthz">Health</a>
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
   </p>
 </footer>
 
@@ -446,6 +455,7 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 		description = "caswhois is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
 	}
 	data := AboutPageData{
+		translatablePageData: translatablePageData{T: newTranslatorFunc(r)},
 		Name:         name,
 		Tagline:      tagline,
 		Description:  description,
@@ -468,6 +478,7 @@ func (s *Server) handleDocsPage(w http.ResponseWriter, r *http.Request) {
 		name = "caswhois"
 	}
 	data := DocsPageData{
+		translatablePageData: translatablePageData{T: newTranslatorFunc(r)},
 		Name:          name,
 		Tagline:       s.config.BrandingTagline,
 		APIVersion:    "v1",

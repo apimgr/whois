@@ -39,7 +39,8 @@
     "docs": "API 文档",
     "api_docs": "API 文档",
     "skip_to_content": "跳转到主要内容",
-    "main_navigation": "网站导航"
+    "main_navigation": "网站导航",
+    "skip_to_nav": "Skip to navigation"
   },
   "health": {
     "title": "系统状态",

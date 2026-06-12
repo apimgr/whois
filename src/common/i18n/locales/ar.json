@@ -39,7 +39,8 @@
     "docs": "وثائق API",
     "api_docs": "توثيق API",
     "skip_to_content": "الانتقال إلى المحتوى الرئيسي",
-    "main_navigation": "تصفح الموقع"
+    "main_navigation": "تصفح الموقع",
+    "skip_to_nav": "Skip to navigation"
   },
   "health": {
     "title": "حالة النظام",

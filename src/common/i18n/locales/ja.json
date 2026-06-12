@@ -39,7 +39,8 @@
     "docs": "API ドキュメント",
     "api_docs": "API ドキュメント",
     "skip_to_content": "メインコンテンツへスキップ",
-    "main_navigation": "サイトナビゲーション"
+    "main_navigation": "サイトナビゲーション",
+    "skip_to_nav": "Skip to navigation"
   },
   "health": {
     "title": "システム状態",

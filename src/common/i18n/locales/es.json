@@ -39,7 +39,8 @@
     "docs": "Docs de API",
     "api_docs": "Documentación de API",
     "skip_to_content": "Saltar al contenido principal",
-    "main_navigation": "Navegación del sitio"
+    "main_navigation": "Navegación del sitio",
+    "skip_to_nav": "Skip to navigation"
   },
   "health": {
     "title": "Estado del sistema",

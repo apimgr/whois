@@ -6,8 +6,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/casapps/caswhois/src/common/i18n"
 	"github.com/casapps/caswhois/src/whois"
 )
+
+// newTranslatorFunc returns a T(key) function for template use, loaded from request context.
+func newTranslatorFunc(r *http.Request) func(string) string {
+	lang := LangFromContext(r.Context())
+	tr, err := i18n.Load(lang)
+	if err != nil {
+		tr, _ = i18n.Load("en")
+	}
+	return tr.T
+}
 
 // homepageTmpl is the template for the WHOIS homepage (/).
 var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
@@ -23,18 +34,18 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
-<a class="skip-link" href="#main-content">Skip to main content</a>
-<a class="skip-link" href="#navigation">Skip to navigation</a>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
 
-<nav id="navigation" class="site-nav" aria-label="Site navigation">
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
     <ul class="nav-links" role="list">
-      <li><a href="/about">About</a></li>
-      <li><a href="/docs">API Docs</a></li>
+      <li><a href="/about">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
     </ul>
     <div class="nav-actions">
-      <button id="theme-toggle" class="btn-theme" aria-label="Toggle colour scheme">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
         <span class="icon-sun" aria-hidden="true">&#9788;</span>
         <span class="icon-moon" aria-hidden="true">&#9790;</span>
       </button>
@@ -47,31 +58,31 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
     <div class="container">
       <div class="card search-card">
         <div class="search-hero">
-          <h1 id="search-heading">WHOIS Lookup</h1>
-          <p>Query domain names, IP addresses, and autonomous system numbers.</p>
+          <h1 id="search-heading">{{call .T "whois.title"}}</h1>
+          <p>{{call .T "whois.subtitle"}}</p>
         </div>
 
         <form id="whois-form" class="search-form-wrap" action="/whois" method="GET" novalidate>
           <div class="search-row">
-            <label for="q" class="sr-only">Query — domain, IP address, or ASN</label>
+            <label for="q" class="sr-only">{{call .T "whois.query_label"}}</label>
             <input
               id="q" name="q" type="text"
               class="search-input"
-              placeholder="example.com, 8.8.8.8, AS15169 …"
+              placeholder="{{call .T "whois.placeholder"}}"
               autocomplete="off" autocorrect="off" autocapitalize="none"
               spellcheck="false"
               value="{{.Query}}"
-              aria-label="Domain, IP address, or ASN"
+              aria-label="{{call .T "whois.query_label"}}"
               required
             >
-            <button type="submit" class="btn-primary" aria-label="Run WHOIS lookup">
-              Look up
+            <button type="submit" class="btn-primary" aria-label="{{call .T "whois.aria_lookup"}}">
+              {{call .T "whois.button"}}
             </button>
           </div>
         </form>
 
-        <div class="examples" aria-label="Example queries">
-          <div class="examples-label">Try an example</div>
+        <div class="examples" aria-label="{{call .T "whois.try_example"}}">
+          <div class="examples-label">{{call .T "whois.try_example"}}</div>
           <div class="example-chips">
             <a href="/whois?q=example.com"   class="example-chip" data-query="example.com">example.com</a>
             <a href="/whois?q=8.8.8.8"       class="example-chip" data-query="8.8.8.8">8.8.8.8</a>
@@ -84,31 +95,31 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 
         {{/* Loading indicator — hidden until JS shows it */}}
         <div id="js-loading" class="state-loading result-area" hidden aria-live="polite" aria-busy="true">
-          <span class="spinner" role="status" aria-label="Loading"></span>
-          <span>Looking up WHOIS information…</span>
+          <span class="spinner" role="status" aria-label="{{call .T "common.loading"}}"></span>
+          <span>{{call .T "whois.loading"}}</span>
         </div>
 
         {{/* JS-rendered result */}}
         <div id="js-result" class="result-area" hidden aria-live="polite">
           <div class="result-meta">
             <div class="meta-item">
-              <div class="meta-label">Query</div>
+              <div class="meta-label">{{call .T "whois.result_query"}}</div>
               <div id="r-query" class="meta-value long-string"></div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Type</div>
+              <div class="meta-label">{{call .T "whois.result_type"}}</div>
               <div id="r-type" class="meta-value"><span class="type-badge"></span></div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Server</div>
+              <div class="meta-label">{{call .T "whois.result_server"}}</div>
               <div id="r-server" class="meta-value long-string"></div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Looked up</div>
+              <div class="meta-label">{{call .T "whois.result_timestamp"}}</div>
               <div id="r-ts" class="meta-value"></div>
             </div>
           </div>
-          <pre id="r-raw" class="whois-raw" aria-label="Raw WHOIS data"></pre>
+          <pre id="r-raw" class="whois-raw" aria-label="{{call .T "whois.result_raw"}}"></pre>
         </div>
 
         {{/* JS error */}}
@@ -116,26 +127,26 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 
         {{/* Server-side result (no-JS path) */}}
         {{if .Result}}
-        <div class="server-result" aria-label="WHOIS result">
+        <div class="server-result" aria-label="{{call .T "whois.result_raw"}}">
           <div class="result-meta">
             <div class="meta-item">
-              <div class="meta-label">Query</div>
+              <div class="meta-label">{{call .T "whois.result_query"}}</div>
               <div class="meta-value long-string">{{.Result.Query}}</div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Type</div>
+              <div class="meta-label">{{call .T "whois.result_type"}}</div>
               <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Server</div>
+              <div class="meta-label">{{call .T "whois.result_server"}}</div>
               <div class="meta-value long-string">{{.Result.Server}}</div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Looked up</div>
+              <div class="meta-label">{{call .T "whois.result_timestamp"}}</div>
               <div class="meta-value"><time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time></div>
             </div>
           </div>
-          <pre class="whois-raw" aria-label="Raw WHOIS data">{{.Result.Raw}}</pre>
+          <pre class="whois-raw" aria-label="{{call .T "whois.result_raw"}}">{{.Result.Raw}}</pre>
         </div>
         {{end}}
 
@@ -153,9 +164,9 @@ var homepageTmpl = template.Must(template.New("home").Parse(`<!DOCTYPE html>
 <footer class="site-footer">
   <p>
     <a href="/">caswhois</a> &mdash;
-    <a href="/about">About</a> &middot;
-    <a href="/docs">API Docs</a> &middot;
-    <a href="/server/healthz">Health</a>
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
   </p>
 </footer>
 
@@ -178,18 +189,18 @@ var whoisPageTmpl = template.Must(template.New("whois-page").Parse(`<!DOCTYPE ht
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
-<a class="skip-link" href="#main-content">Skip to main content</a>
-<a class="skip-link" href="#navigation">Skip to navigation</a>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
 
-<nav id="navigation" class="site-nav" aria-label="Site navigation">
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
     <ul class="nav-links" role="list">
-      <li><a href="/about">About</a></li>
-      <li><a href="/docs">API Docs</a></li>
+      <li><a href="/about">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
     </ul>
     <div class="nav-actions">
-      <button id="theme-toggle" class="btn-theme" aria-label="Toggle colour scheme">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
         <span class="icon-sun" aria-hidden="true">&#9788;</span>
         <span class="icon-moon" aria-hidden="true">&#9790;</span>
       </button>
@@ -202,17 +213,17 @@ var whoisPageTmpl = template.Must(template.New("whois-page").Parse(`<!DOCTYPE ht
 
     <form id="whois-form" class="search-form-wrap" action="/whois" method="GET" style="margin-bottom:1.5rem" novalidate>
       <div class="search-row">
-        <label for="q" class="sr-only">Query — domain, IP address, or ASN</label>
+        <label for="q" class="sr-only">{{call .T "whois.query_label"}}</label>
         <input
           id="q" name="q" type="text"
           class="search-input"
-          placeholder="example.com, 8.8.8.8, AS15169 …"
+          placeholder="{{call .T "whois.placeholder"}}"
           autocomplete="off" autocorrect="off" autocapitalize="none"
           spellcheck="false"
           value="{{.Query}}"
-          aria-label="Domain, IP address, or ASN"
+          aria-label="{{call .T "whois.query_label"}}"
         >
-        <button type="submit" class="btn-primary">Look up</button>
+        <button type="submit" class="btn-primary">{{call .T "whois.button"}}</button>
       </div>
     </form>
 
@@ -222,40 +233,40 @@ var whoisPageTmpl = template.Must(template.New("whois-page").Parse(`<!DOCTYPE ht
     <div class="card">
       <div class="result-meta" style="margin-bottom:1rem">
         <div class="meta-item">
-          <div class="meta-label">Query</div>
+          <div class="meta-label">{{call .T "whois.result_query"}}</div>
           <div class="meta-value long-string">{{.Result.Query}}</div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">Type</div>
+          <div class="meta-label">{{call .T "whois.result_type"}}</div>
           <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">Server</div>
+          <div class="meta-label">{{call .T "whois.result_server"}}</div>
           <div class="meta-value long-string">{{.Result.Server}}</div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">Looked up</div>
+          <div class="meta-label">{{call .T "whois.result_timestamp"}}</div>
           <div class="meta-value">
             <time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time>
           </div>
         </div>
       </div>
-      <pre class="whois-raw" aria-label="Raw WHOIS data">{{.Result.Raw}}</pre>
+      <pre class="whois-raw" aria-label="{{call .T "whois.result_raw"}}">{{.Result.Raw}}</pre>
     </div>
     {{else if .Query}}
-    <div class="state-box state-error" role="alert">No result returned for "{{.Query}}".</div>
+    <div class="state-box state-error" role="alert">{{call .T "whois.no_result"}}</div>
     {{end}}
 
-    <p style="margin-top:1rem"><a href="/">&larr; New lookup</a></p>
+    <p style="margin-top:1rem"><a href="/">{{call .T "whois.new_lookup"}}</a></p>
   </div>
 </main>
 
 <footer class="site-footer">
   <p>
     <a href="/">caswhois</a> &mdash;
-    <a href="/about">About</a> &middot;
-    <a href="/docs">API Docs</a> &middot;
-    <a href="/server/healthz">Health</a>
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
   </p>
 </footer>
 
@@ -268,6 +279,8 @@ type homePageData struct {
 	Query  string
 	Result *whoisResultView
 	Err    string
+	// T is the translation function for this request's language (AI.md PART 30).
+	T func(string) string
 }
 
 // whoisResultView is a presentation-layer view of a WHOISResult.
@@ -284,6 +297,8 @@ type whoisPageData struct {
 	Query  string
 	Result *whoisResultView
 	Err    string
+	// T is the translation function for this request's language (AI.md PART 30).
+	T func(string) string
 }
 
 // handlePublicWHOISPage serves the public WHOIS lookup homepage at /.
@@ -301,7 +316,7 @@ func (s *Server) handlePublicWHOISPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := homePageData{}
+	data := homePageData{T: newTranslatorFunc(r)}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := homepageTmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
@@ -358,7 +373,7 @@ func (s *Server) handleWHOISPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// HTML clients — render the server-side result page.
-	data := whoisPageData{Query: q}
+	data := whoisPageData{Query: q, T: newTranslatorFunc(r)}
 
 	if q != "" {
 		result, err := whois.QueryWHOISWithCache(r.Context(), q, s.cache)

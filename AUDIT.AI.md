@@ -2,6 +2,25 @@
 
 Started: 2026-06-02
 
+## Pass 14: Spec Compliance (PART 30 — i18n template wiring)
+
+Violations found and fixed:
+
+- VIOLATION [PART 30]: All four HTML templates (homepageTmpl, whoisPageTmpl,
+  aboutTmpl, docsTmpl) had hardcoded English strings — navigation labels,
+  button text, aria labels, form labels, footer links. PART 30 requires every
+  user-facing string to use a translation key.
+  - Added `T func(string) string` field to `homePageData`, `whoisPageData`,
+    `AboutPageData`, `DocsPageData` (via embedded `translatablePageData`)
+  - Added `newTranslatorFunc(r *http.Request) func(string) string` helper in
+    public_handler.go — loads translator from request language context
+  - Wired `T: newTranslatorFunc(r)` into all four handler data instantiations
+  - Replaced hardcoded nav/button/aria/footer strings with `{{call .T "key"}}`
+    in all templates (nav.about, nav.docs, nav.skip_to_content, nav.skip_to_nav,
+    nav.main_navigation, theme.toggle, whois.title, whois.subtitle, whois.button,
+    whois.loading, whois.result_*, footer.health, etc.)
+  - Added `nav.skip_to_nav` key to all 7 locale files (en, es, zh, fr, ar, de, ja)
+
 ## Pass 13: Spec Compliance (PART 16 — CORS, PWA)
 
 Violations found and fixed:
