@@ -22,19 +22,23 @@ SOFTWARE.
 
 ---
 
-## Third-Party Licenses
+## Embedded Licenses
 
 This software includes the following third-party libraries:
 
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
-| github.com/lib/pq | v1.10.9 | MIT | PostgreSQL Global Development Group |
-| github.com/mattn/go-sqlite3 | v1.14.24 | MIT | Yasuhiro Matsumoto |
+| github.com/charmbracelet/bubbles | v1.0.0 | MIT | 2020 Charm |
+| github.com/charmbracelet/bubbletea | v1.3.10 | MIT | 2020 Charm |
+| github.com/charmbracelet/lipgloss | v1.1.0 | MIT | 2021 Charm |
+| github.com/cretz/bine | v0.2.0 | MIT | 2018 Drew Denton |
+| github.com/go-acme/lego/v4 | v4.22.1 | MIT | 2015-2019 Sebastian Erhart |
 | github.com/oschwald/maxminddb-golang | v1.13.1 | ISC | 2015 Gregory J. Oschwald |
 | github.com/prometheus/client_golang | v1.23.2 | Apache-2.0 | The Prometheus Authors |
-| golang.org/x/crypto | v0.32.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/sys | v0.40.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/crypto | v0.48.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/sys | v0.42.0 | BSD-3-Clause | 2009 The Go Authors |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT/Apache-2.0 | 2006-2011 Kirill Simonov |
+| modernc.org/sqlite | v1.51.0 | MIT/BSD | 2017 The modernc.org Authors |
 
 Full license texts: https://spdx.org/licenses/
 
