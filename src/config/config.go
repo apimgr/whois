@@ -168,6 +168,27 @@ type I18nConfig struct {
 	Supported       []string `yaml:"supported"`
 }
 
+// TLSConfig holds Let's Encrypt / TLS settings (AI.md PART 15).
+type TLSConfig struct {
+	// Enabled activates TLS. When true, the server requests a cert on startup if
+	// none is found at the certificate lookup paths (PART 15).
+	Enabled bool `yaml:"enabled"`
+	// Domain overrides the FQDN used for the certificate (defaults to server.fqdn).
+	Domain string `yaml:"domain"`
+	// Email is the ACME account contact email required for Let's Encrypt registration.
+	Email string `yaml:"email"`
+	// Challenge is the ACME challenge type: "http-01" (default), "tls-alpn-01", "dns-01".
+	Challenge string `yaml:"challenge"`
+	// MinVersion is the minimum TLS version: "1.2" (default) or "1.3".
+	MinVersion string `yaml:"min_version"`
+	// Staging selects the Let's Encrypt staging environment (for testing).
+	Staging bool `yaml:"staging"`
+	// DNSProvider is the lego DNS provider name used for DNS-01 challenges (e.g., "cloudflare").
+	DNSProvider string `yaml:"dns_provider"`
+	// DNSCredentials holds provider-specific credential key-value pairs for DNS-01.
+	DNSCredentials map[string]string `yaml:"dns_credentials"`
+}
+
 // SchedulerConfig holds scheduler settings (AI.md PART 18).
 type SchedulerConfig struct {
 	// Timezone for scheduled tasks (IANA timezone name, e.g. "America/New_York")
@@ -208,6 +229,9 @@ type ServerConfig struct {
 	BrandingDescription string `yaml:"branding_description"`
 	BrandingTheme       string `yaml:"branding_theme"`        // auto, light, dark
 	BrandingAccentColor string `yaml:"branding_accent_color"` // hex color
+
+	// TLS / Let's Encrypt settings (AI.md PART 15)
+	TLS TLSConfig `yaml:"tls"`
 
 	// Web-layer settings (AI.md PART 16 — CORS, CSRF)
 	Web WebConfig `yaml:"web"`
@@ -322,7 +346,13 @@ func Default() *ServerConfig {
 		DatabaseDir:         "", // Will be determined by OS
 		DatabaseDriver:      "", // Auto-detect: sqlite or libsql from DATABASE_URL
 		DatabaseURL:         "", // From DATABASE_URL env var
-		BaseURL:             "/",
+		BaseURL: "/",
+		TLS: TLSConfig{
+			Enabled:    false,
+			Challenge:  "http-01",
+			MinVersion: "1.2",
+			Staging:    false,
+		},
 		Web: WebConfig{
 			CORS: "*",
 		},
