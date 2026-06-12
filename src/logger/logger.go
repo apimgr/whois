@@ -1,9 +1,11 @@
-// Package logger opens and manages the four required log files for caswhois.
+// Package logger opens and manages all required log files for caswhois.
 // Log files per AI.md PART 11:
-//   access.log  — Apache Combined Log Format (HTTP requests)
-//   server.log  — Text format (application events)
-//   error.log   — Text format (error messages)
-//   audit.log   — JSON format (security events; machine-parseable)
+//   access.log   — Apache Combined Log Format (HTTP requests)
+//   server.log   — Text format (application events)
+//   error.log    — Text format (error messages)
+//   app.log      — logfmt format (general info/warn events)
+//   auth.log     — Syslog RFC 3164 format (authentication events)
+//   audit.log    — JSON format (security events; machine-parseable)
 //   security.log — Fail2ban format (security/auth events)
 //
 // All log files are raw text only: no ANSI codes, no emojis, one event per line.
@@ -31,6 +33,8 @@ type Logger struct {
 	accessFile   *os.File
 	serverFile   *os.File
 	errorFile    *os.File
+	appFile      *os.File
+	authFile     *os.File
 	auditFile    *os.File
 	securityFile *os.File
 
@@ -38,6 +42,8 @@ type Logger struct {
 	serverHandler slog.Handler
 	// slog handler writing to errorFile; swapped on Rotate.
 	errorHandler slog.Handler
+	// slog handler writing to appFile in logfmt format; swapped on Rotate.
+	appHandler slog.Handler
 }
 
 // Open creates the log directory and opens all log files in append mode.
@@ -69,6 +75,8 @@ func (l *Logger) openFiles() error {
 		{"access.log", &l.accessFile},
 		{"server.log", &l.serverFile},
 		{"error.log", &l.errorFile},
+		{"app.log", &l.appFile},
+		{"auth.log", &l.authFile},
 		{"audit.log", &l.auditFile},
 		{"security.log", &l.securityFile},
 	}
@@ -82,11 +90,13 @@ func (l *Logger) openFiles() error {
 		*f.dest = fh
 	}
 
-	// Build slog handlers for server.log and error.log.
+	// Build slog handlers for server.log, error.log, and app.log (logfmt).
 	// Use the plain text (non-JSON) handler so lines match the spec format:
 	//   2024-10-10T13:55:36-04:00 [INFO] message key=value
 	l.serverHandler = newTextHandler(l.serverFile)
 	l.errorHandler = newTextHandler(l.errorFile)
+	// app.log uses slog default text (logfmt) format per AI.md PART 11.
+	l.appHandler = newTextHandler(l.appFile)
 
 	return nil
 }
@@ -96,7 +106,7 @@ func (l *Logger) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.auditFile, l.securityFile} {
+	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.appFile, l.authFile, l.auditFile, l.securityFile} {
 		if fh != nil {
 			_ = fh.Close()
 		}
@@ -114,7 +124,7 @@ func (l *Logger) Rotate() error {
 	defer l.mu.Unlock()
 
 	// Close existing handles silently.
-	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.auditFile, l.securityFile} {
+	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.appFile, l.authFile, l.auditFile, l.securityFile} {
 		if fh != nil {
 			_ = fh.Close()
 		}
@@ -122,6 +132,8 @@ func (l *Logger) Rotate() error {
 	l.accessFile = nil
 	l.serverFile = nil
 	l.errorFile = nil
+	l.appFile = nil
+	l.authFile = nil
 	l.auditFile = nil
 	l.securityFile = nil
 
@@ -257,6 +269,41 @@ func (l *Logger) WriteSecurity(msg string) {
 	defer l.mu.Unlock()
 	if l.securityFile != nil {
 		_, _ = l.securityFile.WriteString(line)
+	}
+}
+
+// App writes a general INFO-level event to app.log in logfmt format (AI.md PART 11).
+// Format: time=<RFC3339> level=INFO msg="..." key=value ...
+func (l *Logger) App(msg string, args ...any) {
+	l.writeText(l.appHandler, slog.LevelInfo, msg, args...)
+}
+
+// AppWarn writes a WARN-level event to app.log in logfmt format (AI.md PART 11).
+func (l *Logger) AppWarn(msg string, args ...any) {
+	l.writeText(l.appHandler, slog.LevelWarn, msg, args...)
+}
+
+// WriteAuth appends a syslog RFC 3164 authentication event to auth.log (AI.md PART 11).
+//
+// Format: MMM DD HH:MM:SS hostname caswhois[pid]: auth: user=xxx ip=x.x.x.x result=success|fail reason=<code>
+func (l *Logger) WriteAuth(user, ip, result, reason string) {
+	if l.authFile == nil {
+		return
+	}
+
+	hostname, _ := os.Hostname()
+	now := time.Now()
+	// Syslog RFC 3164 timestamp: "Jan  2 15:04:05" (no year, leading space for single-digit day).
+	syslogTime := now.Format("Jan _2 15:04:05")
+	pid := os.Getpid()
+
+	line := fmt.Sprintf("%s %s caswhois[%d]: auth: user=%s ip=%s result=%s reason=%s\n",
+		syslogTime, hostname, pid, user, ip, result, reason)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.authFile != nil {
+		_, _ = l.authFile.WriteString(line)
 	}
 }
 
