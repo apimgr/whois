@@ -98,7 +98,7 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 			RateLimiting: s.config.RateLimit.Enabled,
 			Caching:      true,
 			GeoIP:        s.config.GeoIP.Enabled,
-			Metrics:      s.config.MetricsEnabled,
+			Metrics:      s.config.Metrics.Enabled,
 			TorHidden:    onionAddr != "",
 		},
 		// CLI versions map is empty until server-side binary hosting is added.

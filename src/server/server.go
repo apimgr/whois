@@ -96,11 +96,11 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 
 	// Initialize Metrics (PART 20)
 	metricsCfg := metrics.MetricsConfig{
-		Enabled:        cfg.MetricsEnabled,
-		Endpoint:       cfg.MetricsEndpoint,
-		IncludeSystem:  cfg.MetricsIncludeSystem,
-		IncludeRuntime: cfg.MetricsIncludeRuntime,
-		Token:          cfg.MetricsToken,
+		Enabled:        cfg.Metrics.Enabled,
+		Endpoint:       cfg.Metrics.Endpoint,
+		IncludeSystem:  cfg.Metrics.IncludeSystem,
+		IncludeRuntime: cfg.Metrics.IncludeRuntime,
+		Token:          cfg.Metrics.Token,
 	}
 	metricsCollector := metrics.New("caswhois", metricsCfg)
 	if metricsCollector != nil {
@@ -369,8 +369,8 @@ func (s *Server) setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
 	// Metrics endpoint (PART 20) - INTERNAL ONLY, token-protected
-	if s.metrics != nil && s.config.MetricsEnabled {
-		endpoint := s.config.MetricsEndpoint
+	if s.metrics != nil && s.config.Metrics.Enabled {
+		endpoint := s.config.Metrics.Endpoint
 		if endpoint == "" {
 			endpoint = "/metrics"
 		}
@@ -544,8 +544,8 @@ func (s *Server) handleMetrics() http.Handler {
 	handler := promhttp.Handler()
 
 	// If token is configured, require bearer authentication.
-	if s.config.MetricsToken != "" {
-		expected := []byte("Bearer " + s.config.MetricsToken)
+	if s.config.Metrics.Token != "" {
+		expected := []byte("Bearer " + s.config.Metrics.Token)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Constant-time comparison prevents timing oracle on the token.
 			got := []byte(r.Header.Get("Authorization"))

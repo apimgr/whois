@@ -168,6 +168,17 @@ type I18nConfig struct {
 	Supported       []string `yaml:"supported"`
 }
 
+// MetricsConfig holds Prometheus metrics settings (AI.md PART 20 — server.metrics.*).
+type MetricsConfig struct {
+	Enabled        bool    `yaml:"enabled"`
+	Endpoint       string  `yaml:"endpoint"`
+	IncludeSystem  bool    `yaml:"include_system"`
+	IncludeRuntime bool    `yaml:"include_runtime"`
+	// Token is the optional Bearer token required to scrape /metrics.
+	// Empty = no auth (rely on firewall).
+	Token string `yaml:"token"`
+}
+
 // GeoIPDatabasesConfig holds which MMDB databases to enable (AI.md PART 19).
 type GeoIPDatabasesConfig struct {
 	ASN     bool `yaml:"asn"`
@@ -307,12 +318,8 @@ type ServerConfig struct {
 	// GeoIP settings (AI.md PART 19 — server.geoip.*)
 	GeoIP GeoIPConfig `yaml:"geoip"`
 
-	// Metrics settings (AI.md PART 20)
-	MetricsEnabled        bool   `yaml:"metrics_enabled"`
-	MetricsEndpoint       string `yaml:"metrics_endpoint"`
-	MetricsIncludeSystem  bool   `yaml:"metrics_include_system"`
-	MetricsIncludeRuntime bool   `yaml:"metrics_include_runtime"`
-	MetricsToken          string `yaml:"metrics_token"`
+	// Metrics settings (AI.md PART 20 — server.metrics.*)
+	Metrics MetricsConfig `yaml:"metrics"`
 
 	// Backup settings (AI.md PART 21)
 	BackupDir              string `yaml:"backup_dir"`              // Backup directory
@@ -439,11 +446,13 @@ func Default() *ServerConfig {
 				WHOIS:   true,
 			},
 		},
-		MetricsEnabled:        true,
-		MetricsEndpoint:       "/metrics",
-		MetricsIncludeSystem:  true,
-		MetricsIncludeRuntime: true,
-		MetricsToken:          "", // No token by default (use firewall)
+		Metrics: MetricsConfig{
+			Enabled:        true,
+			Endpoint:       "/metrics",
+			IncludeSystem:  true,
+			IncludeRuntime: true,
+			Token:          "", // No token by default — restrict by firewall
+		},
 		BackupDir:              "",  // Will be determined by OS ({data_dir}/backups)
 		BackupEncryptionEnabled: false, // Set during setup or in admin panel
 		BackupMaxBackups:       1,   // Keep 1 daily full backup (default per spec)
@@ -777,8 +786,8 @@ func (c *ServerConfig) Sanitized() map[string]any {
 		"backup_dir":         c.BackupDir,
 		"smtp_host":          c.Notifications.Email.SMTP.Host,
 		"smtp_tls_mode":      c.Notifications.Email.SMTP.TLS,
-		"metrics_enabled":    c.MetricsEnabled,
-		"metrics_endpoint":   c.MetricsEndpoint,
+		"metrics_enabled":    c.Metrics.Enabled,
+		"metrics_endpoint":   c.Metrics.Endpoint,
 		"rate_limit_enabled": c.RateLimit.Enabled,
 		"server_token":       "xxxxx",
 		"api_tokens":         "[redacted]",

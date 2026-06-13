@@ -109,7 +109,7 @@ func TestDefault(t *testing.T) {
 	}
 
 	// Metrics enabled by default
-	if !cfg.MetricsEnabled {
+	if !cfg.Metrics.Enabled {
 		t.Error("Default().MetricsEnabled = false, want true")
 	}
 
