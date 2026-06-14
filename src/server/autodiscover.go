@@ -85,7 +85,7 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 
 	resp := AutodiscoverResponse{
 		Server: AutodiscoverServer{
-			Name:      s.config.BrandingTitle,
+			Name:      s.config.Branding.Title,
 			Version:   Version,
 			GoVersion: runtime.Version(),
 		},

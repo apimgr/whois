@@ -55,18 +55,18 @@ func TestDefault(t *testing.T) {
 	}
 
 	// Branding title must default to "caswhois"
-	if cfg.BrandingTitle != "caswhois" {
-		t.Errorf("Default().BrandingTitle = %q, want %q", cfg.BrandingTitle, "caswhois")
+	if cfg.Branding.Title != "caswhois" {
+		t.Errorf("Default().Branding.Title = %q, want %q", cfg.Branding.Title, "caswhois")
 	}
 
 	// Branding theme must default to "auto" (dark/light/auto CSS)
-	if cfg.BrandingTheme != "auto" {
-		t.Errorf("Default().BrandingTheme = %q, want %q", cfg.BrandingTheme, "auto")
+	if cfg.Branding.Theme != "auto" {
+		t.Errorf("Default().Branding.Theme = %q, want %q", cfg.Branding.Theme, "auto")
 	}
 
 	// Accent color must have a sensible default
-	if cfg.BrandingAccentColor == "" {
-		t.Error("Default().BrandingAccentColor is empty")
+	if cfg.Branding.AccentColor == "" {
+		t.Error("Default().Branding.AccentColor is empty")
 	}
 
 	// Rate limit read window must be non-zero

@@ -128,15 +128,15 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	cacheStats, _ := s.cache.Stats(ctx)
 	
 	// Build response
-	name := s.config.BrandingTitle
+	name := s.config.Branding.Title
 	if name == "" {
 		name = "caswhois"
 	}
-	tagline := s.config.BrandingTagline
+	tagline := s.config.Branding.Tagline
 	if tagline == "" {
 		tagline = "WHOIS Lookup Service"
 	}
-	description := s.config.BrandingDescription
+	description := s.config.Branding.Description
 	if description == "" {
 		description = "Domain, IP, and ASN WHOIS lookup service"
 	}

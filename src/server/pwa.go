@@ -7,15 +7,15 @@ import (
 
 // handleManifest serves /manifest.json for PWA support (AI.md PART 16).
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
-	name := s.config.BrandingTitle
+	name := s.config.Branding.Title
 	if name == "" {
 		name = "caswhois"
 	}
-	desc := s.config.BrandingDescription
+	desc := s.config.Branding.Description
 	if desc == "" {
 		desc = "WHOIS lookup service"
 	}
-	themeColor := s.config.BrandingAccentColor
+	themeColor := s.config.Branding.AccentColor
 	if themeColor == "" {
 		themeColor = "#007bff"
 	}
@@ -53,7 +53,7 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 
 // handleServiceWorker serves /sw.js for PWA offline support (AI.md PART 16).
 func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
-	appName := s.config.BrandingTitle
+	appName := s.config.Branding.Title
 	if appName == "" {
 		appName = "caswhois"
 	}
@@ -122,7 +122,7 @@ self.addEventListener('message', event => {
 
 // handleOfflinePage serves /offline.html shown by the service worker when offline (AI.md PART 16).
 func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
-	name := s.config.BrandingTitle
+	name := s.config.Branding.Title
 	if name == "" {
 		name = "caswhois"
 	}

@@ -41,15 +41,15 @@ var docsTmpl = mustParseTemplate("docs", "docs.html")
 // Content is sourced from branding config (defaults to IDEA.md values) per AI.md PART 16.
 // GET /about, /server/about
 func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
-	name := s.config.BrandingTitle
+	name := s.config.Branding.Title
 	if name == "" {
 		name = "caswhois"
 	}
-	tagline := s.config.BrandingTagline
+	tagline := s.config.Branding.Tagline
 	if tagline == "" {
 		tagline = "Self-hosted WHOIS lookup service"
 	}
-	description := s.config.BrandingDescription
+	description := s.config.Branding.Description
 	if description == "" {
 		description = "caswhois is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
 	}
@@ -72,14 +72,14 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 // Content uses branding config and live config values (rate limits, API version) per AI.md PART 16.
 // GET /docs, /server/docs
 func (s *Server) handleDocsPage(w http.ResponseWriter, r *http.Request) {
-	name := s.config.BrandingTitle
+	name := s.config.Branding.Title
 	if name == "" {
 		name = "caswhois"
 	}
 	data := DocsPageData{
 		translatablePageData: translatablePageData{T: newTranslatorFunc(r)},
 		Name:          name,
-		Tagline:       s.config.BrandingTagline,
+		Tagline:       s.config.Branding.Tagline,
 		APIVersion:    "v1",
 		RateLimitRead: s.config.RateLimit.Read.Requests,
 		OfficialSite:  s.config.FQDN,

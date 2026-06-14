@@ -141,11 +141,19 @@ type LimitsConfig struct {
 	IdleTimeout string `yaml:"idle_timeout"`
 }
 
-// WebConfig holds web-layer settings (AI.md PART 16) — CORS, CSRF, etc.
+// WebConfig holds top-level web-layer settings (AI.md PART 16).
+// In server.yml this lives under the top-level web: key (sibling to server:).
 type WebConfig struct {
 	// CORS is a comma-separated list of allowed origins.
 	// "*" = allow all (default); "" = no CORS headers (same-origin only).
 	CORS string `yaml:"cors"`
+}
+
+// ConfigFile is the top-level structure of server.yml (AI.md PART 5).
+// server: holds all server settings; web: is a sibling section.
+type ConfigFile struct {
+	Server ServerConfig `yaml:"server"`
+	Web    WebConfig    `yaml:"web"`
 }
 
 // CompressionConfig holds response compression settings (AI.md PART 12).
@@ -226,6 +234,15 @@ type MetricsConfig struct {
 	// Token is the optional Bearer token required to scrape /metrics.
 	// Empty = no auth (rely on firewall).
 	Token string `yaml:"token"`
+}
+
+// BrandingConfig holds branding and SEO settings (AI.md PART 16 — server.branding.*).
+type BrandingConfig struct {
+	Title       string `yaml:"title"`
+	Tagline     string `yaml:"tagline"`
+	Description string `yaml:"description"`
+	Theme       string `yaml:"theme"`
+	AccentColor string `yaml:"accent_color"`
 }
 
 // GeoIPDatabasesConfig holds which MMDB databases to enable (AI.md PART 19).
@@ -336,18 +353,15 @@ type ServerConfig struct {
 	// DatabaseURL is the libsql/Turso connection string when using a remote database.
 	DatabaseURL string `yaml:"database_url"`
 
-	// Branding settings
-	BrandingTitle       string `yaml:"branding_title"`
-	BrandingTagline     string `yaml:"branding_tagline"`
-	BrandingDescription string `yaml:"branding_description"`
-	BrandingTheme       string `yaml:"branding_theme"`        // auto, light, dark
-	BrandingAccentColor string `yaml:"branding_accent_color"` // hex color
+	// Branding settings (AI.md PART 16 — server.branding.*)
+	Branding BrandingConfig `yaml:"branding"`
 
-	// TLS / Let's Encrypt settings (AI.md PART 15)
-	TLS TLSConfig `yaml:"tls"`
+	// TLS / Let's Encrypt settings (AI.md PART 15 — server.ssl.*)
+	TLS TLSConfig `yaml:"ssl"`
 
-	// Web-layer settings (AI.md PART 16 — CORS, CSRF)
-	Web WebConfig `yaml:"web"`
+	// Web is populated from the top-level web: key by ConfigFile;
+	// stored here so handlers can access it via s.config.Web.CORS.
+	Web WebConfig `yaml:"-"`
 
 	// Request size and timeout limits (AI.md PART 12)
 	Limits LimitsConfig `yaml:"limits"`
@@ -430,11 +444,13 @@ func Default() *ServerConfig {
 		Web: WebConfig{
 			CORS: "*",
 		},
-		BrandingTitle:       "caswhois",
-		BrandingTagline:     "",
-		BrandingDescription: "",
-		BrandingTheme:       "auto",
-		BrandingAccentColor: "#007bff",
+		Branding: BrandingConfig{
+			Title:       "caswhois",
+			Tagline:     "",
+			Description: "",
+			Theme:       "auto",
+			AccentColor: "#007bff",
+		},
 		Limits: LimitsConfig{
 			MaxBodySize:  "10MB",
 			ReadTimeout:  "30s",
@@ -573,11 +589,17 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	// Parse YAML
-	cfg := Default()
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	// Parse YAML — server.yml uses a top-level server: wrapper (AI.md PART 5).
+	// The web: sibling section is merged into cfg.Web after unmarshaling.
+	cfgDefault := Default()
+	cf := ConfigFile{Server: *cfgDefault}
+	cf.Web.CORS = "*" // default CORS
+	if err := yaml.Unmarshal(data, &cf); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
+	cfg := &cf.Server
+	// Propagate web: section into ServerConfig so handlers can access cfg.Web.
+	cfg.Web = cf.Web
 
 	// Set config dir if not specified
 	if cfg.ConfigDir == "" {
@@ -847,8 +869,16 @@ func (c *ServerConfig) Save(configDir string) error {
 
 	configPath := filepath.Join(configDir, "server.yml")
 
-	// Marshal to YAML
-	data, err := yaml.Marshal(c)
+	// Marshal via ConfigFile wrapper so the file uses the server: top-level key
+	// matching the AI.md PART 5 format. web: defaults to CORS "*".
+	cf := ConfigFile{
+		Server: *c,
+		Web:    c.Web,
+	}
+	if cf.Web.CORS == "" {
+		cf.Web.CORS = "*"
+	}
+	data, err := yaml.Marshal(cf)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
