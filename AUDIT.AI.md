@@ -2,6 +2,33 @@
 
 Started: 2026-06-02
 
+## Pass 17: Spec Compliance — Config schema restructuring (PART 5, 15-21, 31)
+
+All configuration sections in config.go used flat yaml keys (e.g. `geoip_enabled`,
+`smtp_host`, `tor_binary`) instead of the nested yaml paths defined in AI.md.
+
+Violations found and fixed (all tests pass after each change):
+
+- VIOLATION [PART 17]: `smtp_host/smtp_port/smtp_tls/email_from_*` flat → nested
+  under `notifications.email.{smtp,from}.*` (7 fields → 1 NotificationsConfig)
+- VIOLATION [PART 19]: `geoip_enabled/geoip_dir/geoip_database_*/geoip_*_countries`
+  flat → nested under `geoip.*` and `geoip.databases.*` (8 fields → 1 GeoIPConfig)
+- VIOLATION [PART 20]: `metrics_enabled/metrics_endpoint/metrics_*` flat → nested
+  under `metrics.*` (5 fields → 1 MetricsConfig)
+- VIOLATION [PART 21]: `backup_dir/backup_encryption_enabled/backup_max_backups/
+  backup_keep_*` flat → nested under `backup.{dir,encryption,retention}.*`
+  (6 fields → 1 BackupConfig); `compliance_enabled` → `compliance.enabled`
+- VIOLATION [PART 31]: 13 flat `tor_*` fields → nested under `tor.*` (1 TorConfig)
+- VIOLATION [PART 5/PART 16 branding]: `branding_title/tagline/description/theme/
+  accent_color` flat → nested under `branding.*` (5 fields → 1 BrandingConfig)
+- VIOLATION [PART 5]: `server.yml` was missing top-level `server:` wrapper and
+  `web:` sibling section. Added `ConfigFile{Server, Web}` struct; updated
+  `LoadServerConfig` to unmarshal via wrapper; updated `Save` to marshal via wrapper
+- VIOLATION [PART 15]: TLS config used yaml key `tls:` — spec uses `ssl:`. Fixed.
+- VIOLATION [PART 11]: `app.log` (logfmt) and `auth.log` (syslog RFC 3164) were
+  missing from logger. Added both file handles and write methods.
+- VIOLATION [PART 15]: No TLSConfig in config.go. Added with correct PART 15 fields.
+
 ## Pass 16: Spec Compliance (PART 33 — IDEA.md)
 
 Violations found and fixed:
