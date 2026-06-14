@@ -149,8 +149,8 @@ func TestDefault(t *testing.T) {
 	}
 
 	// DatabaseDriver empty — auto-detected at runtime
-	if cfg.DatabaseDriver != "" {
-		t.Errorf("Default().DatabaseDriver = %q, want empty", cfg.DatabaseDriver)
+	if cfg.Database.Driver != "" {
+		t.Errorf("Default().DatabaseDriver = %q, want empty", cfg.Database.Driver)
 	}
 }
 
@@ -699,7 +699,7 @@ func TestGetDatabaseDir(t *testing.T) {
 	// Tier 1: explicit DatabaseDir in config wins over everything
 	t.Run("explicit config field", func(t *testing.T) {
 		cfg := Default()
-		cfg.DatabaseDir = "/explicit/db"
+		cfg.Database.Dir = "/explicit/db"
 
 		os.Unsetenv("DATABASE_DIR")
 		got := cfg.GetDatabaseDir()
@@ -711,7 +711,7 @@ func TestGetDatabaseDir(t *testing.T) {
 	// Tier 2: DATABASE_DIR env var wins when config field is empty
 	t.Run("DATABASE_DIR env var", func(t *testing.T) {
 		cfg := Default()
-		cfg.DatabaseDir = ""
+		cfg.Database.Dir = ""
 
 		t.Setenv("DATABASE_DIR", "/env/db")
 		got := cfg.GetDatabaseDir()
@@ -723,7 +723,7 @@ func TestGetDatabaseDir(t *testing.T) {
 	// Tier 4 (non-container): when DataDir is set, path is {DataDir}/db
 	t.Run("data_dir fallback on non-container", func(t *testing.T) {
 		cfg := Default()
-		cfg.DatabaseDir = ""
+		cfg.Database.Dir = ""
 		cfg.DataDir = "/my/data"
 
 		os.Unsetenv("DATABASE_DIR")
@@ -743,7 +743,7 @@ func TestGetDatabaseDir(t *testing.T) {
 	// Tier 4 fallback: when nothing is set, a non-empty string is still returned
 	t.Run("fallback returns non-empty string", func(t *testing.T) {
 		cfg := Default()
-		cfg.DatabaseDir = ""
+		cfg.Database.Dir = ""
 		cfg.DataDir = ""
 
 		os.Unsetenv("DATABASE_DIR")
@@ -844,8 +844,8 @@ func TestGetDatabaseConfig(t *testing.T) {
 		os.Unsetenv("DATABASE_DRIVER")
 
 		cfg := Default()
-		cfg.DatabaseURL = "libsql://cfg.example.com"
-		cfg.DatabaseDriver = "libsql"
+		cfg.Database.URL = "libsql://cfg.example.com"
+		cfg.Database.Driver = "libsql"
 
 		driver, url, path := cfg.GetDatabaseConfig()
 
@@ -866,8 +866,8 @@ func TestGetDatabaseConfig(t *testing.T) {
 		os.Unsetenv("DATABASE_DRIVER")
 
 		cfg := Default()
-		cfg.DatabaseURL = "libsql://nodriver.example.com"
-		cfg.DatabaseDriver = ""
+		cfg.Database.URL = "libsql://nodriver.example.com"
+		cfg.Database.Driver = ""
 
 		driver, _, _ := cfg.GetDatabaseConfig()
 		if driver != "sqlite" {
@@ -882,8 +882,8 @@ func TestGetDatabaseConfig(t *testing.T) {
 		os.Unsetenv("DATABASE_DIR")
 
 		cfg := Default()
-		cfg.DatabaseURL = ""
-		cfg.DatabaseDriver = ""
+		cfg.Database.URL = ""
+		cfg.Database.Driver = ""
 
 		driver, url, path := cfg.GetDatabaseConfig()
 

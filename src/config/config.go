@@ -236,6 +236,20 @@ type MetricsConfig struct {
 	Token string `yaml:"token"`
 }
 
+// DatabaseConfig holds database connection settings (AI.md PART 10 — server.database.*).
+type DatabaseConfig struct {
+	// Driver is the database driver: "sqlite" (default) or "libsql"/"turso".
+	// Empty = auto-detect from URL.
+	Driver string `yaml:"driver"`
+	// URL is the libsql/Turso remote connection string.
+	// When set, remote mode is used. Takes precedence over Dir.
+	URL string `yaml:"url"`
+	// Token is the Turso auth token (used when URL is set without an embedded authToken).
+	Token string `yaml:"token"`
+	// Dir is the directory containing SQLite files (sqlite driver only).
+	Dir string `yaml:"dir"`
+}
+
 // BrandingConfig holds branding and SEO settings (AI.md PART 16 — server.branding.*).
 type BrandingConfig struct {
 	Title       string `yaml:"title"`
@@ -344,14 +358,8 @@ type ServerConfig struct {
 	DataDir   string `yaml:"data_dir"`
 	LogDir    string `yaml:"log_dir"`
 	CacheDir  string `yaml:"cache_dir"`
-	// DatabaseDir is the SQLite database directory.
-	DatabaseDir string `yaml:"database_dir"`
-
-	// Database settings (PART 10 — SQLite or libsql/Turso only; never PostgreSQL or MySQL).
-	// DatabaseDriver is "sqlite" (default) or "libsql"; empty means auto-detect from URL.
-	DatabaseDriver string `yaml:"database_driver"`
-	// DatabaseURL is the libsql/Turso connection string when using a remote database.
-	DatabaseURL string `yaml:"database_url"`
+	// Database settings (AI.md PART 10 — server.database.*)
+	Database DatabaseConfig `yaml:"database"`
 
 	// Branding settings (AI.md PART 16 — server.branding.*)
 	Branding BrandingConfig `yaml:"branding"`
@@ -431,9 +439,12 @@ func Default() *ServerConfig {
 		ConfigDir:           "", // Will be determined by OS
 		DataDir:             "", // Will be determined by OS
 		LogDir:              "", // Will be determined by OS
-		DatabaseDir:         "", // Will be determined by OS
-		DatabaseDriver:      "", // Auto-detect: sqlite or libsql from DATABASE_URL
-		DatabaseURL:         "", // From DATABASE_URL env var
+		Database: DatabaseConfig{
+			Driver: "", // Auto-detect: sqlite or libsql from DATABASE_URL env var
+			URL:    "", // From DATABASE_URL env var
+			Token:  "", // From TURSO_AUTH_TOKEN env var
+			Dir:    "", // Applied at runtime (AI.md PART 4)
+		},
 		BaseURL: "/",
 		TLS: TLSConfig{
 			Enabled:    false,
@@ -673,8 +684,8 @@ func (c *ServerConfig) Validate() error {
 // Priority: Explicit config -> DATABASE_DIR env -> Container default -> Native default
 func (c *ServerConfig) GetDatabaseDir() string {
 	// 1. Explicit configuration
-	if c.DatabaseDir != "" {
-		return c.DatabaseDir
+	if c.Database.Dir != "" {
+		return c.Database.Dir
 	}
 
 	// 2. DATABASE_DIR environment variable
@@ -769,12 +780,12 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	}
 
 	// Check config values
-	if c.DatabaseURL != "" {
-		driver = c.DatabaseDriver
+	if c.Database.URL != "" {
+		driver = c.Database.Driver
 		if driver == "" {
 			driver = "sqlite"
 		}
-		return driver, c.DatabaseURL, ""
+		return driver, c.Database.URL, ""
 	}
 
 	// Default to SQLite
