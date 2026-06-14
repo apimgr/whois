@@ -182,7 +182,7 @@ func main() {
 		cfg.LogDir = logDir
 	}
 	if backupDir != "" {
-		cfg.BackupDir = backupDir
+		cfg.Backup.Dir = backupDir
 	}
 
 	// Initialize database
@@ -366,8 +366,8 @@ func loadConfig(configDir, mode, address string, port int, debug bool) (*config.
 	if cfg.LogDir == "" {
 		cfg.LogDir = getDefaultLogDir()
 	}
-	if cfg.BackupDir == "" {
-		cfg.BackupDir = getDefaultBackupDir()
+	if cfg.Backup.Dir == "" {
+		cfg.Backup.Dir = getDefaultBackupDir()
 	}
 
 	// Override with CLI flags

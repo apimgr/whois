@@ -168,6 +168,55 @@ type I18nConfig struct {
 	Supported       []string `yaml:"supported"`
 }
 
+// BackupEncryptionConfig holds backup encryption settings (AI.md PART 21).
+type BackupEncryptionConfig struct {
+	// Enabled is true when a backup password has been set.
+	Enabled bool `yaml:"enabled"`
+}
+
+// BackupRetentionConfig holds backup retention policy (AI.md PART 21).
+type BackupRetentionConfig struct {
+	// MaxBackups is the number of daily full backups to keep (≥1).
+	MaxBackups int `yaml:"max_backups"`
+	// KeepWeekly is the number of Sunday backups to retain (0 = disabled).
+	KeepWeekly int `yaml:"keep_weekly"`
+	// KeepMonthly is the number of 1st-of-month backups to retain (0 = disabled).
+	KeepMonthly int `yaml:"keep_monthly"`
+	// KeepYearly is the number of January-1st backups to retain (0 = disabled).
+	KeepYearly int `yaml:"keep_yearly"`
+}
+
+// BackupConfig holds backup settings (AI.md PART 21 — server.backup.*).
+type BackupConfig struct {
+	// Dir is the backup directory (defaults to {data_dir}/backups per PART 4).
+	Dir        string                 `yaml:"dir"`
+	Encryption BackupEncryptionConfig `yaml:"encryption"`
+	Retention  BackupRetentionConfig  `yaml:"retention"`
+}
+
+// ComplianceConfig holds compliance mode settings (AI.md PART 21).
+type ComplianceConfig struct {
+	// Enabled activates compliance mode (HIPAA, SOC2, etc.) — requires encrypted backups.
+	Enabled bool `yaml:"enabled"`
+}
+
+// TorConfig holds Tor hidden service settings (AI.md PART 31 — server.tor.*).
+type TorConfig struct {
+	Binary                    string `yaml:"binary"`
+	UseNetwork                bool   `yaml:"use_network"`
+	MaxCircuits               int    `yaml:"max_circuits"`
+	CircuitTimeout            int    `yaml:"circuit_timeout"`
+	BootstrapTimeout          int    `yaml:"bootstrap_timeout"`
+	SafeLogging               bool   `yaml:"safe_logging"`
+	MaxStreamsPerCircuit       int    `yaml:"max_streams_per_circuit"`
+	CloseCircuitOnStreamLimit bool   `yaml:"close_circuit_on_stream_limit"`
+	BandwidthRate             string `yaml:"bandwidth_rate"`
+	BandwidthBurst            string `yaml:"bandwidth_burst"`
+	MaxMonthlyBandwidth       string `yaml:"max_monthly_bandwidth"`
+	NumIntroPoints            int    `yaml:"num_intro_points"`
+	VirtualPort               int    `yaml:"virtual_port"`
+}
+
 // MetricsConfig holds Prometheus metrics settings (AI.md PART 20 — server.metrics.*).
 type MetricsConfig struct {
 	Enabled        bool    `yaml:"enabled"`
@@ -321,34 +370,17 @@ type ServerConfig struct {
 	// Metrics settings (AI.md PART 20 — server.metrics.*)
 	Metrics MetricsConfig `yaml:"metrics"`
 
-	// Backup settings (AI.md PART 21)
-	BackupDir              string `yaml:"backup_dir"`              // Backup directory
-	BackupEncryptionEnabled bool   `yaml:"backup_encryption_enabled"` // Encryption enabled
-	BackupMaxBackups       int    `yaml:"backup_max_backups"`        // Daily full backups to keep (≥1)
-	BackupKeepWeekly       int    `yaml:"backup_keep_weekly"`        // Weekly backups (Sunday) - 0 = disabled
-	BackupKeepMonthly      int    `yaml:"backup_keep_monthly"`       // Monthly backups (1st) - 0 = disabled
-	BackupKeepYearly       int    `yaml:"backup_keep_yearly"`        // Yearly backups (Jan 1st) - 0 = disabled
+	// Backup settings (AI.md PART 21 — server.backup.*)
+	Backup BackupConfig `yaml:"backup"`
 
-	// Compliance settings (AI.md PART 21)
-	ComplianceEnabled bool `yaml:"compliance_enabled"` // HIPAA, SOC2, etc. - requires encrypted backups
+	// Compliance settings (AI.md PART 21 — server.compliance.*)
+	Compliance ComplianceConfig `yaml:"compliance"`
 
 	// Update settings (PART 23)
 	UpdateChannel string `yaml:"update_channel"` // stable, beta, daily
 
-	// Tor hidden service settings (PART 31)
-	TorBinary                    string `yaml:"tor_binary"`
-	TorUseNetwork                bool   `yaml:"tor_use_network"`
-	TorMaxCircuits               int    `yaml:"tor_max_circuits"`
-	TorCircuitTimeout            int    `yaml:"tor_circuit_timeout"`
-	TorBootstrapTimeout          int    `yaml:"tor_bootstrap_timeout"`
-	TorSafeLogging               bool   `yaml:"tor_safe_logging"`
-	TorMaxStreamsPerCircuit       int    `yaml:"tor_max_streams_per_circuit"`
-	TorCloseCircuitOnStreamLimit bool   `yaml:"tor_close_circuit_on_stream_limit"`
-	TorBandwidthRate             string `yaml:"tor_bandwidth_rate"`
-	TorBandwidthBurst            string `yaml:"tor_bandwidth_burst"`
-	TorMaxMonthlyBandwidth       string `yaml:"tor_max_monthly_bandwidth"`
-	TorNumIntroPoints            int    `yaml:"tor_num_intro_points"`
-	TorVirtualPort               int    `yaml:"tor_virtual_port"`
+	// Tor hidden service settings (AI.md PART 31 — server.tor.*)
+	Tor TorConfig `yaml:"tor"`
 
 	// Notifications settings (AI.md PART 17 — server.notifications.email.smtp.*)
 	Notifications NotificationsConfig `yaml:"notifications"`
@@ -453,27 +485,33 @@ func Default() *ServerConfig {
 			IncludeRuntime: true,
 			Token:          "", // No token by default — restrict by firewall
 		},
-		BackupDir:              "",  // Will be determined by OS ({data_dir}/backups)
-		BackupEncryptionEnabled: false, // Set during setup or in admin panel
-		BackupMaxBackups:       1,   // Keep 1 daily full backup (default per spec)
-		BackupKeepWeekly:       0,   // 0 = disabled (default per spec)
-		BackupKeepMonthly:      0,   // 0 = disabled (default per spec)
-		BackupKeepYearly:       0,   // 0 = disabled (default per spec)
-		ComplianceEnabled:     false, // HIPAA, SOC2, etc. - requires encrypted backups
-		UpdateChannel:                "stable",
-		TorBinary:                    "",
-		TorUseNetwork:                false,
-		TorMaxCircuits:               32,
-		TorCircuitTimeout:            60,
-		TorBootstrapTimeout:          180,
-		TorSafeLogging:               true,
-		TorMaxStreamsPerCircuit:       100,
-		TorCloseCircuitOnStreamLimit: true,
-		TorBandwidthRate:             "1 MB",
-		TorBandwidthBurst:            "2 MB",
-		TorMaxMonthlyBandwidth:       "100 GB",
-		TorNumIntroPoints:            3,
-		TorVirtualPort:               80,
+		Backup: BackupConfig{
+			Dir: "", // Applied at runtime: {data_dir}/backups (AI.md PART 4)
+			Encryption: BackupEncryptionConfig{Enabled: false},
+			Retention: BackupRetentionConfig{
+				MaxBackups:  1, // Keep 1 daily full backup (default per spec)
+				KeepWeekly:  0, // 0 = disabled
+				KeepMonthly: 0, // 0 = disabled
+				KeepYearly:  0, // 0 = disabled
+			},
+		},
+		Compliance: ComplianceConfig{Enabled: false},
+		UpdateChannel: "stable",
+		Tor: TorConfig{
+			Binary:                    "",
+			UseNetwork:                false,
+			MaxCircuits:               32,
+			CircuitTimeout:            60,
+			BootstrapTimeout:          180,
+			SafeLogging:               true,
+			MaxStreamsPerCircuit:       100,
+			CloseCircuitOnStreamLimit: true,
+			BandwidthRate:             "1 MB",
+			BandwidthBurst:            "2 MB",
+			MaxMonthlyBandwidth:       "100 GB",
+			NumIntroPoints:            3,
+			VirtualPort:               80,
+		},
 		Notifications: NotificationsConfig{
 			Email: EmailNotificationsConfig{
 				SMTP: SMTPConfig{
@@ -581,22 +619,22 @@ func (c *ServerConfig) Validate() error {
 	}
 
 	// Backup retention validation (warn, don't error - server must start per spec)
-	if c.BackupMaxBackups <= 0 {
+	if c.Backup.Retention.MaxBackups <= 0 {
 		// Warn and use default
-		c.BackupMaxBackups = 1
+		c.Backup.Retention.MaxBackups = 1
 	}
-	if c.BackupKeepWeekly < 0 {
-		c.BackupKeepWeekly = 0
+	if c.Backup.Retention.KeepWeekly < 0 {
+		c.Backup.Retention.KeepWeekly = 0
 	}
-	if c.BackupKeepMonthly < 0 {
-		c.BackupKeepMonthly = 0
+	if c.Backup.Retention.KeepMonthly < 0 {
+		c.Backup.Retention.KeepMonthly = 0
 	}
-	if c.BackupKeepYearly < 0 {
-		c.BackupKeepYearly = 0
+	if c.Backup.Retention.KeepYearly < 0 {
+		c.Backup.Retention.KeepYearly = 0
 	}
 
 	// Compliance mode validation
-	if c.ComplianceEnabled && !c.BackupEncryptionEnabled {
+	if c.Compliance.Enabled && !c.Backup.Encryption.Enabled {
 		// This will be caught at backup time and user will be prompted
 		// Don't block server startup
 	}
@@ -649,8 +687,8 @@ func (c *ServerConfig) GetDatabaseDir() string {
 // Priority: Explicit config → Container default → Root native → User native
 func (c *ServerConfig) GetBackupDir() string {
 	// 1. Explicit configuration (server.yml backup_dir or --backup CLI flag)
-	if c.BackupDir != "" {
-		return c.BackupDir
+	if c.Backup.Dir != "" {
+		return c.Backup.Dir
 	}
 
 	// 2. Container default: /data/backups/caswhois (AI.md PART 4)
@@ -783,7 +821,7 @@ func (c *ServerConfig) Sanitized() map[string]any {
 		"debug":              c.Debug,
 		"data_dir":           c.DataDir,
 		"log_dir":            c.LogDir,
-		"backup_dir":         c.BackupDir,
+		"backup_dir":         c.Backup.Dir,
 		"smtp_host":          c.Notifications.Email.SMTP.Host,
 		"smtp_tls_mode":      c.Notifications.Email.SMTP.TLS,
 		"metrics_enabled":    c.Metrics.Enabled,

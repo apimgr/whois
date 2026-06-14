@@ -114,22 +114,22 @@ func TestDefault(t *testing.T) {
 	}
 
 	// Backup encryption disabled by default
-	if cfg.BackupEncryptionEnabled {
+	if cfg.Backup.Encryption.Enabled {
 		t.Error("Default().BackupEncryptionEnabled = true, want false")
 	}
 
 	// BackupMaxBackups must be >= 1 (spec: keep at least 1)
-	if cfg.BackupMaxBackups < 1 {
-		t.Errorf("Default().BackupMaxBackups = %d, want >= 1", cfg.BackupMaxBackups)
+	if cfg.Backup.Retention.MaxBackups < 1 {
+		t.Errorf("Default().BackupMaxBackups = %d, want >= 1", cfg.Backup.Retention.MaxBackups)
 	}
 
 	// Tor network disabled by default
-	if cfg.TorUseNetwork {
+	if cfg.Tor.UseNetwork {
 		t.Error("Default().TorUseNetwork = true, want false")
 	}
 
 	// TorSafeLogging must be true by default
-	if !cfg.TorSafeLogging {
+	if !cfg.Tor.SafeLogging {
 		t.Error("Default().TorSafeLogging = false, want true")
 	}
 

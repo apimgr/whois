@@ -281,19 +281,19 @@ func (s *Server) Start() error {
 	defer torCancel()
 	go func() {
 		torCfg := castor.TorConfig{
-			Binary:                    s.config.TorBinary,
-			UseNetwork:                s.config.TorUseNetwork,
-			MaxCircuits:               s.config.TorMaxCircuits,
-			CircuitTimeout:            s.config.TorCircuitTimeout,
-			BootstrapTimeout:          s.config.TorBootstrapTimeout,
-			SafeLogging:               s.config.TorSafeLogging,
-			MaxStreamsPerCircuit:       s.config.TorMaxStreamsPerCircuit,
-			CloseCircuitOnStreamLimit: s.config.TorCloseCircuitOnStreamLimit,
-			BandwidthRate:             s.config.TorBandwidthRate,
-			BandwidthBurst:            s.config.TorBandwidthBurst,
-			MaxMonthlyBandwidth:       s.config.TorMaxMonthlyBandwidth,
-			NumIntroPoints:            s.config.TorNumIntroPoints,
-			VirtualPort:               s.config.TorVirtualPort,
+			Binary:                    s.config.Tor.Binary,
+			UseNetwork:                s.config.Tor.UseNetwork,
+			MaxCircuits:               s.config.Tor.MaxCircuits,
+			CircuitTimeout:            s.config.Tor.CircuitTimeout,
+			BootstrapTimeout:          s.config.Tor.BootstrapTimeout,
+			SafeLogging:               s.config.Tor.SafeLogging,
+			MaxStreamsPerCircuit:       s.config.Tor.MaxStreamsPerCircuit,
+			CloseCircuitOnStreamLimit: s.config.Tor.CloseCircuitOnStreamLimit,
+			BandwidthRate:             s.config.Tor.BandwidthRate,
+			BandwidthBurst:            s.config.Tor.BandwidthBurst,
+			MaxMonthlyBandwidth:       s.config.Tor.MaxMonthlyBandwidth,
+			NumIntroPoints:            s.config.Tor.NumIntroPoints,
+			VirtualPort:               s.config.Tor.VirtualPort,
 		}
 		svc, err := castor.Start(torCtx, s.config.Port, &torCfg, s.config.ConfigDir, s.config.DataDir)
 		if err != nil {

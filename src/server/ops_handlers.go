@@ -26,7 +26,7 @@ func (s *Server) runBackup(prefix string) (string, error) {
 	destPath := filepath.Join(backupDir, filename)
 
 	password := ""
-	if s.config.BackupEncryptionEnabled {
+	if s.config.Backup.Encryption.Enabled {
 		// Server token doubles as the backup encryption key (AI.md PART 21).
 		password = s.config.ServerToken
 	}
@@ -47,10 +47,10 @@ func (s *Server) runBackup(prefix string) (string, error) {
 	// Apply retention policy after successful creation (AI.md PART 21).
 	if err := backup.ApplyRetentionPolicy(
 		backupDir,
-		s.config.BackupMaxBackups,
-		s.config.BackupKeepWeekly,
-		s.config.BackupKeepMonthly,
-		s.config.BackupKeepYearly,
+		s.config.Backup.Retention.MaxBackups,
+		s.config.Backup.Retention.KeepWeekly,
+		s.config.Backup.Retention.KeepMonthly,
+		s.config.Backup.Retention.KeepYearly,
 	); err != nil {
 		log.Printf("WARN: backup retention failed: %v", err)
 	}
