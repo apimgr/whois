@@ -49,11 +49,6 @@ func TestDefault(t *testing.T) {
 		t.Error("Default().RateLimit.Enabled = false, want true")
 	}
 
-	// APITokens must be an empty slice, not nil (avoid JSON null)
-	if cfg.APITokens == nil {
-		t.Error("Default().APITokens = nil, want empty slice")
-	}
-
 	// Branding title must default to "caswhois"
 	if cfg.Branding.Title != "caswhois" {
 		t.Errorf("Default().Branding.Title = %q, want %q", cfg.Branding.Title, "caswhois")
@@ -407,7 +402,7 @@ notifications:
     smtp:
       port: 465
 update_channel: beta
-server_token: tok_testtoken12345678901234567890123
+token: tok_testtoken12345678901234567890123
 `
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -453,7 +448,7 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	dir := t.TempDir()
 
 	// Only set the mode; everything else should remain at Default() values.
-	yaml := "mode: development\nserver_token: tok_partialmergetoken123456789012\n"
+	yaml := "mode: development\ntoken: tok_partialmergetoken123456789012\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -519,7 +514,7 @@ func TestLoadServerConfigAutoGeneratesToken(t *testing.T) {
 func TestLoadServerConfigSetsConfigDirFromArg(t *testing.T) {
 	dir := t.TempDir()
 
-	yaml := "mode: production\nserver_token: tok_configdirtest12345678901234567\n"
+	yaml := "mode: production\ntoken: tok_configdirtest12345678901234567\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -540,7 +535,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	customDir := "/custom/config"
 
-	yaml := "mode: production\nconfig_dir: " + customDir + "\nserver_token: tok_preserveconfigdir12345678901234\n"
+	yaml := "mode: production\nconfig_dir: " + customDir + "\ntoken: tok_preserveconfigdir12345678901234\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -561,7 +556,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 func TestLoadServerConfigInvalidPortInYAML(t *testing.T) {
 	dir := t.TempDir()
 
-	yaml := "mode: production\nport: 99999\nserver_token: tok_badport1234567890123456789012\n"
+	yaml := "mode: production\nport: 99999\ntoken: tok_badport1234567890123456789012\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}

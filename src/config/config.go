@@ -419,12 +419,11 @@ type ServerConfig struct {
 	// Debug mode
 	Debug bool `yaml:"debug"`
 
-	// Security
-	// ServerToken is the global operator token (auto-generated on first run if empty).
-	// Stored as-is in server.yml; validated by SHA-256-hashing the inbound bearer
-	// token and comparing with subtle.ConstantTimeCompare — never written to the DB.
-	ServerToken string   `yaml:"server_token"`
-	APITokens   []string `yaml:"api_tokens"`
+	// ServerToken is the global operator token (AI.md PART 12).
+	// Auto-generated on first run (tok_ + 32 base62 chars); stored in server.yml as "token:".
+	// Validated by SHA-256-hashing the inbound bearer and using subtle.ConstantTimeCompare.
+	// NEVER written to the DB. Config yaml key is "token" (server.token per spec).
+	ServerToken string `yaml:"token"`
 }
 
 // Default returns a ServerConfig with sane defaults
@@ -566,7 +565,6 @@ func Default() *ServerConfig {
 		},
 		Debug:               false,
 		ServerToken:         "", // auto-generated on first run
-		APITokens:           []string{},
 	}
 }
 
@@ -861,7 +859,6 @@ func (c *ServerConfig) Sanitized() map[string]any {
 		"metrics_endpoint":   c.Metrics.Endpoint,
 		"rate_limit_enabled": c.RateLimit.Enabled,
 		"server_token":       "xxxxx",
-		"api_tokens":         "[redacted]",
 	}
 }
 
