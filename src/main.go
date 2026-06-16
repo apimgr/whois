@@ -106,9 +106,8 @@ func main() {
 
 	// langFlag is consumed by the language layer after config load.
 	_ = langFlag
-	// baseURL and pidFile are placeholders for follow-up work; they are
-	// parsed for forward compatibility but not yet applied to config.
-	_ = baseURL
+	// pidFile is parsed for forward compatibility; PID file path is
+	// determined from OS context (PART 4), not a bare boolean flag.
 	_ = pidFile
 
 	// Handle service management
@@ -370,7 +369,7 @@ func loadConfig(configDir, mode, address string, port int, debug bool) (*config.
 		cfg.Backup.Dir = getDefaultBackupDir()
 	}
 
-	// Override with CLI flags
+	// Override with CLI flags (highest priority per AI.md PART 5 precedence).
 	if mode != "" {
 		cfg.Mode = mode
 	}
@@ -382,6 +381,9 @@ func loadConfig(configDir, mode, address string, port int, debug bool) (*config.
 	}
 	if debug {
 		cfg.Debug = true
+	}
+	if baseURL != "" && baseURL != "/" {
+		cfg.BaseURL = baseURL
 	}
 
 	// Set random port if not specified
