@@ -165,7 +165,7 @@ func main() {
 	}
 
 	// Load configuration.
-	cfg, err := loadConfig(configDir, mode, address, port, debug)
+	cfg, err := loadConfig(configDir, mode, address, baseURL, port, debug)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
@@ -342,7 +342,7 @@ func printHelp(binaryName string) {
 	fmt.Printf("Run '%s <command> --help' for detailed help on any command.\n", binaryName)
 }
 
-func loadConfig(configDir, mode, address string, port int, debug bool) (*config.ServerConfig, error) {
+func loadConfig(configDir, mode, address, baseURL string, port int, debug bool) (*config.ServerConfig, error) {
 	var cfg *config.ServerConfig
 	var err error
 

@@ -759,7 +759,7 @@ func TestGetBackupDir(t *testing.T) {
 	// Tier 1: explicit BackupDir in config
 	t.Run("explicit config field", func(t *testing.T) {
 		cfg := Default()
-		cfg.BackupDir = "/explicit/backups"
+		cfg.Backup.Dir = "/explicit/backups"
 
 		got := cfg.GetBackupDir()
 		if got != "/explicit/backups" {
@@ -773,7 +773,7 @@ func TestGetBackupDir(t *testing.T) {
 			t.Skip("skipping: running inside a container")
 		}
 		cfg := Default()
-		cfg.BackupDir = ""
+		cfg.Backup.Dir = ""
 		cfg.DataDir = "/my/data"
 
 		got := cfg.GetBackupDir()
@@ -786,7 +786,7 @@ func TestGetBackupDir(t *testing.T) {
 	// Fallback: empty DataDir and no explicit dir must still return a string
 	t.Run("fallback returns non-empty string", func(t *testing.T) {
 		cfg := Default()
-		cfg.BackupDir = ""
+		cfg.Backup.Dir = ""
 		cfg.DataDir = ""
 
 		got := cfg.GetBackupDir()
