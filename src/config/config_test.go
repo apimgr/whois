@@ -219,13 +219,13 @@ func TestValidate(t *testing.T) {
 			// BackupMaxBackups <= 0 is corrected to 1, no error
 			name: "zero backup max corrected to 1",
 			setup: func(c *ServerConfig) {
-				c.BackupMaxBackups = 0
+				c.Backup.Retention.MaxBackups = 0
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
 				t.Helper()
-				if c.BackupMaxBackups != 1 {
-					t.Errorf("BackupMaxBackups after correction = %d, want 1", c.BackupMaxBackups)
+				if c.Backup.Retention.MaxBackups != 1 {
+					t.Errorf("BackupMaxBackups after correction = %d, want 1", c.Backup.Retention.MaxBackups)
 				}
 			},
 		},
@@ -233,13 +233,13 @@ func TestValidate(t *testing.T) {
 			// BackupMaxBackups = -5 must also be corrected to 1
 			name: "negative backup max corrected to 1",
 			setup: func(c *ServerConfig) {
-				c.BackupMaxBackups = -5
+				c.Backup.Retention.MaxBackups = -5
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
 				t.Helper()
-				if c.BackupMaxBackups != 1 {
-					t.Errorf("BackupMaxBackups after correction = %d, want 1", c.BackupMaxBackups)
+				if c.Backup.Retention.MaxBackups != 1 {
+					t.Errorf("BackupMaxBackups after correction = %d, want 1", c.Backup.Retention.MaxBackups)
 				}
 			},
 		},
@@ -247,13 +247,13 @@ func TestValidate(t *testing.T) {
 			// Negative retention values are clamped to 0
 			name: "negative weekly retention clamped to 0",
 			setup: func(c *ServerConfig) {
-				c.BackupKeepWeekly = -3
+				c.Backup.Retention.KeepWeekly = -3
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
 				t.Helper()
-				if c.BackupKeepWeekly != 0 {
-					t.Errorf("BackupKeepWeekly after clamping = %d, want 0", c.BackupKeepWeekly)
+				if c.Backup.Retention.KeepWeekly != 0 {
+					t.Errorf("BackupKeepWeekly after clamping = %d, want 0", c.Backup.Retention.KeepWeekly)
 				}
 			},
 		},
@@ -261,13 +261,13 @@ func TestValidate(t *testing.T) {
 			// Negative monthly retention clamped to 0
 			name: "negative monthly retention clamped to 0",
 			setup: func(c *ServerConfig) {
-				c.BackupKeepMonthly = -1
+				c.Backup.Retention.KeepMonthly = -1
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
 				t.Helper()
-				if c.BackupKeepMonthly != 0 {
-					t.Errorf("BackupKeepMonthly after clamping = %d, want 0", c.BackupKeepMonthly)
+				if c.Backup.Retention.KeepMonthly != 0 {
+					t.Errorf("BackupKeepMonthly after clamping = %d, want 0", c.Backup.Retention.KeepMonthly)
 				}
 			},
 		},
@@ -275,13 +275,13 @@ func TestValidate(t *testing.T) {
 			// Negative yearly retention clamped to 0
 			name: "negative yearly retention clamped to 0",
 			setup: func(c *ServerConfig) {
-				c.BackupKeepYearly = -2
+				c.Backup.Retention.KeepYearly = -2
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
 				t.Helper()
-				if c.BackupKeepYearly != 0 {
-					t.Errorf("BackupKeepYearly after clamping = %d, want 0", c.BackupKeepYearly)
+				if c.Backup.Retention.KeepYearly != 0 {
+					t.Errorf("BackupKeepYearly after clamping = %d, want 0", c.Backup.Retention.KeepYearly)
 				}
 			},
 		},
@@ -320,8 +320,8 @@ func TestValidate(t *testing.T) {
 			// Compliance with encryption disabled must not block startup
 			name: "compliance without encryption does not error",
 			setup: func(c *ServerConfig) {
-				c.ComplianceEnabled = true
-				c.BackupEncryptionEnabled = false
+				c.Compliance.Enabled = true
+				c.Backup.Encryption.Enabled = false
 			},
 			wantErr: false,
 		},
@@ -394,15 +394,16 @@ func TestLoadServerConfigEmptyDir(t *testing.T) {
 func TestLoadServerConfigWithValidYAML(t *testing.T) {
 	dir := t.TempDir()
 
-	// Write a minimal valid server.yml that sets a few well-known fields.
-	yaml := `mode: development
-port: 64123
-notifications:
-  email:
-    smtp:
-      port: 465
-update_channel: beta
-token: tok_testtoken12345678901234567890123
+	// Write a minimal valid server.yml with the required server: wrapper (AI.md PART 5).
+	yaml := `server:
+  mode: development
+  port: 64123
+  notifications:
+    email:
+      smtp:
+        port: 465
+  update_channel: beta
+  token: tok_testtoken12345678901234567890123
 `
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -448,7 +449,7 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	dir := t.TempDir()
 
 	// Only set the mode; everything else should remain at Default() values.
-	yaml := "mode: development\ntoken: tok_partialmergetoken123456789012\n"
+	yaml := "server:\n  mode: development\n  token: tok_partialmergetoken123456789012\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -481,7 +482,7 @@ func TestLoadServerConfigAutoGeneratesToken(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write a valid YAML file with no server_token field.
-	yaml := "mode: production\nport: 64100\n"
+	yaml := "server:\n  mode: production\n  port: 64100\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -514,7 +515,7 @@ func TestLoadServerConfigAutoGeneratesToken(t *testing.T) {
 func TestLoadServerConfigSetsConfigDirFromArg(t *testing.T) {
 	dir := t.TempDir()
 
-	yaml := "mode: production\ntoken: tok_configdirtest12345678901234567\n"
+	yaml := "server:\n  mode: production\n  token: tok_configdirtest12345678901234567\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -535,7 +536,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	customDir := "/custom/config"
 
-	yaml := "mode: production\nconfig_dir: " + customDir + "\ntoken: tok_preserveconfigdir12345678901234\n"
+	yaml := "server:\n  mode: production\n  config_dir: " + customDir + "\n  token: tok_preserveconfigdir12345678901234\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -556,7 +557,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 func TestLoadServerConfigInvalidPortInYAML(t *testing.T) {
 	dir := t.TempDir()
 
-	yaml := "mode: production\nport: 99999\ntoken: tok_badport1234567890123456789012\n"
+	yaml := "server:\n  mode: production\n  port: 99999\n  token: tok_badport1234567890123456789012\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
