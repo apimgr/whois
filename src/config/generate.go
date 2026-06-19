@@ -24,205 +24,206 @@ func GenerateToken() (string, error) {
 	return "tok_" + string(b), nil
 }
 
-// defaultConfigTemplate returns the default server.yml template.
-// All YAML comments go ABOVE their setting (PART 5 style rule).
+// defaultConfigTemplate returns the default server.yml template (AI.md PART 5).
+// The file uses a top-level server: key with nested sections matching the
+// ServerConfig yaml tags. All comments go ABOVE their setting (PART 5 rule).
 func defaultConfigTemplate() string {
 	return `# =============================================================================
-# caswhois — Server Configuration
+# caswhois — Server Configuration (AI.md PART 5)
 # =============================================================================
 # Auto-generated on first run. Edit this file to change settings.
 # All changes require a server restart.
 # =============================================================================
 
-# =============================================================================
-# SERVER
-# =============================================================================
+server:
+  # ===========================================================================
+  # CORE
+  # ===========================================================================
 
-# Random port in 64000-64999 range; set manually to a fixed value if preferred
-port: {{PORT}}
+  # Random port in 64000-64999 range; change to a fixed value if preferred
+  port: {{PORT}}
 
-# Listen on all interfaces (IPv4 + IPv6)
-address: "[::]"
+  # Listen on all interfaces (IPv4 + IPv6)
+  address: "[::]"
 
-# production or development (development enables pprof and verbose logging)
-mode: production
+  # production or development
+  mode: production
 
-# Debug logging (overrides mode; use --debug flag or set here)
-debug: false
+  # Debug endpoints and logging (use --debug flag or set here)
+  debug: false
 
-# Operator bearer token — auto-generated on first run; NEVER share this
-# Format: tok_<32 base62 chars>
-# Used for: bulk WHOIS, scheduler management, backup operations
-server_token: "{{TOKEN}}"
+  # Operator bearer token — auto-generated on first run; NEVER share this
+  # Format: tok_<32 base62 chars>
+  # Used for: bulk WHOIS, scheduler management, backup operations
+  token: "{{TOKEN}}"
 
-# Daemonize: detach from terminal (set true for manual launch without systemd)
-daemonize: false
+  # Daemonize: detach from terminal (set true for manual launch without systemd)
+  daemonize: false
 
-# PID file written to data directory on start
-pidfile: true
+  # PID file written to data directory on start
+  pidfile: true
 
-# =============================================================================
-# BRANDING
-# =============================================================================
+  # ===========================================================================
+  # BRANDING (PART 16)
+  # ===========================================================================
 
-branding_title: "caswhois"
-branding_tagline: "WHOIS Lookup Service"
-branding_description: "Domain, IP, and ASN WHOIS lookup service"
+  branding:
+    title: "caswhois"
+    tagline: "WHOIS Lookup Service"
+    description: "Domain, IP, and ASN WHOIS lookup service"
+    # Theme: auto, light, dark
+    theme: "auto"
+    accent_color: "#007bff"
 
-# Theme: auto, light, dark
-branding_theme: "auto"
+  # ===========================================================================
+  # DATABASE — SQLite only (PART 10)
+  # ===========================================================================
 
-# =============================================================================
-# RATE LIMITING
-# =============================================================================
+  database:
+    # driver: sqlite (default) or libsql/turso for remote
+    driver: ""
+    # url: libsql://your-db.turso.io?authToken=TOKEN (for remote mode)
+    url: ""
+    # dir: override SQLite data directory (default: auto from OS context)
+    dir: ""
 
-rate_limit_enabled: true
+  # ===========================================================================
+  # SSL / TLS (PART 15)
+  # ===========================================================================
 
-# Requests allowed per window per IP
-rate_limit_requests: 120
+  ssl:
+    enabled: false
+    # challenge: http-01 (default), tls-alpn-01, dns-01
+    challenge: "http-01"
+    # email: ACME account contact for Let's Encrypt
+    email: ""
+    min_version: "1.2"
+    staging: false
+    dns_provider: ""
 
-# Rolling window length
-rate_limit_window: "1m"
+  # ===========================================================================
+  # RATE LIMITING (PART 12)
+  # ===========================================================================
 
-# =============================================================================
-# DATABASE — SQLite only (no PostgreSQL, no MySQL)
-# =============================================================================
+  rate_limit:
+    enabled: true
+    read:
+      requests: 120
+      window: 60
+    write:
+      requests: 10
+      window: 60
+    health:
+      requests: 120
+      window: 60
+    global_burst: 240
 
-# Override database directory (default: {data_dir})
-database_dir: ""
+  # ===========================================================================
+  # GEOIP (PART 19)
+  # ===========================================================================
 
-# =============================================================================
-# SSL / TLS (PART 15)
-# =============================================================================
+  geoip:
+    enabled: true
+    # dir: override GeoIP database directory (default: {data_dir}/security/geoip)
+    dir: ""
+    deny_countries: []
+    allow_countries: []
+    databases:
+      asn: true
+      country: true
+      city: true
+      whois: true
 
-# SSL/TLS settings (see PART 15 for full Let's Encrypt configuration)
+  # ===========================================================================
+  # METRICS — Prometheus-compatible (PART 20)
+  # ===========================================================================
 
-# =============================================================================
-# GEOIP (PART 19)
-# =============================================================================
+  metrics:
+    enabled: true
+    endpoint: "/metrics"
+    include_system: true
+    include_runtime: true
+    # token: leave empty to allow unauthenticated access (restrict by firewall)
+    token: ""
 
-geoip_enabled: true
+  # ===========================================================================
+  # EMAIL / SMTP (PART 17)
+  # ===========================================================================
 
-# Directory for MaxMind GeoLite2 databases (default: {config_dir}/security/geoip)
-geoip_dir: ""
+  notifications:
+    email:
+      smtp:
+        # host: empty = auto-detect loopback/Docker/gateway SMTP on startup
+        host: ""
+        # port: 587 = STARTTLS, 465 = TLS, 25 = plain
+        port: 587
+        username: ""
+        password: ""
+        # tls: auto, starttls, tls, none
+        tls: "auto"
+      from:
+        # name: empty = branding title
+        name: ""
+        # email: empty = no-reply@{fqdn}
+        email: ""
 
-geoip_database_asn: true
-geoip_database_country: true
-geoip_database_city: true
-geoip_database_whois: true
+  # ===========================================================================
+  # BACKUP & RESTORE (PART 21)
+  # ===========================================================================
 
-# ISO 3166-1 alpha-2 country codes to deny
-geoip_deny_countries: []
+  backup:
+    # dir: empty = auto from OS context ({data_dir}/backups)
+    dir: ""
+    encryption:
+      enabled: false
+    retention:
+      max_backups: 1
+      keep_weekly: 0
+      keep_monthly: 0
+      keep_yearly: 0
 
-# =============================================================================
-# METRICS — Prometheus-compatible (PART 20)
-# =============================================================================
+  compliance:
+    enabled: false
 
-metrics_enabled: true
-metrics_endpoint: "/metrics"
-metrics_include_system: true
-metrics_include_runtime: true
+  # ===========================================================================
+  # UPDATES (PART 22)
+  # ===========================================================================
 
-# Token to protect /metrics (leave empty to allow unauthenticated access)
-metrics_token: ""
+  # update_channel: stable, beta, daily
+  update_channel: "stable"
 
-# =============================================================================
-# EMAIL / SMTP (PART 17)
-# =============================================================================
+  # ===========================================================================
+  # TOR HIDDEN SERVICE (PART 31)
+  # ===========================================================================
 
-# SMTP host — empty: auto-detect loopback/Docker/gateway SMTP on startup
-smtp_host: ""
+  tor:
+    # binary: empty = auto-detect from PATH
+    binary: ""
+    use_network: false
+    bootstrap_timeout: 180
+    safe_logging: true
+    bandwidth_rate: "1 MB"
+    bandwidth_burst: "2 MB"
+    max_monthly_bandwidth: "100 GB"
+    virtual_port: 80
+    max_circuits: 32
+    max_streams_per_circuit: 100
 
-# SMTP port (587 = STARTTLS, 465 = TLS, 25 = plain)
-smtp_port: 587
+  # ===========================================================================
+  # SCHEDULER (PART 18)
+  # ===========================================================================
 
-# SMTP credentials (leave empty if no auth required)
-smtp_username: ""
-smtp_password: ""
-
-# TLS mode: auto, starttls, tls, none
-smtp_tls: "auto"
-
-# Sender display name (empty = branding title)
-email_from_name: ""
-
-# Sender address (empty = no-reply@{fqdn})
-email_from_email: ""
-
-# =============================================================================
-# BACKUP & RESTORE (PART 21)
-# =============================================================================
-
-# Backup directory (default: {data_dir}/backups)
-backup_dir: ""
-
-# Encrypt backups with Argon2id key derivation
-backup_encryption_enabled: false
-
-# Daily full backups to retain
-backup_max_backups: 7
-
-# Weekly backups to retain (Sunday; 0 = disabled)
-backup_keep_weekly: 4
-
-# Monthly backups to retain (1st of month; 0 = disabled)
-backup_keep_monthly: 12
-
-# Yearly backups to retain (Jan 1; 0 = disabled)
-backup_keep_yearly: 3
-
-# =============================================================================
-# UPDATES (PART 22)
-# =============================================================================
-
-# Update channel: stable, beta, daily
-update_channel: "stable"
-
-# =============================================================================
-# TOR HIDDEN SERVICE (PART 31)
-# =============================================================================
-
-# Path to tor binary (leave empty for auto-detection from PATH)
-tor_binary: ""
-
-# Route outbound WHOIS requests through Tor for anonymity
-tor_use_network: false
-
-# Bootstrap timeout in seconds (wait for Tor network)
-tor_bootstrap_timeout: 180
-
-# Scrub sensitive info from Tor logs
-tor_safe_logging: true
-
-# Bandwidth rate per second (e.g. "1 MB", "500 KB")
-tor_bandwidth_rate: "1 MB"
-
-# Bandwidth burst per second
-tor_bandwidth_burst: "2 MB"
-
-# Monthly bandwidth limit (e.g. "100 GB", "unlimited")
-tor_max_monthly_bandwidth: "100 GB"
-
-# Virtual port users connect to (.onion:PORT → server port)
-tor_virtual_port: 80
-
-# Maximum circuits to keep open
-tor_max_circuits: 32
-
-# Maximum concurrent streams per circuit
-tor_max_streams_per_circuit: 100
-
-# =============================================================================
-# LOGGING
-# =============================================================================
-
-# Log files are written to {log_dir}: access.log, server.log, error.log, audit.log
+  scheduler:
+    timezone: "America/New_York"
+    catch_up_window: "1h"
 
 # =============================================================================
-# WHOIS CACHE TTLs
+# WEB LAYER (PART 16)
 # =============================================================================
 
-# (Configured in code; TTLs: domain=24h, ip/asn=168h, failure=5m)
+web:
+  # cors: "*" = allow all origins (default); "" = no CORS; or comma-separated list
+  cors: "*"
 `
 }
 
