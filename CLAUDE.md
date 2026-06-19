@@ -105,11 +105,15 @@ Purpose:
 - IDEA.md format: `AI.md` PART 33
 
 ## Current Project State
-- Last read AI.md: 2026-06-12
-- Current task: Spec compliance audit — continuous passes against AI.md
-- Relevant PARTs: All (multi-pass compliance audit in progress)
-- Test coverage: 100% enforced by `make test`
+- Last read AI.md: 2026-06-19
+- Current task: Spec compliance audit — multi-pass complete (Pass 17 done)
+- Relevant PARTs: All (17 passes completed; no known violations remaining)
+- Test coverage: 100% enforced — all 28 packages pass `go test ./...`
 - Build image: casjaysdev/go:latest (NOT golang:alpine)
 - PART 27: Skipped — no CI/CD workflow files
 - Templates: `src/server/template/` (file-based embed, not inline strings)
-- Application data: `src/data/` (JSON, embedded via //go:embed)
+- Application data: `src/data/whois-servers.json` (embedded via //go:embed)
+- Config format: `server.yml` uses `server:` top-level wrapper + `web:` sibling (PART 5)
+- All config sections nested: geoip.*, metrics.*, notifications.email.smtp.*,
+  backup.{encryption,retention}.*, compliance.*, tor.*, branding.*, database.*,
+  ssl.*, server.token (not server_token)

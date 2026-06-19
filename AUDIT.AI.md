@@ -2,6 +2,15 @@
 
 Started: 2026-06-02
 
+## Pass 18: Fix generate.go config template
+
+- VIOLATION [PART 5]: `src/config/generate.go` `defaultConfigTemplate()` produced
+  a flat server.yml (no `server:` wrapper) using all old flat yaml keys (server_token:,
+  geoip_enabled:, branding_title:, etc.). This caused TestGenerateDefaultConfigPortInRange
+  to fail since LoadServerConfig (now using ConfigFile wrapper) couldn't parse the flat
+  file. Rewrote the entire template to use server: wrapper with all nested yaml paths
+  matching the current ServerConfig schema. Added web: sibling section.
+
 ## Pass 17: Spec Compliance — Config schema restructuring (PART 5, 15-21, 31)
 
 All configuration sections in config.go used flat yaml keys (e.g. `geoip_enabled`,
