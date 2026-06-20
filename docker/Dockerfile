@@ -2,6 +2,10 @@
 # Build stage: casjaysdev/go:latest (AI.md PART 26)
 # Runtime stage: alpine:latest
 
+ARG VERSION=dev
+ARG BUILD_DATE=unknown
+ARG COMMIT_ID=unknown
+
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
@@ -81,11 +85,25 @@ RUN mkdir -p \
 COPY --from=builder /build/caswhois /usr/local/bin/caswhois
 
 # Copy entrypoint script
-COPY docker/file_system/usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/rootfs/usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# OCI image labels (AI.md PART 26)
+LABEL org.opencontainers.image.title="caswhois"
+LABEL org.opencontainers.image.description="Self-hosted WHOIS lookup service with web UI, REST API, and CLI client"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${COMMIT_ID}"
+LABEL org.opencontainers.image.source="https://github.com/casapps/caswhois"
+LABEL org.opencontainers.image.url="https://caswhois.casapps.dev"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.vendor="casapps"
 
 # Set volumes (logs and backups live inside /data per AI.md PART 4).
 VOLUME ["/config", "/data"]
+
+# Default mode is development (allows localhost, .local, .test etc. in container per AI.md PART 26)
+ENV MODE=development
 
 # Set default timezone (override with TZ env var)
 ENV TZ=America/New_York

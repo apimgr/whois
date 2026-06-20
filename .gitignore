@@ -131,7 +131,8 @@ go.work
 go.work.sum
 
 # Runtime data (docker-compose creates these)
-rootfs/
+volumes/rootfs/
+# docker/rootfs/ is committed (build-time container overlay)
 
 # Temporary files
 *.swp
