@@ -1,6 +1,9 @@
-# Infer PROJECTNAME and PROJECTORG from git remote or directory path (NEVER hardcode)
+# Frozen project identity (set at creation from IDEA.md - never changes even if git remote changes)
+INTERNAL_NAME := caswhois
+PROJECTORG    := casapps
+
+# Infer PROJECTNAME from git remote or directory path (NEVER hardcode)
 PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
-PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
 # Version: env var > release.txt > default
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
@@ -32,7 +35,7 @@ GOCACHE ?= $(HOME)/.local/share/go/build
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
 
 # Docker - Set REGISTRY based on your platform (ghcr.io, registry.gitlab.com, git.example.com)
-REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
+REGISTRY ?= ghcr.io/$(PROJECTORG)/$(INTERNAL_NAME)
 GO_DOCKER := docker run --rm \
 	-v $(PWD):/build \
 	-v $(GOCACHE):/root/.cache/go-build \
@@ -59,13 +62,13 @@ build: clean
 	# Build for local OS/ARCH
 	@echo "Building local binary..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
 
 	# Build server for all platforms
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
-		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
+		OUTPUT=$(BINDIR)/$(INTERNAL_NAME)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
@@ -78,7 +81,7 @@ build: clean
 		for platform in $(PLATFORMS); do \
 			OS=$${platform%/*}; \
 			ARCH=$${platform#*/}; \
-			OUTPUT=$(BINDIR)/$(PROJECTNAME)-cli-$$OS-$$ARCH; \
+			OUTPUT=$(BINDIR)/$(INTERNAL_NAME)-cli-$$OS-$$ARCH; \
 			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
@@ -103,15 +106,15 @@ local: clean
 	@$(GO_DOCKER) go mod download
 
 	# Build server binary
-	@echo "Building $(PROJECTNAME)..."
+	@echo "Building $(INTERNAL_NAME)..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
 
 	# Build CLI binary (if exists)
 	@if [ -d "src/client" ]; then \
-		echo "Building $(PROJECTNAME)-cli..."; \
+		echo "Building $(INTERNAL_NAME)-cli..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli ./src/client"; \
+			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME)-cli ./src/client"; \
 	fi
 
 	@echo "Local build complete: $(BINDIR)/"
@@ -127,7 +130,7 @@ release: build
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
 
 	# Copy binaries to releases (strip if needed)
-	@for f in $(BINDIR)/$(PROJECTNAME)-*; do \
+	@for f in $(BINDIR)/$(INTERNAL_NAME)-*; do \
 		[ -f "$$f" ] || continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \
@@ -136,7 +139,7 @@ release: build
 	# Create source archive (exclude VCS and build artifacts)
 	@tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-		-czf $(RELDIR)/$(PROJECTNAME)-$(VERSION)-source.tar.gz .
+		-czf $(RELDIR)/$(INTERNAL_NAME)-$(VERSION)-source.tar.gz .
 
 	# Delete existing release/tag if exists
 	@gh release delete $(VERSION) --yes 2>/dev/null || true
@@ -145,7 +148,7 @@ release: build
 
 	# Create new release (stable)
 	@gh release create $(VERSION) $(RELDIR)/* \
-		--title "$(PROJECTNAME) $(VERSION)" \
+		--title "$(INTERNAL_NAME) $(VERSION)" \
 		--notes "Release $(VERSION)" \
 		--latest
 
@@ -163,8 +166,8 @@ docker:
 	@docker buildx version > /dev/null 2>&1 || (echo "docker buildx required" && exit 1)
 
 	# Create/use builder
-	@docker buildx create --name $(PROJECTNAME)-builder --use 2>/dev/null || \
-		docker buildx use $(PROJECTNAME)-builder
+	@docker buildx create --name $(INTERNAL_NAME)-builder --use 2>/dev/null || \
+		docker buildx use $(INTERNAL_NAME)-builder
 
 	# Build and push multi-arch (multi-stage Dockerfile handles Go compilation)
 	@docker buildx build \
@@ -187,13 +190,19 @@ test:
 	@echo "Running tests with coverage..."
 	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod download
-	@$(GO_DOCKER) go test -v -cover -coverprofile=/tmp/coverage.out ./...
-	@COVERAGE=$$($(GO_DOCKER) go tool cover -func=/tmp/coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
-	if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then \
-		echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; \
-		exit 1; \
-	fi
-	@echo "Tests complete - Coverage: $$COVERAGE% (>= 80% required) ✓"
+	@mkdir -p "/tmp/$(PROJECTORG)"
+	$(eval COVDIR := $(shell mktemp -d "/tmp/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX"))
+	@docker run --rm \
+		-v $(PWD):/workspace \
+		-v $(COVDIR):/tmp/coverage \
+		-v $(GOCACHE):/root/.cache/go-build \
+		-v $(GODIR):/go \
+		-w /workspace \
+		-e CGO_ENABLED=0 \
+		casjaysdev/go:latest \
+		sh -c "go test -coverprofile=/tmp/coverage/coverage.out ./... && \
+		       go tool cover -func=/tmp/coverage/coverage.out | grep total | awk '{if (\$$3+0 < 80) exit 1}'"
+	@echo "Tests complete - coverage >= 80% ✓"
 
 # =============================================================================
 # DEV - Quick build for local development/testing (to random temp dir)
@@ -204,17 +213,17 @@ dev:
 	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod tidy
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
-		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
+		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
 		echo "Quick dev build to $$BUILD_DIR..." && \
 		$(GO_DOCKER) go build -o /build/.tmp-server ./src && \
-		mv .tmp-server $$BUILD_DIR/$(PROJECTNAME) && \
-		echo "Built: $$BUILD_DIR/$(PROJECTNAME)" && \
+		mv .tmp-server $$BUILD_DIR/$(INTERNAL_NAME) && \
+		echo "Built: $$BUILD_DIR/$(INTERNAL_NAME)" && \
 		if [ -d "src/client" ]; then \
 			$(GO_DOCKER) go build -o /build/.tmp-cli ./src/client && \
-			mv .tmp-cli $$BUILD_DIR/$(PROJECTNAME)-cli && \
-			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-cli"; \
+			mv .tmp-cli $$BUILD_DIR/$(INTERNAL_NAME)-cli && \
+			echo "Built: $$BUILD_DIR/$(INTERNAL_NAME)-cli"; \
 		fi && \
-		echo "Test:  docker run --rm -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
+		echo "Test:  docker run --rm -v $$BUILD_DIR:/app alpine:latest /app/$(INTERNAL_NAME) --help"
 
 # =============================================================================
 # CLEAN - Remove build artifacts
