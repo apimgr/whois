@@ -158,6 +158,7 @@ CLAUDE.local.md
 
 # Coverage
 coverage.html
+coverage.out
 
 # Environment files (if accidentally created - we don't use .env)
 .env
