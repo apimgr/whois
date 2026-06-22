@@ -77,9 +77,9 @@ func RespondWithFormat(w http.ResponseWriter, r *http.Request, data interface{})
 	case ClientTypeText:
 		respondText(w, http.StatusOK, data)
 	case ClientTypeHTML:
-		respondHTML(w, http.StatusOK, data)
+		respondHTML(w, r, http.StatusOK, data)
 	default:
-		respondHTML(w, http.StatusOK, data)
+		respondHTML(w, r, http.StatusOK, data)
 	}
 }
 
@@ -115,12 +115,22 @@ func respondText(w http.ResponseWriter, status int, data interface{}) {
 // htmlResponseTmpl is the generic response template (AI.md PART 7 — loaded from src/server/template/).
 var htmlResponseTmpl = mustParseTemplate("response", "response.html")
 
-// respondHTML sends an HTML response using a server-side template.
-// The data value is HTML-escaped by html/template before rendering.
-func respondHTML(w http.ResponseWriter, status int, data interface{}) {
+// responsePageData is the data model for the generic response.html template.
+type responsePageData struct {
+	translatablePageData
+	Content string
+}
+
+// respondHTML sends an HTML response using the generic response template.
+// The content value is HTML-escaped by html/template before rendering.
+func respondHTML(w http.ResponseWriter, r *http.Request, status int, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := htmlResponseTmpl.Execute(w, fmt.Sprintf("%v", data)); err != nil {
+	pd := responsePageData{
+		translatablePageData: newPageData(r),
+		Content:              fmt.Sprintf("%v", data),
+	}
+	if err := htmlResponseTmpl.Execute(w, pd); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
 	}
 }
@@ -150,15 +160,6 @@ func RespondError(w http.ResponseWriter, r *http.Request, status int, message st
 		w.WriteHeader(status)
 		fmt.Fprintf(w, "Error: %s\n", message)
 	case ClientTypeHTML:
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(status)
-		fmt.Fprintf(w, "<!DOCTYPE html>\n")
-		fmt.Fprintf(w, "<html>\n")
-		fmt.Fprintf(w, "<head><title>Error %d</title></head>\n", status)
-		fmt.Fprintf(w, "<body>\n")
-		fmt.Fprintf(w, "<h1>%s</h1>\n", http.StatusText(status))
-		fmt.Fprintf(w, "<p>%s</p>\n", message)
-		fmt.Fprintf(w, "</body>\n")
-		fmt.Fprintf(w, "</html>\n")
+		respondHTML(w, r, status, fmt.Sprintf("%s — %s", http.StatusText(status), message))
 	}
 }

@@ -38,3 +38,17 @@ The `docker/file_system/` directory should be deleted from the repository.
 
 Read: AI.md PART 26
 
+## [ ] Refactor main.go to use positional subcommands
+
+Spec (binary-rules.md) requires positional subcommands: `serve` (default), `migrate`, `client`, `version`.
+Current implementation uses flags (`--service`, `--maintenance`, etc.) instead.
+Required subcommand routing:
+- `caswhois serve [flags]` — start the server (current default behaviour)
+- `caswhois migrate` — run database migrations
+- `caswhois client` — launch caswhois-cli
+- `caswhois version` — print version (same as --version)
+- `caswhois install / uninstall / start / stop / restart / status` — service management
+- `caswhois update [--check] [--version X]` — self-update
+The flag interface must remain for backward compatibility; add subcommand routing on top.
+
+Read: AI.md PART 7, 8

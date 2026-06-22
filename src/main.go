@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/casapps/caswhois/src/config"
@@ -45,6 +46,7 @@ func main() {
 		baseURL        string
 		debug          bool
 		daemon         bool
+		noColor        bool
 		colorFlag      string
 		langFlag       string
 		shellCmd       string
@@ -70,6 +72,7 @@ func main() {
 	flag.StringVar(&baseURL, "baseurl", "/", "URL path prefix")
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&daemon, "daemon", false, "Run as daemon (detach from terminal)")
+	flag.BoolVar(&noColor, "no-color", false, "Disable color output")
 	flag.StringVar(&colorFlag, "color", "auto", "Color output (always|never|auto)")
 	flag.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
 	flag.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
@@ -79,8 +82,13 @@ func main() {
 
 	flag.Parse()
 
+	// --no-color flag takes precedence; map it to the colorFlag "never" value.
+	if noColor {
+		colorFlag = "never"
+	}
+
 	// Apply NO_COLOR standard (PART 8): non-empty NO_COLOR env var disables colors and emojis.
-	// CLI --color flag takes priority over NO_COLOR.
+	// CLI --color/--no-color flags take priority over NO_COLOR.
 	useColor := colorEnabled(colorFlag)
 
 	// Handle immediate-exit flags (AI.md PART 8)
@@ -234,11 +242,10 @@ func colorEnabled(flag string) bool {
 }
 
 func printVersion(binaryName string, useColor bool) {
-	fmt.Printf("%s version %s\n", binaryName, Version)
-	fmt.Printf("Commit: %s\n", CommitID)
-	fmt.Printf("Built:  %s\n", BuildDate)
-	fmt.Printf("Site:   %s\n", OfficialSite)
-	// Suppress unused parameter warning in older Go toolchains
+	// Format: {name} version {version} ({commit}) built on {date} for {os}/{arch}
+	// Matches binary-rules.md §"--version Output Format (EXACT)".
+	fmt.Printf("%s version %s (%s) built on %s for %s/%s\n",
+		binaryName, Version, CommitID, BuildDate, runtime.GOOS, runtime.GOARCH)
 	_ = useColor
 }
 

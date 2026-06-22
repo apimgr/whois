@@ -26,16 +26,19 @@ maintainer_email:  casjay@yahoo.com
 
 - WHOIS lookup for domains, IPv4, IPv6, and ASNs — auto-detect query type
 - Proxied queries to upstream WHOIS servers (IANA, RIRs, TLD-specific)
-- Caching of WHOIS results (TTL: domain 24h, IP/ASN 7d, failure 5m)
+- In-memory cache for hot queries (TTL: domain 24h, IP/ASN 7d, failure 5m) — fast path only
+- Persistent WHOIS record database — every successful lookup is stored permanently in SQLite; builds a free, comprehensive, self-hosted WHOIS dataset over time
 - Rate-limited anonymous access; unlimited for server-token holders
 - Bulk lookup (POST, server-token required)
+- Owner/registrant reverse search — `GET /whois/search?owner=...`; searches the persistent local database by registrant name, org, or email; no external API key required; quality grows with usage
+- External reverse WHOIS seeding (optional) — supported providers: securitytrails, whoxy, viewdns; when an owner search returns no local results, optionally query the configured provider AND import its results into the local database via background WHOIS lookups, permanently enriching the dataset; provider key stored in browser localStorage (web), cli.yml (CLI), or server.yml (operator default); server never persists user-supplied per-request keys
 - GeoIP enrichment (ASN, Country, City) from MaxMind GeoLite2
 - Tor hidden service support (optional, auto-enabled if Tor detected)
 - Prometheus-compatible metrics endpoint
 - Argon2id-encrypted backup and restore
 - In-place self-update via GitHub releases
 - Service manager integration (systemd, OpenRC, runit, s6, launchd, SCM)
-- Built-in scheduler for ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update, tor_health
+- Built-in scheduler for ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update, tor_health, whois_records_refresh (re-queries stale records older than configurable threshold, default 30d)
 - TLS via Let's Encrypt (HTTP-01, TLS-ALPN-01, DNS-01)
 - CLI client (caswhois-cli) with TUI, setup wizard, auto-update
 - Shell completions (bash, zsh, fish, powershell)
@@ -43,7 +46,6 @@ maintainer_email:  casjay@yahoo.com
 **Non-goals:**
 
 - This service does NOT register or modify domain records
-- This service does NOT store WHOIS data long-term beyond configurable TTL
 - No user accounts, no sessions, no cookies — bearer token only
 - No admin web UI — all configuration via server.yml only
 - No PostgreSQL or MySQL — SQLite/libsql only
@@ -58,6 +60,7 @@ maintainer_email:  casjay@yahoo.com
 - ASN-specific WHOIS lookup
 - Query validation without performing lookup
 - Bulk lookup (POST, server-token required)
+- Owner/registrant search — `GET /whois/search?owner=...` (web) + `GET /api/v1/whois/search?owner=...` (API); searches local history then optional external provider
 - WHOIS server list
 - Server statistics
 - Scheduler task list and manual trigger (server-token required)
@@ -102,6 +105,7 @@ maintainer_email:  casjay@yahoo.com
 - **scheduler_history**: id, task_id → scheduler_tasks, started_at, finished_at, status, error, duration_ms
 - **backups**: id, filename, filepath, size_bytes, type, created_at, checksum, notes
 - **api_tokens**: id, token_hash (SHA-256), token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, revoked_reason
+- **whois_records**: id, query, query_type, registrant_name, registrant_org, registrant_email, registrant_country, registrar, created_date, expiry_date, nameservers (JSON array), status (JSON array), whois_server, raw_whois (full text), first_seen, last_seen, last_updated — permanent record; upserted (last_seen + raw updated) on every successful lookup; indexed on all registrant fields + expiry_date; never auto-deleted (operators can configure max_age for pruning old stale records; default: keep forever); forms the free, open, self-hosted WHOIS dataset
 
 **Sensitivity classification:**
 
@@ -109,7 +113,8 @@ maintainer_email:  casjay@yahoo.com
 |------|-------------|-------|
 | server.token (server.yml) | HIGH | Operator secret; SHA-256 compared; never logged raw |
 | api_token hashes (DB) | HIGH | Stored as SHA-256 only; prefix for identification |
-| WHOIS results (cache) | LOW | Publicly available data; no PII beyond what WHOIS exposes |
+| WHOIS results (in-memory cache) | LOW | Publicly available data; no PII beyond what WHOIS exposes |
+| whois_records (persistent DB) | LOW | Publicly available data aggregated from upstream WHOIS; intended to be an open dataset |
 | audit_log.actor_ip | MEDIUM | IP addresses are PII in some jurisdictions; not exposed via API |
 | rate_limits | LOW | Counters only; no content |
 | backup password (server.yml) | HIGH | Argon2id KDF; never stored plain |
@@ -135,6 +140,7 @@ maintainer_email:  casjay@yahoo.com
 | TLD-specific servers (queried by IANA referral) | Accept results as-is | Return raw response; parse best-effort |
 | MaxMind GeoLite2 CDN (weekly update) | Trusted source; checksum verified | Retain existing DB on download failure; log warning |
 | GitHub Releases (self-update) | SHA-256 verified before replacing binary | Abort update on checksum mismatch; log error |
+| SecurityTrails / WHOXY / ViewDNS (reverse WHOIS) | User-supplied key forwarded per-request; server never stores user keys | Return local-only results on provider error; log warning |
 | Let's Encrypt ACME (TLS provisioning) | Standard ACME protocol | Retain existing cert; schedule retry |
 | Tor network (hidden service) | Optional; operator-opt-in | Disable hidden service on Tor failure; HTTP still serves |
 
@@ -189,3 +195,7 @@ maintainer_email:  casjay@yahoo.com
 - **Port chosen randomly (64000–64999) on first run**: Avoids well-known port conflicts; not a security measure. Operators behind a reverse proxy map to port 80 inside the container.
 - **Parameterized queries always; no raw SQL string building**: Enforced in all database access. Violation of this rule is a bug.
 - **Argon2id for backup encryption key derivation**: bcrypt and PBKDF2 are explicitly forbidden. Argon2id (winner of the Password Hashing Competition) is required.
+- **Persistent WHOIS record database is the primary dataset**: Every successful lookup is stored permanently. The external provider is a seeding mechanism only — results from it trigger real WHOIS lookups that populate the local database. The database is the asset; the provider is optional bootstrap fuel.
+- **Reverse WHOIS API keys never stored server-side from requests**: User-supplied keys sent via `X-Provider-Key` / `X-Provider-Name` request headers are used only for that request and immediately discarded. Only operator-configured keys (server.yml) and user-local keys (CLI cli.yml, browser localStorage) are persisted — and only by the party who owns that storage.
+- **Owner search rate-limited same as read endpoints**: No special exemption; the feature should not be abused to enumerate the registrant dataset at scale.
+- **External provider seeding is async and best-effort**: When a provider returns domain names for an owner search, those domains are queued for background WHOIS lookup and DB insertion. The API response returns immediately with local results; seeded results appear in subsequent searches.

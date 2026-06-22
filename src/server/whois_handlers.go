@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/casapps/caswhois/src/common/i18n"
 	"github.com/casapps/caswhois/src/whois"
+	"github.com/casapps/caswhois/src/whois/history"
+	"github.com/casapps/caswhois/src/whois/reverse"
 )
 
 // handleWHOISDomainLookup handles domain-specific WHOIS lookups
@@ -213,6 +217,15 @@ func (s *Server) performWHOISLookup(w http.ResponseWriter, r *http.Request, quer
 		return
 	}
 
+	// Persist domain registrant data for reverse owner search (fire-and-forget).
+	if result.Domain != nil && s.database != nil {
+		go func() {
+			if saveErr := history.SaveDomain(r.Context(), s.database.Server, query, result.Domain); saveErr != nil {
+				_ = saveErr
+			}
+		}()
+	}
+
 	// Determine response format
 	format := determineResponseFormat(r)
 
@@ -232,7 +245,7 @@ func (s *Server) performWHOISLookup(w http.ResponseWriter, r *http.Request, quer
 	case "text":
 		sendTextResponse(w, result)
 	case "html":
-		sendHTMLResponse(w, result)
+		sendHTMLResponse(w, r, result)
 	default:
 		// Default to JSON
 		SendSuccess(w, data)
@@ -308,9 +321,12 @@ func sendTextResponse(w http.ResponseWriter, result *whois.WHOISResult) {
 }
 
 // sendHTMLResponse sends a WHOIS response in HTML format using the shared stylesheet.
-func sendHTMLResponse(w http.ResponseWriter, result *whois.WHOISResult) {
+// lang and dir are derived from the request context (AI.md PART 16, PART 30).
+func sendHTMLResponse(w http.ResponseWriter, r *http.Request, result *whois.WHOISResult) {
+	lang := LangFromContext(r.Context())
+	dir := i18n.Dir(lang)
 	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -359,6 +375,8 @@ func sendHTMLResponse(w http.ResponseWriter, result *whois.WHOISResult) {
 <script src="/static/js/main.js" defer></script>
 </body>
 </html>`,
+		lang,
+		dir,
 		result.Query,
 		template.HTMLEscapeString(result.Query),
 		template.HTMLEscapeString(result.Type.String()),
@@ -370,4 +388,104 @@ func sendHTMLResponse(w http.ResponseWriter, result *whois.WHOISResult) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(html))
+}
+
+// handleWHOISOwnerSearch serves reverse-WHOIS / owner search.
+// It searches the local whois_history table first (no API key required).
+// When no local results are found it falls back to the external provider
+// configured via server.yml or via the X-Provider-Name / X-Provider-Key
+// request headers (user-supplied key, never stored server-side).
+//
+// GET /whois/search?owner=…&page=1&limit=100
+// GET /api/v1/whois/search?owner=…&page=1&limit=100
+func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) {
+	owner := strings.TrimSpace(r.URL.Query().Get("owner"))
+	if owner == "" {
+		SendError(w, ErrBadRequest, "owner query parameter is required")
+		return
+	}
+
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+
+	page := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n > 0 {
+			page = n
+		}
+	}
+	offset := (page - 1) * limit
+
+	// 1. Search local history (always; no API key needed).
+	localEntries, err := history.SearchByOwner(r.Context(), s.database.Server, owner, limit, offset)
+	if err != nil {
+		SendError(w, ErrServerError, fmt.Sprintf("owner search failed: %v", err))
+		return
+	}
+
+	// Convert local entries to result map slice for unified response.
+	type ownerResult struct {
+		Domain          string `json:"domain"`
+		Source          string `json:"source"`
+		RegistrantName  string `json:"registrant_name,omitempty"`
+		RegistrantOrg   string `json:"registrant_org,omitempty"`
+		RegistrantEmail string `json:"registrant_email,omitempty"`
+		LookedUpAt      string `json:"looked_up_at"`
+	}
+
+	results := make([]ownerResult, 0, len(localEntries))
+	for _, e := range localEntries {
+		results = append(results, ownerResult{
+			Domain:          e.Query,
+			Source:          "local",
+			RegistrantName:  e.RegistrantName,
+			RegistrantOrg:   e.RegistrantOrg,
+			RegistrantEmail: e.RegistrantEmail,
+			LookedUpAt:      e.LookedUpAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	// 2. If no local results, try external provider (page 1 only to avoid
+	//    redundant external calls on subsequent pages).
+	providerName := strings.TrimSpace(r.Header.Get("X-Provider-Name"))
+	providerKey := strings.TrimSpace(r.Header.Get("X-Provider-Key"))
+
+	// Fall back to server-level operator defaults when headers are absent.
+	if providerName == "" {
+		providerName = s.config.ReverseWHOIS.Provider
+	}
+	if providerKey == "" {
+		providerKey = s.config.ReverseWHOIS.APIKey
+	}
+
+	maxExt := s.config.ReverseWHOIS.MaxResults
+	if maxExt <= 0 {
+		maxExt = 100
+	}
+
+	if len(results) == 0 && page == 1 && providerName != "" && providerKey != "" {
+		extResults, extErr := reverse.SearchByOwner(r.Context(), providerName, providerKey, owner, maxExt)
+		if extErr == nil {
+			for _, er := range extResults {
+				results = append(results, ownerResult{
+					Domain: er.Domain,
+					Source: er.Provider,
+				})
+			}
+		}
+	}
+
+	SendSuccess(w, map[string]interface{}{
+		"owner":   owner,
+		"results": results,
+		"meta": map[string]interface{}{
+			"page":     page,
+			"limit":    limit,
+			"count":    len(results),
+		},
+	})
 }

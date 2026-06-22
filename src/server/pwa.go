@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/casapps/caswhois/src/common/i18n"
 )
 
 // handleManifest serves /manifest.json for PWA support (AI.md PART 16).
@@ -127,8 +129,11 @@ func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
 		name = "caswhois"
 	}
 
+	lang := LangFromContext(r.Context())
+	dir := i18n.Dir(lang)
+
 	page := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -142,7 +147,7 @@ func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
   <button onclick="window.location.reload()">Retry</button>
 </main>
 </body>
-</html>`, name, name)
+</html>`, lang, dir, name, name)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

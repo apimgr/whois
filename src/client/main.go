@@ -28,7 +28,9 @@ func main() {
 	var (
 		flagServer  string
 		flagToken   string
+		flagOutput  string
 		flagFormat  string
+		flagNoColor bool
 		flagLang    string
 		flagColor   string
 		flagUpdate  string
@@ -39,7 +41,9 @@ func main() {
 
 	flag.StringVar(&flagServer, "server", "", "Server base URL")
 	flag.StringVar(&flagToken, "token", "", "API token")
-	flag.StringVar(&flagFormat, "format", "", "Output format: json/text/raw (default: text)")
+	flag.StringVar(&flagOutput, "output", "", "Output format: json/text/raw (default: text)")
+	flag.StringVar(&flagFormat, "format", "", "Output format alias for --output")
+	flag.BoolVar(&flagNoColor, "no-color", false, "Disable color output")
 	flag.StringVar(&flagLang, "lang", "", "Language code (en, es, zh, fr, ar, de, ja)")
 	flag.StringVar(&flagColor, "color", "", "Color output: always/never/auto (default: auto)")
 	flag.StringVar(&flagUpdate, "update", "", "Update command: check/yes/branch=<name>")
@@ -70,8 +74,15 @@ func main() {
 	if flagToken != "" {
 		cfg.Token = flagToken
 	}
-	if flagFormat != "" {
+	// --output takes precedence; --format is a legacy alias.
+	if flagOutput != "" {
+		cfg.Format = flagOutput
+	} else if flagFormat != "" {
 		cfg.Format = flagFormat
+	}
+	// --no-color overrides --color.
+	if flagNoColor {
+		flagColor = "never"
 	}
 	if flagDebug {
 		cfg.Debug = true

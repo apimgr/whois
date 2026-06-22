@@ -342,6 +342,18 @@ type SchedulerConfig struct {
 }
 
 // ServerConfig holds all server configuration
+// ReverseWHOISConfig holds settings for the owner-search / reverse WHOIS feature (AI.md PART 14).
+// Local history is always searched first; an external provider is queried only when configured
+// and no local results are found.
+type ReverseWHOISConfig struct {
+	// Provider selects the external reverse-WHOIS service: "securitytrails", "viewdns", or "" (none).
+	Provider string `yaml:"provider"`
+	// APIKey is the API key for the configured provider. Never logged.
+	APIKey string `yaml:"api_key"`
+	// MaxResults caps the total number of results returned per search (default 100).
+	MaxResults int `yaml:"max_results"`
+}
+
 type ServerConfig struct {
 	// Server settings
 	Port      int    `yaml:"port"`
@@ -415,6 +427,9 @@ type ServerConfig struct {
 
 	// Scheduler configuration (AI.md PART 18)
 	Scheduler SchedulerConfig `yaml:"scheduler"`
+
+	// Reverse WHOIS settings — local history + optional external provider (AI.md PART 14)
+	ReverseWHOIS ReverseWHOISConfig `yaml:"reverse_whois"`
 
 	// Debug mode
 	Debug bool `yaml:"debug"`

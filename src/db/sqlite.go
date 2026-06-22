@@ -163,6 +163,28 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 			revoked_reason TEXT
 		)`,
 
+		// WHOIS lookup history indexed by registrant fields for reverse-owner search (AI.md PART 14)
+		`CREATE TABLE IF NOT EXISTS whois_history (
+			id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+			query              TEXT NOT NULL,
+			query_type         TEXT NOT NULL,
+			registrant_name    TEXT,
+			registrant_org     TEXT,
+			registrant_email   TEXT,
+			registrant_country TEXT,
+			looked_up_at       INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			expires_at         INTEGER NOT NULL
+		)`,
+
+		// Unique constraint — upsert by query (keeps the most-recent hit alive)
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whois_history_query ON whois_history(query)`,
+
+		// Covering indexes for registrant-field searches
+		`CREATE INDEX IF NOT EXISTS idx_whois_history_name    ON whois_history(registrant_name)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_history_org     ON whois_history(registrant_org)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_history_email   ON whois_history(registrant_email)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_history_expires ON whois_history(expires_at)`,
+
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_config_key ON config(key)`,
 		`CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON rate_limits(window_start)`,

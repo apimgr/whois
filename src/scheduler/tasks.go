@@ -173,7 +173,23 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register tor_health: %w", err)
 	}
 
-	log.Printf("INFO: Registered %d built-in scheduler tasks", 10)
+	// whois_history_cleanup — Every 6 hours; removes expired registrant-index rows
+	if err := s.Register(&Task{
+		ID:       "whois_history_cleanup",
+		Name:     "WHOIS History Cleanup",
+		Schedule: "@every 6h",
+		Enabled:  true,
+		Handler:  s.taskWhoisHistoryCleanup,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 3,
+			RetryDelay: 5 * time.Minute,
+			Backoff:    "linear",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register whois_history_cleanup: %w", err)
+	}
+
+	log.Printf("INFO: Registered %d built-in scheduler tasks", 11)
 	return nil
 }
 
@@ -280,4 +296,18 @@ func (s *Scheduler) taskTorHealth(ctx context.Context) error {
 		return nil
 	}
 	return s.TorHealthHook(ctx)
+}
+
+// taskWhoisHistoryCleanup removes expired rows from whois_history.
+func (s *Scheduler) taskWhoisHistoryCleanup(ctx context.Context) error {
+	result, err := s.db.ExecContext(ctx,
+		`DELETE FROM whois_history WHERE expires_at <= strftime('%s', 'now')`)
+	if err != nil {
+		return fmt.Errorf("whois_history_cleanup: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n > 0 {
+		log.Printf("INFO: whois_history_cleanup: removed %d expired entries", n)
+	}
+	return nil
 }

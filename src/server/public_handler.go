@@ -25,11 +25,10 @@ var whoisPageTmpl = mustParseTemplate("whois-page", "whois.html")
 
 // homePageData holds template data for the homepage.
 type homePageData struct {
+	translatablePageData
 	Query  string
 	Result *whoisResultView
 	Err    string
-	// T is the translation function for this request's language (AI.md PART 30).
-	T func(string) string
 }
 
 // whoisResultView is a presentation-layer view of a WHOISResult.
@@ -43,11 +42,10 @@ type whoisResultView struct {
 
 // whoisPageData holds template data for the /whois result page.
 type whoisPageData struct {
+	translatablePageData
 	Query  string
 	Result *whoisResultView
 	Err    string
-	// T is the translation function for this request's language (AI.md PART 30).
-	T func(string) string
 }
 
 // handlePublicWHOISPage serves the public WHOIS lookup homepage at /.
@@ -65,7 +63,7 @@ func (s *Server) handlePublicWHOISPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := homePageData{T: newTranslatorFunc(r)}
+	data := homePageData{translatablePageData: newPageData(r)}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := homepageTmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
@@ -122,7 +120,7 @@ func (s *Server) handleWHOISPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// HTML clients — render the server-side result page.
-	data := whoisPageData{Query: q, T: newTranslatorFunc(r)}
+	data := whoisPageData{translatablePageData: newPageData(r), Query: q}
 
 	if q != "" {
 		result, err := whois.QueryWHOISWithCache(r.Context(), q, s.cache)

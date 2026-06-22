@@ -14,6 +14,7 @@ type DomainResult struct {
 	Registrant   string    `json:"registrant"`
 	Organization string    `json:"organization"`
 	Email        string    `json:"email"`
+	Country      string    `json:"country,omitempty"`
 	Nameservers  []string  `json:"nameservers"`
 	Status       []string  `json:"status"`
 	CreatedDate  time.Time `json:"created_date,omitempty"`
@@ -25,18 +26,19 @@ type DomainResult struct {
 
 // Common WHOIS field patterns
 var domainPatterns = map[string]*regexp.Regexp{
-	"domain":           regexp.MustCompile(`(?i)^\s*(?:domain\s*name|domain):\s*(.+)$`),
-	"registrar":        regexp.MustCompile(`(?i)^\s*registrar:\s*(.+)$`),
-	"registrar_iana":   regexp.MustCompile(`(?i)^\s*registrar\s*iana\s*id:\s*(.+)$`),
-	"registrant_name":  regexp.MustCompile(`(?i)^\s*registrant\s*(?:name)?:\s*(.+)$`),
-	"registrant_org":   regexp.MustCompile(`(?i)^\s*registrant\s*organi[sz]ation:\s*(.+)$`),
-	"registrant_email": regexp.MustCompile(`(?i)^\s*registrant\s*email:\s*(.+)$`),
-	"nameserver":       regexp.MustCompile(`(?i)^\s*(?:name\s*server|nserver):\s*(.+)$`),
-	"status":           regexp.MustCompile(`(?i)^\s*(?:domain\s*)?status:\s*(.+)$`),
-	"created":          regexp.MustCompile(`(?i)^\s*(?:creation\s*date|created|registered\s*on):\s*(.+)$`),
-	"updated":          regexp.MustCompile(`(?i)^\s*(?:updated\s*date|last\s*updated|modified):\s*(.+)$`),
-	"expires":          regexp.MustCompile(`(?i)^\s*(?:expir(?:y|ation)\s*date|expires|registry\s*expiry\s*date):\s*(.+)$`),
-	"dnssec":           regexp.MustCompile(`(?i)^\s*dnssec:\s*(.+)$`),
+	"domain":              regexp.MustCompile(`(?i)^\s*(?:domain\s*name|domain):\s*(.+)$`),
+	"registrar":           regexp.MustCompile(`(?i)^\s*registrar:\s*(.+)$`),
+	"registrar_iana":      regexp.MustCompile(`(?i)^\s*registrar\s*iana\s*id:\s*(.+)$`),
+	"registrant_name":     regexp.MustCompile(`(?i)^\s*registrant\s*(?:name)?:\s*(.+)$`),
+	"registrant_org":      regexp.MustCompile(`(?i)^\s*registrant\s*organi[sz]ation:\s*(.+)$`),
+	"registrant_email":    regexp.MustCompile(`(?i)^\s*registrant\s*email:\s*(.+)$`),
+	"registrant_country":  regexp.MustCompile(`(?i)^\s*registrant\s*country:\s*(.+)$`),
+	"nameserver":          regexp.MustCompile(`(?i)^\s*(?:name\s*server|nserver):\s*(.+)$`),
+	"status":              regexp.MustCompile(`(?i)^\s*(?:domain\s*)?status:\s*(.+)$`),
+	"created":             regexp.MustCompile(`(?i)^\s*(?:creation\s*date|created|registered\s*on):\s*(.+)$`),
+	"updated":             regexp.MustCompile(`(?i)^\s*(?:updated\s*date|last\s*updated|modified):\s*(.+)$`),
+	"expires":             regexp.MustCompile(`(?i)^\s*(?:expir(?:y|ation)\s*date|expires|registry\s*expiry\s*date):\s*(.+)$`),
+	"dnssec":              regexp.MustCompile(`(?i)^\s*dnssec:\s*(.+)$`),
 }
 
 // ParseDomain parses raw WHOIS response for domain queries
@@ -93,6 +95,13 @@ func ParseDomain(raw string) (*DomainResult, error) {
 		if result.Email == "" {
 			if match := domainPatterns["registrant_email"].FindStringSubmatch(line); match != nil {
 				result.Email = strings.TrimSpace(match[1])
+			}
+		}
+
+		// Registrant country
+		if result.Country == "" {
+			if match := domainPatterns["registrant_country"].FindStringSubmatch(line); match != nil {
+				result.Country = strings.ToUpper(strings.TrimSpace(match[1]))
 			}
 		}
 

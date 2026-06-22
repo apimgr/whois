@@ -125,3 +125,12 @@ func IsSupported(lang string) bool {
 	}
 	return false
 }
+
+// Dir returns the text directionality for the given language code.
+// Arabic (ar) is RTL; all other supported languages are LTR.
+func Dir(lang string) string {
+	if lang == "ar" {
+		return "rtl"
+	}
+	return "ltr"
+}

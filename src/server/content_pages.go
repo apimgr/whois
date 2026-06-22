@@ -2,13 +2,29 @@ package server
 
 import (
 	"net/http"
+
+	"github.com/casapps/caswhois/src/common/i18n"
 )
 
-// translatablePageData embeds a translation function into page data structs.
-// All page data structs that render HTML should embed this (AI.md PART 30).
+// translatablePageData embeds language and translation fields into page data structs.
+// All HTML page data structs must embed this to satisfy AI.md PART 16 and PART 30.
 type translatablePageData struct {
 	// T is the translation function for the request's detected language.
 	T func(string) string
+	// Lang is the BCP-47 language code used in the <html lang="…"> attribute.
+	Lang string
+	// Dir is the text direction ("ltr" or "rtl") used in the <html dir="…"> attribute.
+	Dir string
+}
+
+// newPageData returns a translatablePageData populated from the request context.
+func newPageData(r *http.Request) translatablePageData {
+	lang := LangFromContext(r.Context())
+	return translatablePageData{
+		T:    newTranslatorFunc(r),
+		Lang: lang,
+		Dir:  i18n.Dir(lang),
+	}
 }
 
 // AboutPageData holds the dynamic data for the /about and /server/about pages.
@@ -54,7 +70,7 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 		description = "caswhois is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
 	}
 	data := AboutPageData{
-		translatablePageData: translatablePageData{T: newTranslatorFunc(r)},
+		translatablePageData: newPageData(r),
 		Name:         name,
 		Tagline:      tagline,
 		Description:  description,
@@ -77,7 +93,7 @@ func (s *Server) handleDocsPage(w http.ResponseWriter, r *http.Request) {
 		name = "caswhois"
 	}
 	data := DocsPageData{
-		translatablePageData: translatablePageData{T: newTranslatorFunc(r)},
+		translatablePageData: newPageData(r),
 		Name:          name,
 		Tagline:       s.config.Branding.Tagline,
 		APIVersion:    "v1",
