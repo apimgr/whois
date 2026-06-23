@@ -25,6 +25,7 @@ import (
 	"github.com/casapps/caswhois/src/scheduler"
 	castor "github.com/casapps/caswhois/src/tor"
 	"github.com/casapps/caswhois/src/whois"
+	"github.com/casapps/caswhois/src/whois/records"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -196,6 +197,25 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 			}
 		}
 		// SSLRenewHook stays nil until the SSL manager is integrated.
+
+		// Wire WHOIS records refresh hook — re-queries stale permanent records (PART 14).
+		if srv.database != nil {
+			sched.WhoisRefreshHook = func(ctx context.Context, queries []string) error {
+				for _, q := range queries {
+					result, qErr := whois.QueryWHOISWithCache(ctx, q, srv.cache)
+					if qErr != nil {
+						continue
+					}
+					if result.Domain == nil {
+						continue
+					}
+					if upErr := records.UpsertRecord(ctx, srv.database.Server, q, result.Type.String(), result.Domain); upErr != nil {
+						return upErr
+					}
+				}
+				return nil
+			}
+		}
 
 		if err := sched.RegisterBuiltInTasks(); err != nil {
 			log.Printf("WARN: Failed to register built-in tasks: %v", err)

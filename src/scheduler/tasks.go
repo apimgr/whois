@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/casapps/caswhois/src/whois/records"
 )
 
 // RegisterBuiltInTasks registers all required built-in tasks (AI.md PART 18).
@@ -173,20 +175,20 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register tor_health: %w", err)
 	}
 
-	// whois_history_cleanup — Every 6 hours; removes expired registrant-index rows
+	// whois_records_refresh — Daily; re-queries permanent records older than 30 days
 	if err := s.Register(&Task{
-		ID:       "whois_history_cleanup",
-		Name:     "WHOIS History Cleanup",
-		Schedule: "@every 6h",
+		ID:       "whois_records_refresh",
+		Name:     "WHOIS Records Refresh",
+		Schedule: "0 6 * * *",
 		Enabled:  true,
-		Handler:  s.taskWhoisHistoryCleanup,
+		Handler:  s.taskWhoisRecordsRefresh,
 		RetryPolicy: &RetryPolicy{
 			MaxRetries: 3,
-			RetryDelay: 5 * time.Minute,
-			Backoff:    "linear",
+			RetryDelay: 30 * time.Minute,
+			Backoff:    "exponential",
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to register whois_history_cleanup: %w", err)
+		return fmt.Errorf("failed to register whois_records_refresh: %w", err)
 	}
 
 	log.Printf("INFO: Registered %d built-in scheduler tasks", 11)
@@ -298,16 +300,27 @@ func (s *Scheduler) taskTorHealth(ctx context.Context) error {
 	return s.TorHealthHook(ctx)
 }
 
-// taskWhoisHistoryCleanup removes expired rows from whois_history.
-func (s *Scheduler) taskWhoisHistoryCleanup(ctx context.Context) error {
-	result, err := s.db.ExecContext(ctx,
-		`DELETE FROM whois_history WHERE expires_at <= strftime('%s', 'now')`)
+// taskWhoisRecordsRefresh finds permanent records older than 30 days and re-queries
+// them via the WhoisRefreshHook. Records are never deleted, only refreshed in place.
+// When no hook is registered the task is a no-op.
+func (s *Scheduler) taskWhoisRecordsRefresh(ctx context.Context) error {
+	if s.WhoisRefreshHook == nil {
+		log.Printf("INFO: whois_records_refresh skipped (no refresh hook registered)")
+		return nil
+	}
+
+	queries, err := records.RefreshStale(ctx, s.db, 30)
 	if err != nil {
-		return fmt.Errorf("whois_history_cleanup: %w", err)
+		return fmt.Errorf("whois_records_refresh: find stale: %w", err)
 	}
-	n, _ := result.RowsAffected()
-	if n > 0 {
-		log.Printf("INFO: whois_history_cleanup: removed %d expired entries", n)
+	if len(queries) == 0 {
+		log.Printf("DEBUG: whois_records_refresh: no stale records")
+		return nil
 	}
+
+	if err := s.WhoisRefreshHook(ctx, queries); err != nil {
+		return fmt.Errorf("whois_records_refresh: %w", err)
+	}
+	log.Printf("INFO: whois_records_refresh: refreshed %d stale records", len(queries))
 	return nil
 }

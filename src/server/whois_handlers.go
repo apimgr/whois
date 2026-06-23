@@ -12,7 +12,7 @@ import (
 
 	"github.com/casapps/caswhois/src/common/i18n"
 	"github.com/casapps/caswhois/src/whois"
-	"github.com/casapps/caswhois/src/whois/history"
+	"github.com/casapps/caswhois/src/whois/records"
 	"github.com/casapps/caswhois/src/whois/reverse"
 )
 
@@ -217,10 +217,10 @@ func (s *Server) performWHOISLookup(w http.ResponseWriter, r *http.Request, quer
 		return
 	}
 
-	// Persist domain registrant data for reverse owner search (fire-and-forget).
+	// Persist domain registrant data permanently for reverse owner search (fire-and-forget).
 	if result.Domain != nil && s.database != nil {
 		go func() {
-			if saveErr := history.SaveDomain(r.Context(), s.database.Server, query, result.Domain); saveErr != nil {
+			if saveErr := records.UpsertRecord(r.Context(), s.database.Server, query, result.Type.String(), result.Domain); saveErr != nil {
 				_ = saveErr
 			}
 		}()
@@ -391,7 +391,7 @@ func sendHTMLResponse(w http.ResponseWriter, r *http.Request, result *whois.WHOI
 }
 
 // handleWHOISOwnerSearch serves reverse-WHOIS / owner search.
-// It searches the local whois_history table first (no API key required).
+// It searches the local whois_records table first (no API key required).
 // When no local results are found it falls back to the external provider
 // configured via server.yml or via the X-Provider-Name / X-Provider-Key
 // request headers (user-supplied key, never stored server-side).
@@ -420,32 +420,38 @@ func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) 
 	}
 	offset := (page - 1) * limit
 
-	// 1. Search local history (always; no API key needed).
-	localEntries, err := history.SearchByOwner(r.Context(), s.database.Server, owner, limit, offset)
+	// 1. Search local permanent records (always; no API key needed).
+	localRecords, err := records.SearchByOwner(r.Context(), s.database.Server, owner, limit, offset)
 	if err != nil {
 		SendError(w, ErrServerError, fmt.Sprintf("owner search failed: %v", err))
 		return
 	}
 
-	// Convert local entries to result map slice for unified response.
+	// Convert local records to result slice for unified response.
 	type ownerResult struct {
 		Domain          string `json:"domain"`
 		Source          string `json:"source"`
 		RegistrantName  string `json:"registrant_name,omitempty"`
 		RegistrantOrg   string `json:"registrant_org,omitempty"`
 		RegistrantEmail string `json:"registrant_email,omitempty"`
-		LookedUpAt      string `json:"looked_up_at"`
+		Registrar       string `json:"registrar,omitempty"`
+		ExpiryDate      string `json:"expiry_date,omitempty"`
+		FirstSeen       string `json:"first_seen"`
+		LastSeen        string `json:"last_seen"`
 	}
 
-	results := make([]ownerResult, 0, len(localEntries))
-	for _, e := range localEntries {
+	results := make([]ownerResult, 0, len(localRecords))
+	for _, rec := range localRecords {
 		results = append(results, ownerResult{
-			Domain:          e.Query,
+			Domain:          rec.Query,
 			Source:          "local",
-			RegistrantName:  e.RegistrantName,
-			RegistrantOrg:   e.RegistrantOrg,
-			RegistrantEmail: e.RegistrantEmail,
-			LookedUpAt:      e.LookedUpAt.UTC().Format(time.RFC3339),
+			RegistrantName:  rec.RegistrantName,
+			RegistrantOrg:   rec.RegistrantOrg,
+			RegistrantEmail: rec.RegistrantEmail,
+			Registrar:       rec.Registrar,
+			ExpiryDate:      rec.ExpiryDate,
+			FirstSeen:       time.Unix(rec.FirstSeen, 0).UTC().Format(time.RFC3339),
+			LastSeen:        time.Unix(rec.LastSeen, 0).UTC().Format(time.RFC3339),
 		})
 	}
 

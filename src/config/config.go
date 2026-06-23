@@ -346,9 +346,10 @@ type SchedulerConfig struct {
 // Local history is always searched first; an external provider is queried only when configured
 // and no local results are found.
 type ReverseWHOISConfig struct {
-	// Provider selects the external reverse-WHOIS service: "securitytrails", "viewdns", or "" (none).
+	// Provider selects the external reverse-WHOIS service: "securitytrails", "whoxy", "viewdns", or "" (none).
 	Provider string `yaml:"provider"`
-	// APIKey is the API key for the configured provider. Never logged.
+	// APIKey is the operator-default API key for the configured provider. Never logged.
+	// Never persisted from per-request X-Provider-Key headers.
 	APIKey string `yaml:"api_key"`
 	// MaxResults caps the total number of results returned per search (default 100).
 	MaxResults int `yaml:"max_results"`

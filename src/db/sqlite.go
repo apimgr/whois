@@ -163,8 +163,9 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 			revoked_reason TEXT
 		)`,
 
-		// WHOIS lookup history indexed by registrant fields for reverse-owner search (AI.md PART 14)
-		`CREATE TABLE IF NOT EXISTS whois_history (
+		// Permanent WHOIS record store indexed by registrant fields for reverse-owner search (AI.md PART 14).
+		// Records are never expired; they are upserted in place and periodically refreshed.
+		`CREATE TABLE IF NOT EXISTS whois_records (
 			id                 INTEGER PRIMARY KEY AUTOINCREMENT,
 			query              TEXT NOT NULL,
 			query_type         TEXT NOT NULL,
@@ -172,18 +173,28 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 			registrant_org     TEXT,
 			registrant_email   TEXT,
 			registrant_country TEXT,
-			looked_up_at       INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-			expires_at         INTEGER NOT NULL
+			registrar          TEXT,
+			created_date       TEXT,
+			expiry_date        TEXT,
+			nameservers        TEXT,
+			status             TEXT,
+			whois_server       TEXT,
+			raw_whois          TEXT,
+			first_seen         INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			last_seen          INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			last_updated       INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 		)`,
 
-		// Unique constraint — upsert by query (keeps the most-recent hit alive)
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whois_history_query ON whois_history(query)`,
+		// Unique constraint — upsert by query (one permanent row per query)
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whois_records_query ON whois_records(query)`,
 
-		// Covering indexes for registrant-field searches
-		`CREATE INDEX IF NOT EXISTS idx_whois_history_name    ON whois_history(registrant_name)`,
-		`CREATE INDEX IF NOT EXISTS idx_whois_history_org     ON whois_history(registrant_org)`,
-		`CREATE INDEX IF NOT EXISTS idx_whois_history_email   ON whois_history(registrant_email)`,
-		`CREATE INDEX IF NOT EXISTS idx_whois_history_expires ON whois_history(expires_at)`,
+		// Covering indexes for registrant-field searches and staleness scans
+		`CREATE INDEX IF NOT EXISTS idx_whois_records_name      ON whois_records(registrant_name)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_records_org       ON whois_records(registrant_org)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_records_email     ON whois_records(registrant_email)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_records_country   ON whois_records(registrant_country)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_records_expiry    ON whois_records(expiry_date)`,
+		`CREATE INDEX IF NOT EXISTS idx_whois_records_last_seen ON whois_records(last_seen)`,
 
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_config_key ON config(key)`,

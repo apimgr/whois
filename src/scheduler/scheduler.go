@@ -31,6 +31,8 @@ type Scheduler struct {
 	BlocklistUpdateHook func(context.Context) error
 	CVEUpdateHook      func(context.Context) error
 	TorHealthHook      func(context.Context) error
+	// WhoisRefreshHook re-queries the supplied stale queries and upserts fresh records.
+	WhoisRefreshHook   func(context.Context, []string) error
 }
 
 // Task represents a scheduled task
