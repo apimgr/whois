@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Manifest represents the backup manifest (AI.md PART 22)
+// Manifest represents the backup manifest (AI.md PART 21)
 type Manifest struct {
 	Version          string    `json:"version"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -42,7 +42,7 @@ type BackupOptions struct {
 	AppVersion  string // Current app version
 }
 
-// Create creates a backup per AI.md PART 22 specification
+// Create creates a backup per AI.md PART 21 specification
 func Create(opts *BackupOptions) error {
 	// Generate default filename if not specified
 	if opts.OutputFile == "" {
@@ -235,7 +235,7 @@ func buildFinalArchive(opts *BackupOptions, manifest *Manifest, contentBuf []byt
 }
 
 // encryptBackup encrypts backup data using AES-256-GCM with Argon2id key derivation
-// Per AI.md PART 22 specification
+// Per AI.md PART 21 specification
 func encryptBackup(data []byte, password string) ([]byte, error) {
 	// Generate salt for Argon2id
 	salt := make([]byte, 32)
@@ -386,7 +386,7 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// VerifyBackup performs comprehensive backup verification per AI.md PART 22
+// VerifyBackup performs comprehensive backup verification per AI.md PART 21
 // All 7 checks must pass:
 // 1. File exists
 // 2. Size > 0
@@ -673,7 +673,7 @@ func decryptBackupData(data []byte, password string) ([]byte, error) {
 }
 
 // ApplyRetentionPolicy deletes old backups based on retention settings
-// Per AI.md PART 22 specification
+// Per AI.md PART 21 specification
 func ApplyRetentionPolicy(backupDir string, maxBackups, keepWeekly, keepMonthly, keepYearly int) error {
 	// List all backup files (exclude incrementals: -daily, -hourly)
 	files, err := filepath.Glob(filepath.Join(backupDir, "caswhois_backup_*.tar.gz*"))
@@ -778,7 +778,7 @@ func ApplyRetentionPolicy(backupDir string, maxBackups, keepWeekly, keepMonthly,
 }
 
 // CreateIncremental creates an incremental backup (daily or hourly)
-// Per AI.md PART 22 specification
+// Per AI.md PART 21 specification
 func CreateIncremental(opts *BackupOptions, backupType string) error {
 	// Determine filename
 	ext := ".tar.gz"

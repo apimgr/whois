@@ -17,12 +17,11 @@ echo "caswhois Container Starting"
 echo "=========================================="
 echo "Timezone: $TZ"
 echo "Port: ${PORT:-80}"
-echo "Mode: ${MODE:-production}"
 echo "=========================================="
 
 # Note: Tor startup is controlled by the caswhois binary itself
-# The binary detects if /usr/bin/tor exists and starts it if needed
-# See AI.md PART 32 for Tor Hidden Service implementation
+# The binary detects if a tor binary exists and starts it if needed
+# See AI.md PART 31 for Tor Hidden Service implementation
 
 # Start the application
 # Pass all arguments to the binary

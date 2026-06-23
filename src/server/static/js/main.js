@@ -22,6 +22,14 @@
   var errorArea=document.getElementById('js-error');
   if(!form||!input)return;
 
+  // User-facing strings are injected server-side via data-* attributes so they
+  // honour the request language (AI.md PART 30 — no hardcoded strings in JS).
+  var msg={
+    empty:form.getAttribute('data-msg-empty')||'',
+    failed:form.getAttribute('data-msg-failed')||'',
+    network:form.getAttribute('data-msg-network')||''
+  };
+
   function hideAll(){
     if(loading)loading.hidden=true;
     if(resultArea)resultArea.hidden=true;
@@ -45,21 +53,22 @@
   }
 
   function doLookup(q){
-    if(!q.trim()){showError('Enter a domain, IP address, or ASN number.');return;}
+    if(!q.trim()){showError(msg.empty);return;}
     hideAll();
     if(loading)loading.hidden=false;
     var btn=form.querySelector('button[type="submit"]');
     if(btn){btn.disabled=true;}
-    fetch('/api/v1/whois/'+encodeURIComponent(q.trim()))
+    // Build the URL from the page origin so the app works behind a reverse proxy (AI.md PART 16).
+    fetch(window.location.origin+'/api/v1/whois/'+encodeURIComponent(q.trim()))
       .then(function(res){return res.json();})
       .then(function(body){
         if(btn){btn.disabled=false;}
         if(body.ok&&body.data){showResult(body.data);}
-        else{showError(body.message||'WHOIS lookup failed — please try again.');}
+        else{showError(body.message||msg.failed);}
       })
       .catch(function(err){
         if(btn){btn.disabled=false;}
-        showError('Network error: '+err.message);
+        showError(msg.network+' '+err.message);
       });
   }
 
@@ -77,6 +86,35 @@
   });
 })();
 
+// showUpdateBanner builds the PWA "update available" banner from classed
+// elements (AI.md PART 16 — no inline CSS or inline event handlers in JS).
+function showUpdateBanner() {
+  var form = document.getElementById('whois-form');
+  var labelText = (form && form.getAttribute('data-msg-update')) || 'Update available';
+  var actionText = (form && form.getAttribute('data-msg-update-action')) || 'Update';
+
+  var banner = document.createElement('div');
+  banner.className = 'sw-update-banner';
+
+  var label = document.createElement('span');
+  label.textContent = labelText;
+
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'sw-update-btn';
+  btn.textContent = actionText;
+  btn.addEventListener('click', function() {
+    navigator.serviceWorker.ready.then(function(r) {
+      if (r.waiting) { r.waiting.postMessage({ type: 'SKIP_WAITING' }); }
+    });
+    banner.remove();
+  });
+
+  banner.appendChild(label);
+  banner.appendChild(btn);
+  document.body.appendChild(banner);
+}
+
 // PWA service worker registration (AI.md PART 16)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
@@ -86,10 +124,7 @@ if ('serviceWorker' in navigator) {
           var newWorker = reg.installing;
           newWorker.addEventListener('statechange', function() {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              var banner = document.createElement('div');
-              banner.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--color-accent,#007bff);color:#fff;padding:.75rem 1.5rem;border-radius:.5rem;display:flex;gap:1rem;align-items:center;z-index:9999;';
-              banner.innerHTML = '<span>Update available</span><button onclick="navigator.serviceWorker.ready.then(function(r){if(r.waiting)r.waiting.postMessage({type:\'SKIP_WAITING\'})});this.closest(\'[style]\').remove()" style="background:rgba(0,0,0,.2);border:none;color:#fff;padding:.25rem .75rem;border-radius:.25rem;cursor:pointer;">Update</button>';
-              document.body.appendChild(banner);
+              showUpdateBanner();
             }
           });
         });

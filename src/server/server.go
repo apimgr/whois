@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -286,13 +287,25 @@ func (s *Server) Start() error {
 		}
 	}
 
+	// Bind the listener while still privileged so ports below 1024 can be
+	// claimed, then drop to the unprivileged service account before serving
+	// any request (AI.md PART 23 — bind privileged port, then drop privileges).
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("failed to bind %s: %w", addr, err)
+	}
+	if err := dropPrivileges(s.config.User, s.config.Group); err != nil {
+		listener.Close()
+		return fmt.Errorf("failed to drop privileges: %w", err)
+	}
+
 	// Channel for server errors
 	serverErrors := make(chan error, 1)
 
 	// Start server in goroutine
 	go func() {
 		log.Printf("Server starting on %s", addr)
-		serverErrors <- s.server.ListenAndServe()
+		serverErrors <- s.server.Serve(listener)
 	}()
 
 	// Start Tor hidden service (PART 31) — non-blocking, optional

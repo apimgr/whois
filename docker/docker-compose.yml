@@ -11,23 +11,16 @@ services:
     ports:
       - "64580:80"
     
-    # Volumes for persistent data
+    # Volumes for persistent data (logs live under /data/log per AI.md PART 4)
     volumes:
-      - ./rootfs/config:/config
-      - ./rootfs/data:/data
-      - ./rootfs/logs:/logs
-    
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
+
     # Environment variables
     environment:
       # Timezone (override as needed)
       TZ: America/New_York
-      
-      # Internal port (matches container port above)
-      PORT: 80
-      
-      # Application mode
-      MODE: production
-      
+
       # Optional: Database connection (for cluster mode)
       # DATABASE_TYPE: postgres
       # DATABASE_HOST: postgres
@@ -42,9 +35,9 @@ services:
       # CACHE_PORT: 6379
       # CACHE_PASSWORD: your_password_here
     
-    # Health check
+    # Health check (matches the binary's --status check; route is /server/healthz)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/server/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3

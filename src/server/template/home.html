@@ -39,7 +39,12 @@
           <p>{{call .T "whois.subtitle"}}</p>
         </div>
 
-        <form id="whois-form" class="search-form-wrap" action="/whois" method="GET" novalidate>
+        <form id="whois-form" class="search-form-wrap" action="/whois" method="GET" novalidate
+          data-msg-empty="{{call .T "whois.error_empty"}}"
+          data-msg-failed="{{call .T "whois.error_failed"}}"
+          data-msg-network="{{call .T "whois.error_network"}}"
+          data-msg-update="{{call .T "pwa.update_available"}}"
+          data-msg-update-action="{{call .T "pwa.update_action"}}">
           <div class="search-row">
             <label for="q" class="sr-only">{{call .T "whois.query_label"}}</label>
             <input

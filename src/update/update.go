@@ -50,7 +50,7 @@ type UpdateInfo struct {
 }
 
 // CheckForUpdates checks GitHub for available updates
-// Per AI.md PART 23 specification
+// Per AI.md PART 22 specification
 func CheckForUpdates(currentVersion string, channel UpdateChannel) (*UpdateInfo, error) {
 	// Get latest release from GitHub API
 	release, err := getLatestRelease(channel)
@@ -99,7 +99,7 @@ func CheckForUpdates(currentVersion string, channel UpdateChannel) (*UpdateInfo,
 }
 
 // PerformUpdate downloads and installs the update
-// Per AI.md PART 23 specification
+// Per AI.md PART 22 specification
 func PerformUpdate(currentVersion string, channel UpdateChannel) error {
 	// Check for updates
 	info, err := CheckForUpdates(currentVersion, channel)

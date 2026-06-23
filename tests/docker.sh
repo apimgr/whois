@@ -21,13 +21,12 @@ echo "========================================"
 echo "Project root: $PROJECT_ROOT"
 echo
 
-# Cleanup function
+# Cleanup function (only remove this project's test resources, never a broad sweep)
 cleanup() {
     echo
     echo "Cleaning up..."
     cd "$DOCKER_DIR"
-    docker-compose -f docker-compose.test.yml down -v 2>/dev/null || true
-    docker system prune -f 2>/dev/null || true
+    docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
 }
 
 # Set trap for cleanup
@@ -64,11 +63,11 @@ echo
 # Build and start test container
 echo "Building test container..."
 cd "$DOCKER_DIR"
-docker-compose -f docker-compose.test.yml build
+docker compose -f docker-compose.test.yml build
 echo
 
 echo "Starting test container..."
-docker-compose -f docker-compose.test.yml up -d
+docker compose -f docker-compose.test.yml up -d
 echo
 
 # Wait for container to be healthy
@@ -76,7 +75,7 @@ echo "Waiting for container to be healthy (max 60s)..."
 TIMEOUT=60
 ELAPSED=0
 while [ $ELAPSED -lt $TIMEOUT ]; do
-    if docker-compose -f docker-compose.test.yml ps | grep -q "healthy"; then
+    if docker compose -f docker-compose.test.yml ps | grep -q "healthy"; then
         echo -e "${GREEN}Container is healthy${NC}"
         break
     fi
@@ -88,7 +87,7 @@ echo
 
 if [ $ELAPSED -ge $TIMEOUT ]; then
     echo -e "${RED}Container failed to become healthy${NC}"
-    docker-compose -f docker-compose.test.yml logs
+    docker compose -f docker-compose.test.yml logs
     exit 1
 fi
 
@@ -143,6 +142,20 @@ run_test "XML format (Accept header)" \
 run_test "Text format (Accept header)" \
     "curl -f -s -H 'Accept: text/plain' http://localhost:$PORT/api/v1/stats"
 
+# Test: Frontend content negotiation (PART 28 requires text/html AND text/plain)
+run_test "Frontend HTML (Accept: text/html)" \
+    "curl -f -sL -H 'Accept: text/html' http://localhost:$PORT/ | grep -q -i '<html'"
+
+run_test "Frontend plain text (Accept: text/plain)" \
+    "curl -f -sL -H 'Accept: text/plain' http://localhost:$PORT/"
+
+# Test: Canonical health routes (PART 13)
+run_test "Health check (/server/healthz)" \
+    "curl -f -s http://localhost:$PORT/server/healthz"
+
+run_test "Health check (/api/v1/server/healthz)" \
+    "curl -f -s http://localhost:$PORT/api/v1/server/healthz"
+
 # Test: Rate limiting headers
 run_test "Rate limit headers present" \
     "curl -s -I http://localhost:$PORT/api/v1/healthz | grep -q -i 'x-ratelimit'"
@@ -169,7 +182,7 @@ echo
 if [ $TESTS_FAILED -gt 0 ]; then
     echo "Container logs:"
     echo "========================================"
-    docker-compose -f docker-compose.test.yml logs
+    docker compose -f docker-compose.test.yml logs
     echo "========================================"
     exit 1
 fi

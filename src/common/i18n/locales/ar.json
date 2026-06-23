@@ -71,7 +71,14 @@
     "result_raw": "بيانات WHOIS الخام",
     "new_lookup": "← بحث جديد",
     "no_result": "لم يتم العثور على نتيجة لـ \"{query}\".",
-    "error_prefix": "فشل بحث WHOIS: "
+    "error_prefix": "فشل بحث WHOIS: ",
+    "error_empty": "أدخل اسم نطاق أو عنوان IP أو رقم ASN.",
+    "error_failed": "فشل بحث WHOIS — يرجى المحاولة مرة أخرى.",
+    "error_network": "خطأ في الشبكة:"
+  },
+  "pwa": {
+    "update_available": "تحديث متوفر",
+    "update_action": "تحديث"
   },
   "errors": {
     "bad_request": "طلب غير صالح",

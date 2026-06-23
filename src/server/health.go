@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -16,9 +15,12 @@ type HealthResponse struct {
 	Project ProjectInfo `json:"project"`
 
 	// 2. Overall status
-	Status         string   `json:"status"`                    // "healthy", "degraded", "unhealthy"
-	PendingRestart bool     `json:"pending_restart,omitempty"` // true if a restart is needed to apply a config change
-	RestartReason  []string `json:"restart_reason,omitempty"`  // settings that changed and require restart
+	// Status is one of "healthy", "degraded", or "unhealthy".
+	Status string `json:"status"`
+	// PendingRestart is true when a restart is needed to apply a config change.
+	PendingRestart bool `json:"pending_restart,omitempty"`
+	// RestartReason lists settings that changed and require a restart.
+	RestartReason []string `json:"restart_reason,omitempty"`
 
 	// 3. Version & build info
 	Version   string    `json:"version"`
@@ -102,21 +104,13 @@ type StatsInfo struct {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response := s.buildHealthResponse()
 
-	// Content negotiation handled by middleware (see AI.md PART 14)
-	// Determine format from content detection (already done in middleware)
-	format := r.Context().Value("content_type")
-	if format == nil {
-		format = "json" // default
-	}
-
-	switch format {
-	case "text":
+	// Content negotiation per AI.md PART 14 — text/plain clients (curl, wget)
+	// get the numbered text format; everyone else gets JSON.
+	if DetectClientType(r) == ClientTypeText {
 		s.renderHealthText(w, response)
-	case "json":
-		s.renderHealthJSON(w, response)
-	default:
-		s.renderHealthJSON(w, response)
+		return
 	}
+	s.renderHealthJSON(w, response)
 }
 
 // buildHealthResponse builds the health response data
@@ -188,9 +182,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 
 // renderHealthJSON renders health response as JSON
 func (s *Server) renderHealthJSON(w http.ResponseWriter, response HealthResponse) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // renderHealthText renders health response as plain text
@@ -238,7 +230,7 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "checks.scheduler: %s\n", response.Checks.Scheduler)
 	fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 8. Stats\n")
+	fmt.Fprintf(w, "# 7. Stats\n")
 	fmt.Fprintf(w, "stats.requests_total: %d\n", response.Stats.RequestsTotal)
 	fmt.Fprintf(w, "stats.requests_24h: %d\n", response.Stats.Requests24h)
 	fmt.Fprintf(w, "stats.active_connections: %d\n", response.Stats.ActiveConns)

@@ -21,25 +21,19 @@ services:
     tmpfs:
       - /config
       - /data
-      - /logs
-    
-    # Environment variables
+
+    # Development mode + debug (the binary reads flags, not MODE/DEBUG env)
+    command: ["--mode", "development", "--debug"]
+
+    # Environment variables (the binary reads DATABASE_DIR/DATABASE_URL/DATABASE_DRIVER)
     environment:
       TZ: America/New_York
-      PORT: 80
-      MODE: development
-      DEBUG: 1
-      
-      # Use in-memory database for testing
-      DATABASE_TYPE: sqlite
-      DATABASE_PATH: :memory:
-      
-      # Use in-memory cache
-      CACHE_TYPE: memory
-    
+      # Ephemeral SQLite database under the tmpfs-backed /data
+      DATABASE_DIR: /data/db
+
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/server/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3

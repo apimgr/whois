@@ -17,7 +17,7 @@ import (
 // 1. Rename current binary to .old
 // 2. Move new binary to current path
 // 3. Schedule .old for deletion on reboot (or delete after restart)
-// Per AI.md PART 23 specification
+// Per AI.md PART 22 specification
 func replaceBinary(currentPath, newBinaryPath string) error {
 	oldPath := currentPath + ".old"
 
@@ -49,7 +49,7 @@ func replaceBinary(currentPath, newBinaryPath string) error {
 
 // restartSelf starts a new instance and exits (Windows)
 // Windows doesn't support exec() replacement, so we spawn new process and exit
-// Per AI.md PART 23 specification
+// Per AI.md PART 22 specification
 func restartSelf() error {
 	exe, err := os.Executable()
 	if err != nil {

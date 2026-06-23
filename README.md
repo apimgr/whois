@@ -1,6 +1,6 @@
 # caswhois
 
-[![Build](https://github.com/casapps/caswhois/actions/workflows/build.yml/badge.svg)](https://github.com/casapps/caswhois/actions/workflows/build.yml)
+[![Security](https://github.com/casapps/caswhois/actions/workflows/security.yml/badge.svg)](https://github.com/casapps/caswhois/actions/workflows/security.yml)
 [![Release](https://img.shields.io/github/v/release/casapps/caswhois)](https://github.com/casapps/caswhois/releases)
 [![License](https://img.shields.io/github/license/casapps/caswhois)](LICENSE.md)
 
@@ -10,16 +10,16 @@ A comprehensive WHOIS lookup service that provides detailed information about do
 
 ## About
 
-caswhois is a production-ready WHOIS service with enterprise features:
+caswhois is a production-ready WHOIS service shipped as a single static binary:
 
 - **Multi-Source Queries**: Domain names, IPv4, IPv6, and ASN lookups
 - **Intelligent Caching**: Reduces upstream load with configurable TTLs
+- **Persistent Dataset**: Every successful lookup is stored permanently in SQLite
 - **Multiple Output Formats**: JSON, XML, plain text, and HTML
-- **Built-in Admin Panel**: Complete web-based configuration
+- **File-Only Configuration**: All settings live in `server.yml` (no admin web UI)
 - **Rate Limiting**: Protect against abuse while maintaining usability
 - **GeoIP Integration**: Geographic information for IP addresses
 - **Tor Hidden Service**: Auto-enabled when Tor is installed
-- **Cluster Ready**: PostgreSQL + Valkey/Redis for horizontal scaling
 - **Monitoring**: Prometheus metrics built-in
 
 **Target Users:**
@@ -30,6 +30,14 @@ caswhois is a production-ready WHOIS service with enterprise features:
 
 ---
 
+## Official Site
+
+- Website: https://caswhois.casapps.dev
+- Documentation: https://caswhois.readthedocs.io
+- Source: https://github.com/casapps/caswhois
+
+---
+
 ## Features
 
 - ✅ **Domain WHOIS**: Registration details, nameservers, ownership information
@@ -37,14 +45,15 @@ caswhois is a production-ready WHOIS service with enterprise features:
 - ✅ **ASN WHOIS**: Autonomous System information, routing details
 - ✅ **Auto-Detection**: Automatically detects query type
 - ✅ **Smart Caching**: 24-hour domain cache, 7-day IP/ASN cache
-- ✅ **Rate Limiting**: 60 queries/minute per IP (configurable)
+- ✅ **Persistent Records**: Every successful lookup stored permanently in SQLite
+- ✅ **Owner Search**: Registrant/owner reverse search over the local dataset
+- ✅ **Rate Limiting**: Configurable per-IP read/write limits
 - ✅ **Multiple Formats**: JSON, XML, text, HTML output
-- ✅ **Bulk Queries**: Batch lookups for authenticated users
-- ✅ **Admin Panel**: Full web-based configuration at `/admin`
-- ✅ **Metrics**: Prometheus endpoint at `/metrics`
-- ✅ **Health Checks**: `/healthz` for monitoring
+- ✅ **Bulk Queries**: Batch lookups for server-token holders
+- ✅ **File-Only Config**: All settings in `server.yml` (no admin web UI)
+- ✅ **Metrics**: Prometheus endpoint for monitoring
+- ✅ **Health Checks**: Health endpoint for monitoring
 - ✅ **SSL/TLS**: Let's Encrypt auto-renewal
-- ✅ **Clustering**: Multi-node deployment support
 - ✅ **Backup/Restore**: Built-in maintenance commands
 - ✅ **Auto-Update**: Self-updating from releases
 
@@ -173,51 +182,34 @@ caswhois-cli --gui
 
 Configuration file: `/etc/casapps/caswhois/server.yml`
 
+All settings live in `server.yml`. There is no admin web UI; the operator edits the
+file and the server hot-reloads safe changes (a restart is required only for listen
+address or port changes).
+
 **Key Settings:**
 ```yaml
 server:
-  # Listen address and port
-  address: "127.0.0.1"
-  port: 64580
-  
-  # Application mode
+  address: ":64580"
   mode: production
-
-# Rate limiting
-rate_limit:
-  enabled: true
-  requests_per_minute: 60
-  burst: 10
-
-# Caching
-cache:
-  enabled: true
-  type: memory  # or: redis, valkey
-  ttl:
-    domain: 86400    # 24 hours
-    ip: 604800       # 7 days
-    asn: 604800      # 7 days
-    failure: 300     # 5 minutes
-
-# Database
-database:
-  type: sqlite  # or: postgres
-  path: /var/lib/casapps/caswhois/db/
-
-# Cluster mode (optional)
-cluster:
-  enabled: false
-  # nodes:
-  #   - https://node1.example.com
-  #   - https://node2.example.com
+  rate_limit:
+    read: 120
+    write: 10
+    health: 60
+    burst: 10
+  database:
+    driver: sqlite
+    path: /var/lib/casapps/caswhois/db/caswhois.db
+  cache:
+    type: memory
+    ttl:
+      domain: 86400
+      ip: 604800
+      asn: 604800
+      failure: 300
 ```
 
-**Admin Panel:** Access at `http://localhost:64580/admin`
-- Configure all settings via web interface
-- Manage admin accounts
-- View metrics and statistics
-- Schedule backups
-- Update WHOIS server list
+Caching backends: `memory` (default), `redis`, or `valkey`. Database drivers: `sqlite`
+(default), `libsql`, or `turso`. PostgreSQL and MySQL are not supported.
 
 ---
 
@@ -389,12 +381,11 @@ caswhois/
 │   ├── config/              # Configuration
 │   ├── db/                  # Database layer
 │   ├── cache/               # Cache implementation
-│   ├── admin/               # Admin panel
 │   └── client/              # Client binary
 ├── docker/                   # Docker files
 │   ├── Dockerfile
 │   ├── docker-compose.yml
-│   └── file_system/         # Container overlay
+│   └── rootfs/              # Container overlay
 ├── tests/                    # Test scripts
 ├── docs/                     # Documentation
 └── Makefile                 # Build targets

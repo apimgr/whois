@@ -1,5 +1,5 @@
 // Package scheduler provides built-in task scheduling
-// See AI.md PART 19: SCHEDULER
+// See AI.md PART 18: SCHEDULER
 package scheduler
 
 import (

@@ -73,7 +73,7 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&daemon, "daemon", false, "Run as daemon (detach from terminal)")
 	flag.BoolVar(&noColor, "no-color", false, "Disable color output")
-	flag.StringVar(&colorFlag, "color", "auto", "Color output (always|never|auto)")
+	flag.StringVar(&colorFlag, "color", "auto", "Color output (auto|yes|no)")
 	flag.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
 	flag.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
 	flag.StringVar(&serviceCmd, "service", "", "Service management (install|uninstall|disable|start|stop|restart|reload|status|help)")
@@ -82,9 +82,9 @@ func main() {
 
 	flag.Parse()
 
-	// --no-color flag takes precedence; map it to the colorFlag "never" value.
+	// --no-color flag takes precedence; map it to the colorFlag "no" value.
 	if noColor {
-		colorFlag = "never"
+		colorFlag = "no"
 	}
 
 	// Apply NO_COLOR standard (PART 8): non-empty NO_COLOR env var disables colors and emojis.
@@ -224,9 +224,9 @@ func main() {
 // 1. CLI --color flag  2. NO_COLOR env var  3. Auto-detect (TTY)
 func colorEnabled(flag string) bool {
 	switch flag {
-	case "always":
+	case "yes":
 		return true
-	case "never":
+	case "no":
 		return false
 	}
 	// auto: respect NO_COLOR, then TTY
@@ -338,7 +338,7 @@ func printHelp(binaryName string) {
 	fmt.Printf("      --baseurl PATH                URL path prefix (default: /)\n")
 	fmt.Printf("      --daemon                      Run as daemon (detach from terminal)\n")
 	fmt.Printf("      --debug                       Enable debug mode\n")
-	fmt.Printf("      --color {always|never|auto}   Color output (default: auto)\n")
+	fmt.Printf("      --color {auto|yes|no}         Color output (default: auto)\n")
 	fmt.Printf("      --lang CODE                   Language for output (default: auto)\n\n")
 	fmt.Printf("Service Management:\n")
 	fmt.Printf("      --service CMD                 Service management (install|uninstall|start|stop|restart|reload|status|help)\n\n")

@@ -12,7 +12,7 @@ import (
 // replaceBinary replaces the running binary (Unix)
 // On Unix, we can replace a running binary - the old binary stays in memory
 // until the process exits, then the new one takes over on next start
-// Per AI.md PART 23 specification
+// Per AI.md PART 22 specification
 func replaceBinary(currentPath, newBinaryPath string) error {
 	// Get current binary permissions
 	info, err := os.Stat(currentPath)
@@ -46,7 +46,7 @@ func replaceBinary(currentPath, newBinaryPath string) error {
 
 // restartSelf re-executes the current process (Unix)
 // syscall.Exec replaces the current process
-// Per AI.md PART 23 specification
+// Per AI.md PART 22 specification
 func restartSelf() error {
 	exe, err := os.Executable()
 	if err != nil {

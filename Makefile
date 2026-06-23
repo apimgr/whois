@@ -155,10 +155,11 @@ release: build
 	@echo "Release complete: $(VERSION)"
 
 # =============================================================================
-# DOCKER - Build and push container to registry (set REGISTRY env var)
+# DOCKER - Build the production container image locally (current arch)
 # =============================================================================
-# Uses multi-stage Dockerfile - Go compilation happens inside Docker
-# No pre-built binaries needed
+# Uses multi-stage Dockerfile - Go compilation happens inside Docker.
+# Local build only; multi-arch push to the registry is handled by release.yml
+# (AI.md PART 25 / PART 27). Set REGISTRY to override the image tag.
 docker:
 	@echo "Building Docker image $(VERSION)..."
 
@@ -169,19 +170,19 @@ docker:
 	@docker buildx create --name $(INTERNAL_NAME)-builder --use 2>/dev/null || \
 		docker buildx use $(INTERNAL_NAME)-builder
 
-	# Build and push multi-arch (multi-stage Dockerfile handles Go compilation)
+	# Build for the local arch and load into the local Docker image store
+	# (multi-stage Dockerfile handles Go compilation)
 	@docker buildx build \
 		-f docker/Dockerfile \
-		--platform linux/amd64,linux/arm64 \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
 		--build-arg COMMIT_ID="$(COMMIT_ID)" \
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
-		--push \
+		--load \
 		.
 
-	@echo "Docker push complete: $(REGISTRY):$(VERSION)"
+	@echo "Docker build complete: $(REGISTRY):$(VERSION)"
 
 # =============================================================================
 # TEST - Run all tests with coverage enforcement (via Docker)

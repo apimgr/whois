@@ -1,5 +1,5 @@
 // Package scheduler provides built-in task scheduling
-// See AI.md PART 19: SCHEDULER
+// See AI.md PART 18: SCHEDULER
 package scheduler
 
 import (
@@ -82,7 +82,7 @@ func New(db *sql.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, 
 }
 
 // Register adds a task to the scheduler
-// See AI.md PART 19 for built-in required tasks
+// See AI.md PART 18 for built-in required tasks
 func (s *Scheduler) Register(task *Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -168,7 +168,7 @@ func (s *Scheduler) saveTaskState(task *Task) error {
 
 // Start begins the scheduler loop
 // Checks for missed tasks and starts continuous scheduling
-// See AI.md PART 19: Startup Behavior
+// See AI.md PART 18: Startup Behavior
 func (s *Scheduler) Start() error {
 	// Check for missed tasks within catch-up window
 	if err := s.catchUpMissedTasks(); err != nil {
@@ -288,7 +288,7 @@ func (s *Scheduler) calculateNextRun(task *Task) time.Time {
 
 // Stop gracefully stops the scheduler
 // Waits for running tasks to complete (max 30 seconds)
-// See AI.md PART 19: Shutdown Behavior
+// See AI.md PART 18: Shutdown Behavior
 func (s *Scheduler) Stop() error {
 	log.Println("INFO: Stopping scheduler...")
 

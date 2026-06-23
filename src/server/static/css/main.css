@@ -398,3 +398,16 @@ td code{font-size:0.875em}
   :root:not([data-theme]) .icon-moon{display:inline}
   :root:not([data-theme]) .icon-sun{display:none}
 }
+
+/* ── PWA update banner ───────────────────────────────────────────── */
+.sw-update-banner{
+  position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);
+  background:var(--accent);color:var(--fg-on-accent);
+  padding:0.75rem 1.5rem;border-radius:0.5rem;
+  display:flex;gap:1rem;align-items:center;z-index:9999;
+  box-shadow:0 2px 8px rgba(0,0,0,0.25);
+}
+.sw-update-btn{
+  background:var(--bg-overlay);border:none;color:var(--fg-on-accent);
+  padding:0.25rem 0.75rem;border-radius:0.25rem;cursor:pointer;
+}

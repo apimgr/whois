@@ -1,5 +1,5 @@
 // Package metrics provides Prometheus-compatible metrics
-// See AI.md PART 21: METRICS
+// See AI.md PART 20: METRICS
 package metrics
 
 import (
@@ -68,7 +68,7 @@ type MetricsConfig struct {
 }
 
 // New creates a new metrics collector
-// All metrics follow AI.md PART 21 naming conventions
+// All metrics follow AI.md PART 20 naming conventions
 func New(namespace string, cfg MetricsConfig) *Collector {
 	if !cfg.Enabled {
 		return nil
@@ -383,7 +383,7 @@ var (
 
 // NormalizePath normalizes URL path for metrics by replacing high-cardinality
 // segments (UUIDs, IP addresses, domain names, ASNs, query values) with named
-// placeholders. This prevents metrics label explosion (AI.md PART 21).
+// placeholders. This prevents metrics label explosion (AI.md PART 20).
 func NormalizePath(path string) string {
 	// Replace WHOIS sub-resource paths before the generic whois rule to preserve ordering.
 	if reWhoisIP.MatchString(path) {

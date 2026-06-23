@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -83,13 +82,10 @@ func RespondWithFormat(w http.ResponseWriter, r *http.Request, data interface{})
 	}
 }
 
-// respondJSON sends a JSON response
+// respondJSON sends a JSON response with 2-space indentation and a single
+// trailing newline (AI.md PART 14).
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
-	}
+	writeJSON(w, status, data)
 }
 
 // respondText sends a plain text response
@@ -135,26 +131,19 @@ func respondHTML(w http.ResponseWriter, r *http.Request, status int, data interf
 	}
 }
 
-// ErrorResponse represents an error response
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message,omitempty"`
-	Code    int    `json:"code"`
-}
-
-// RespondError responds with an error in the appropriate format
+// RespondError responds with an error in the appropriate format.
+// The JSON branch emits the canonical envelope (AI.md PART 14):
+// {"ok":false,"error":"CODE","message":"..."}.
 func RespondError(w http.ResponseWriter, r *http.Request, status int, message string) {
 	clientType := DetectClientType(r)
 
-	errResp := ErrorResponse{
-		Error:   http.StatusText(status),
-		Message: message,
-		Code:    status,
-	}
-
 	switch clientType {
 	case ClientTypeJSON:
-		respondJSON(w, status, errResp)
+		respondJSON(w, status, APIResponse{
+			OK:      false,
+			Error:   statusToErrorCode(status),
+			Message: message,
+		})
 	case ClientTypeText:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(status)

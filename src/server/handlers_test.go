@@ -16,14 +16,6 @@ import (
 	"github.com/casapps/caswhois/src/scheduler"
 )
 
-// addContextValue adds a plain-string key/value pair to a context.
-// Used to inject "content_type" into requests for handler tests that exercise
-// format-selection branches (e.g., the text/plain path in handleHealth).
-// The handler itself uses a bare string key so we must match it here.
-func addContextValue(ctx context.Context, key, val string) context.Context {
-	return context.WithValue(ctx, key, val) //nolint:staticcheck
-}
-
 // newTestServer builds the minimal *Server needed for handler unit tests.
 // It wires up a real in-memory SQLite database and scheduler so all health
 // checks return accurate status rather than hard-coded strings.
@@ -141,10 +133,8 @@ func TestHandleHealthTextFormat(t *testing.T) {
 	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
-	// Inject context key "content_type" = "text" to trigger the text branch.
-	// The handler reads from r.Context().Value("content_type").
-	// Since httptest.NewRequest creates a background context, we set the value directly.
-	req = req.WithContext(addContextValue(req.Context(), "content_type", "text"))
+	// Accept: text/plain triggers the text branch via content negotiation (AI.md PART 14).
+	req.Header.Set("Accept", "text/plain")
 
 	rr := httptest.NewRecorder()
 	s.handleHealth(rr, req)

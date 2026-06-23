@@ -71,7 +71,14 @@
     "result_raw": "Raw WHOIS data",
     "new_lookup": "← New lookup",
     "no_result": "No result returned for \"{query}\".",
-    "error_prefix": "WHOIS lookup failed: "
+    "error_prefix": "WHOIS lookup failed: ",
+    "error_empty": "Enter a domain, IP address, or ASN number.",
+    "error_failed": "WHOIS lookup failed — please try again.",
+    "error_network": "Network error:"
+  },
+  "pwa": {
+    "update_available": "Update available",
+    "update_action": "Update"
   },
   "errors": {
     "bad_request": "Bad request",

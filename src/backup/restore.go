@@ -26,7 +26,7 @@ type RestoreOptions struct {
 	Force      bool // Skip confirmation prompts
 }
 
-// Restore restores from backup per AI.md PART 22 specification
+// Restore restores from backup per AI.md PART 21 specification
 func Restore(opts *RestoreOptions) error {
 	// Verify backup file exists
 	if !fileExists(opts.BackupFile) {
@@ -89,7 +89,7 @@ func Restore(opts *RestoreOptions) error {
 }
 
 // decryptBackup decrypts backup data using AES-256-GCM with Argon2id key derivation
-// Per AI.md PART 22 specification
+// Per AI.md PART 21 specification
 func decryptBackup(data []byte, password string) ([]byte, error) {
 	// Extract salt (first 32 bytes)
 	if len(data) < 32 {
@@ -131,29 +131,39 @@ func decryptBackup(data []byte, password string) ([]byte, error) {
 	return plaintext, nil
 }
 
-// verifyBackupIntegrity verifies backup checksum
+// verifyBackupIntegrity verifies the backup archive against the checksum stored
+// in its manifest, matching how Create computes it (content-only archive, no
+// manifest.json). Returns an error on any mismatch or unreadable manifest.
 func verifyBackupIntegrity(data []byte) error {
-	// Calculate checksum
-	checksum := sha256.Sum256(data)
+	// Extract the manifest to obtain the expected checksum.
+	tempDir, err := os.MkdirTemp("", "caswhois-verify-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	if err := extractTarGz(data, tempDir); err != nil {
+		return fmt.Errorf("extract archive: %w", err)
+	}
+
+	manifest, err := loadManifest(tempDir)
+	if err != nil {
+		return fmt.Errorf("load manifest: %w", err)
+	}
+
+	// Reconstruct the content-only archive (excluding manifest.json) and hash it,
+	// matching how Create derives the stored checksum.
+	contentBuf, err := rebuildContentArchive(data)
+	if err != nil {
+		return fmt.Errorf("rebuild content archive for checksum: %w", err)
+	}
+	checksum := sha256.Sum256(contentBuf)
 	calculatedChecksum := "sha256:" + hex.EncodeToString(checksum[:])
 
-	// Extract and parse manifest to get expected checksum
-	// (This is a simplified check - full implementation would extract manifest first)
-	// For now, just verify the data is valid gzip/tar
-	gr, err := gzip.NewReader(strings.NewReader(string(data)))
-	if err != nil {
-		return fmt.Errorf("invalid gzip format: %w", err)
-	}
-	defer gr.Close()
-
-	tr := tar.NewReader(gr)
-	_, err = tr.Next()
-	if err != nil {
-		return fmt.Errorf("invalid tar format: %w", err)
+	if manifest.Checksum != calculatedChecksum {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", manifest.Checksum, calculatedChecksum)
 	}
 
-	// Checksum verified (simplified)
-	_ = calculatedChecksum
 	return nil
 }
 

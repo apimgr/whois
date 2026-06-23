@@ -363,6 +363,12 @@ type ServerConfig struct {
 	FQDN      string `yaml:"fqdn"`
 	Daemonize bool   `yaml:"daemonize"`
 	PIDFile   bool   `yaml:"pidfile"`
+	// User and Group are the unprivileged service account the server drops to
+	// after binding a privileged port when started as root (AI.md PART 23).
+	// Defaults to the frozen internal name "caswhois". Ignored on Windows
+	// (which uses a Virtual Service Account) and when not running as root.
+	User  string `yaml:"user"`
+	Group string `yaml:"group"`
 	// BaseURL is the URL path prefix for all routes (AI.md PART 12 — baseurl).
 	BaseURL string `yaml:"baseurl"`
 
@@ -411,7 +417,7 @@ type ServerConfig struct {
 	// Compliance settings (AI.md PART 21 — server.compliance.*)
 	Compliance ComplianceConfig `yaml:"compliance"`
 
-	// Update settings (PART 23)
+	// Update settings (AI.md PART 22)
 	UpdateChannel string `yaml:"update_channel"` // stable, beta, daily
 
 	// Tor hidden service settings (AI.md PART 31 — server.tor.*)
@@ -451,6 +457,8 @@ func Default() *ServerConfig {
 		FQDN:                "",
 		Daemonize:           false,
 		PIDFile:             true,
+		User:                "caswhois",
+		Group:               "caswhois",
 		ConfigDir:           "", // Will be determined by OS
 		DataDir:             "", // Will be determined by OS
 		LogDir:              "", // Will be determined by OS

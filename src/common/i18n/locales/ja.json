@@ -71,7 +71,14 @@
     "result_raw": "生の WHOIS データ",
     "new_lookup": "← 新しい検索",
     "no_result": "「{query}」の結果が見つかりませんでした。",
-    "error_prefix": "WHOIS 検索に失敗しました: "
+    "error_prefix": "WHOIS 検索に失敗しました: ",
+    "error_empty": "ドメイン、IPアドレス、または ASN 番号を入力してください。",
+    "error_failed": "WHOIS 検索に失敗しました — もう一度お試しください。",
+    "error_network": "ネットワークエラー:"
+  },
+  "pwa": {
+    "update_available": "更新があります",
+    "update_action": "更新"
   },
   "errors": {
     "bad_request": "不正なリクエスト",

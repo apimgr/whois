@@ -71,7 +71,14 @@
     "result_raw": "Datos WHOIS sin procesar",
     "new_lookup": "← Nueva consulta",
     "no_result": "No se encontró resultado para \"{query}\".",
-    "error_prefix": "Error en la consulta WHOIS: "
+    "error_prefix": "Error en la consulta WHOIS: ",
+    "error_empty": "Introduce un dominio, dirección IP o número ASN.",
+    "error_failed": "La consulta WHOIS falló — inténtalo de nuevo.",
+    "error_network": "Error de red:"
+  },
+  "pwa": {
+    "update_available": "Actualización disponible",
+    "update_action": "Actualizar"
   },
   "errors": {
     "bad_request": "Solicitud incorrecta",

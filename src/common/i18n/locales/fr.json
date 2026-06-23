@@ -71,7 +71,14 @@
     "result_raw": "Données WHOIS brutes",
     "new_lookup": "← Nouvelle recherche",
     "no_result": "Aucun résultat trouvé pour « {query} ».",
-    "error_prefix": "Échec de la recherche WHOIS : "
+    "error_prefix": "Échec de la recherche WHOIS : ",
+    "error_empty": "Saisissez un domaine, une adresse IP ou un numéro ASN.",
+    "error_failed": "La recherche WHOIS a échoué — veuillez réessayer.",
+    "error_network": "Erreur réseau :"
+  },
+  "pwa": {
+    "update_available": "Mise à jour disponible",
+    "update_action": "Mettre à jour"
   },
   "errors": {
     "bad_request": "Requête incorrecte",

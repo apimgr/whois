@@ -18,28 +18,19 @@ services:
     ports:
       - "64580:80"
     
-    # Volumes for persistent data + source code mounting
+    # Volumes for persistent data (logs live under /data/log per AI.md PART 4)
     volumes:
-      - ./rootfs/config:/config
-      - ./rootfs/data:/data
-      - ./rootfs/logs:/logs
-      # Mount source code for hot reload (if implementing watch mode)
-      # - ../src:/app/src:ro
-    
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
+
+    # Development mode + debug logging (the binary reads flags, not MODE/DEBUG env)
+    command: ["--mode", "development", "--debug"]
+
     # Environment variables
     environment:
       # Timezone
       TZ: America/New_York
-      
-      # Internal port
-      PORT: 80
-      
-      # Development mode
-      MODE: development
-      
-      # Debug logging
-      DEBUG: 1
-      
+
       # Optional: PostgreSQL
       # DATABASE_TYPE: postgres
       # DATABASE_HOST: postgres
@@ -56,7 +47,7 @@ services:
     
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/server/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -31,7 +31,7 @@ type TorConfig struct {
 
 	// Security settings
 	SafeLogging               bool `yaml:"safe_logging" json:"safe_logging"`
-	MaxStreamsPerCircuit       int  `yaml:"max_streams_per_circuit" json:"max_streams_per_circuit"`
+	MaxStreamsPerCircuit      int  `yaml:"max_streams_per_circuit" json:"max_streams_per_circuit"`
 	CloseCircuitOnStreamLimit bool `yaml:"close_circuit_on_stream_limit" json:"close_circuit_on_stream_limit"`
 
 	// Bandwidth settings
@@ -53,7 +53,7 @@ func DefaultTorConfig() TorConfig {
 		CircuitTimeout:            60,
 		BootstrapTimeout:          180,
 		SafeLogging:               true,
-		MaxStreamsPerCircuit:       100,
+		MaxStreamsPerCircuit:      100,
 		CloseCircuitOnStreamLimit: true,
 		BandwidthRate:             "1 MB",
 		BandwidthBurst:            "2 MB",

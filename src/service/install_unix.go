@@ -7,13 +7,68 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"strings"
 )
+
+// ensureServiceUser creates the dedicated system group and user the server
+// drops to after binding a privileged port (AI.md PART 23). The account has no
+// login shell and no home directory. It is idempotent: an existing account is
+// left untouched. Tool selection adapts to the distro (useradd/groupadd on
+// glibc systems, adduser/addgroup on BusyBox/Alpine).
+func (sm *ServiceManager) ensureServiceUser() error {
+	if _, err := user.Lookup(sm.Name); err == nil {
+		return nil
+	}
+
+	// Create the group first so the user can be placed in it.
+	if _, err := user.LookupGroup(sm.Name); err != nil {
+		if groupadd, lookErr := exec.LookPath("groupadd"); lookErr == nil {
+			if out, runErr := exec.Command(groupadd, "--system", sm.Name).CombinedOutput(); runErr != nil {
+				return fmt.Errorf("groupadd %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+			}
+		} else if addgroup, lookErr := exec.LookPath("addgroup"); lookErr == nil {
+			if out, runErr := exec.Command(addgroup, "-S", sm.Name).CombinedOutput(); runErr != nil {
+				return fmt.Errorf("addgroup %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+			}
+		} else {
+			return fmt.Errorf("no supported group creation tool found (groupadd/addgroup)")
+		}
+	}
+
+	// Create the system user as a member of the group with no shell/home.
+	if useradd, lookErr := exec.LookPath("useradd"); lookErr == nil {
+		args := []string{"--system", "--gid", sm.Name, "--no-create-home", "--shell", "/sbin/nologin", sm.Name}
+		if out, runErr := exec.Command(useradd, args...).CombinedOutput(); runErr != nil {
+			return fmt.Errorf("useradd %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	if adduser, lookErr := exec.LookPath("adduser"); lookErr == nil {
+		args := []string{"-S", "-D", "-H", "-s", "/sbin/nologin", "-G", sm.Name, sm.Name}
+		if out, runErr := exec.Command(adduser, args...).CombinedOutput(); runErr != nil {
+			return fmt.Errorf("adduser %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+
+	return fmt.Errorf("no supported user creation tool found (useradd/adduser)")
+}
 
 // installSystemService installs service as system service (requires root)
 func (sm *ServiceManager) installSystemService() error {
 	// Detect service manager
 	manager := DetectServiceManager()
+
+	// Create the dedicated unprivileged service account the binary drops to
+	// after binding a privileged port (AI.md PART 23). launchd manages its own
+	// accounts, so this only applies to the Linux init systems.
+	switch manager {
+	case "systemd", "openrc", "runit", "rcd":
+		if err := sm.ensureServiceUser(); err != nil {
+			return fmt.Errorf("creating service account: %w", err)
+		}
+	}
 
 	switch manager {
 	case "systemd":

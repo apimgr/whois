@@ -71,7 +71,14 @@
     "result_raw": "原始 WHOIS 数据",
     "new_lookup": "← 新查询",
     "no_result": "未找到 \"{query}\" 的结果。",
-    "error_prefix": "WHOIS 查询失败: "
+    "error_prefix": "WHOIS 查询失败: ",
+    "error_empty": "请输入域名、IP 地址或 ASN 编号。",
+    "error_failed": "WHOIS 查询失败 — 请重试。",
+    "error_network": "网络错误："
+  },
+  "pwa": {
+    "update_available": "有可用更新",
+    "update_action": "更新"
   },
   "errors": {
     "bad_request": "错误请求",
