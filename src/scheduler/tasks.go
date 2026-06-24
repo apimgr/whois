@@ -199,7 +199,7 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 func (s *Scheduler) taskTokenCleanup(ctx context.Context) error {
 	// Remove revoked tokens soft-deleted more than 30 days ago
 	result, err := s.db.ExecContext(ctx,
-		`DELETE FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at < strftime('%s', 'now', '-30 days')`)
+		`DELETE FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at < datetime('now', '-30 days')`)
 	if err != nil {
 		return fmt.Errorf("failed to delete revoked tokens: %w", err)
 	}

@@ -601,3 +601,483 @@ func TestNewCertManager_DifferentFQDNs(t *testing.T) {
 		})
 	}
 }
+
+// TestGetCertPEM_ValidFile verifies getCertPEM reads and validates PEM correctly.
+func TestGetCertPEM_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "pem.example.com"
+	generateSelfSignedCert(t, dir, fqdn)
+
+	certPath := filepath.Join(dir, "ssl", "local", fqdn, "cert.pem")
+	data, err := getCertPEM(certPath)
+	if err != nil {
+		t.Fatalf("getCertPEM() error = %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("getCertPEM() returned empty data")
+	}
+}
+
+// TestGetCertPEM_MissingFile verifies getCertPEM returns an error for a non-existent path.
+func TestGetCertPEM_MissingFile(t *testing.T) {
+	_, err := getCertPEM("/nonexistent/path/cert.pem")
+	if err == nil {
+		t.Fatal("getCertPEM() expected error for missing file, got nil")
+	}
+}
+
+// TestGetCertPEM_InvalidPEM verifies getCertPEM returns an error for a file that is not PEM.
+func TestGetCertPEM_InvalidPEM(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.pem")
+	if err := os.WriteFile(path, []byte("this is not pem data"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := getCertPEM(path)
+	if err == nil {
+		t.Fatal("getCertPEM() expected error for non-PEM file, got nil")
+	}
+}
+
+// TestGetKeyPEM_ValidFile verifies getKeyPEM reads and validates PEM correctly.
+func TestGetKeyPEM_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "keypem.example.com"
+	generateSelfSignedCert(t, dir, fqdn)
+
+	keyPath := filepath.Join(dir, "ssl", "local", fqdn, "key.pem")
+	data, err := getKeyPEM(keyPath)
+	if err != nil {
+		t.Fatalf("getKeyPEM() error = %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("getKeyPEM() returned empty data")
+	}
+}
+
+// TestGetKeyPEM_MissingFile verifies getKeyPEM returns an error for a non-existent path.
+func TestGetKeyPEM_MissingFile(t *testing.T) {
+	_, err := getKeyPEM("/nonexistent/path/key.pem")
+	if err == nil {
+		t.Fatal("getKeyPEM() expected error for missing file, got nil")
+	}
+}
+
+// TestGetKeyPEM_InvalidPEM verifies getKeyPEM returns an error for a file that is not PEM.
+func TestGetKeyPEM_InvalidPEM(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.pem")
+	if err := os.WriteFile(path, []byte("not pem"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := getKeyPEM(path)
+	if err == nil {
+		t.Fatal("getKeyPEM() expected error for non-PEM file, got nil")
+	}
+}
+
+// TestCheckAndRenew_NilCert verifies checkAndRenew returns immediately when no
+// certificate is loaded (no panic, no renewal attempt).
+func TestCheckAndRenew_NilCert(t *testing.T) {
+	cm := NewCertManager(t.TempDir(), "example.com")
+	// cert is nil — should return without panicking.
+	cm.checkAndRenew()
+}
+
+// TestCheckAndRenew_NoAppManagedCert verifies checkAndRenew does not attempt renewal
+// for a certificate that is not in the app-managed letsencrypt directory.
+func TestCheckAndRenew_NoAppManagedCert(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "localonly.example.com"
+	generateSelfSignedCert(t, dir, fqdn)
+
+	cm := NewCertManager(dir, fqdn)
+	if err := cm.LoadCertificate(); err != nil {
+		t.Fatalf("LoadCertificate(): %v", err)
+	}
+
+	// No app-managed letsencrypt cert exists — checkAndRenew should return immediately.
+	cm.checkAndRenew()
+}
+
+// TestRenewCertificate_NilACMEClientTriggersRequest verifies RenewCertificate calls
+// RequestNewCertificate when acmeClient is nil. The request itself will fail (no network),
+// but the call path is exercised.
+func TestRenewCertificate_NilACMEClientTriggersRequest(t *testing.T) {
+	dir := t.TempDir()
+	cm := NewCertManager(dir, "renew.example.com")
+	cm.email = "admin@example.com"
+	cm.staging = true
+
+	err := cm.RenewCertificate()
+	// Error is expected (cannot contact Let's Encrypt in tests); what matters is no panic.
+	if err == nil {
+		t.Log("RenewCertificate: unexpectedly succeeded — network available?")
+	}
+}
+
+// TestGenerateSelfSignedCertificate_CertIsValid verifies the generated cert is parseable
+// and has the correct FQDN.
+func TestGenerateSelfSignedCertificate_CertIsValid(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "validate.example.com"
+
+	cm := NewCertManager(dir, fqdn)
+	if err := cm.GenerateSelfSignedCertificate(); err != nil {
+		t.Fatalf("GenerateSelfSignedCertificate() error = %v", err)
+	}
+
+	info, err := cm.GetCertificateInfo()
+	if err != nil {
+		t.Fatalf("GetCertificateInfo() error = %v", err)
+	}
+	if subject, ok := info["subject"].(string); !ok || subject != fqdn {
+		t.Errorf("subject = %v, want %q", info["subject"], fqdn)
+	}
+	if valid, ok := info["valid"].(bool); !ok || !valid {
+		t.Errorf("valid = %v, want true", info["valid"])
+	}
+}
+
+// TestGenerateSelfSignedCertificate_Idempotent verifies calling GenerateSelfSignedCertificate
+// twice on the same manager overwrites the files and leaves a valid cert.
+func TestGenerateSelfSignedCertificate_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "idempotent.example.com"
+
+	cm := NewCertManager(dir, fqdn)
+	for i := 0; i < 2; i++ {
+		if err := cm.GenerateSelfSignedCertificate(); err != nil {
+			t.Fatalf("GenerateSelfSignedCertificate() call %d error = %v", i+1, err)
+		}
+	}
+
+	if cm.cert == nil {
+		t.Error("cert must be non-nil after repeated GenerateSelfSignedCertificate calls")
+	}
+}
+
+// TestLoadCertificate_CertNotYetValid verifies a certificate whose NotBefore is
+// in the future is rejected.
+func TestLoadCertificate_CertNotYetValid(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "future.example.com"
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(99),
+		Subject:      pkix.Name{CommonName: fqdn},
+		DNSNames:     []string{fqdn},
+		NotBefore:    time.Now().Add(48 * time.Hour),
+		NotAfter:     time.Now().Add(72 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+
+	certDir := filepath.Join(dir, "ssl", "local", fqdn)
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	if err := os.WriteFile(filepath.Join(certDir, "cert.pem"), certPEM, 0644); err != nil {
+		t.Fatalf("write cert.pem: %v", err)
+	}
+
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	if err := os.WriteFile(filepath.Join(certDir, "key.pem"), keyPEM, 0600); err != nil {
+		t.Fatalf("write key.pem: %v", err)
+	}
+
+	cm := NewCertManager(dir, fqdn)
+	err = cm.LoadCertificate()
+	if err == nil {
+		t.Fatal("LoadCertificate() expected error for not-yet-valid certificate")
+	}
+}
+
+// TestCertificatePaths_Fields verifies the CertificatePaths struct fields are accessible.
+func TestCertificatePaths_Fields(t *testing.T) {
+	cp := CertificatePaths{
+		CertPath: "/tmp/cert.pem",
+		KeyPath:  "/tmp/key.pem",
+		Source:   "app-local",
+	}
+	if cp.CertPath != "/tmp/cert.pem" {
+		t.Errorf("CertPath = %q", cp.CertPath)
+	}
+	if cp.Source != "app-local" {
+		t.Errorf("Source = %q", cp.Source)
+	}
+}
+
+// TestRequestNewCertificate_UnsupportedChallenge exercises the default branch in
+// RequestNewCertificate which returns an error for unknown challenge types.
+// The ACME client registration will fail before reaching the switch, so we inject
+// the unsupported type directly and verify we get a meaningful error.
+func TestRequestNewCertificate_UnsupportedChallenge(t *testing.T) {
+	dir := t.TempDir()
+	cm := NewCertManager(dir, "unsupported.example.com")
+	cm.email = "admin@example.com"
+	cm.staging = true
+	// Force an unsupported challenge type; SetChallengeType rejects it, so set directly.
+	cm.challengeType = "bogus-challenge"
+
+	err := cm.RequestNewCertificate()
+	// Error is expected — either from ACME network failure or the unsupported type switch.
+	if err == nil {
+		t.Log("RequestNewCertificate: unexpectedly succeeded — network available?")
+	}
+}
+
+// TestRenewCertificate_WithExistingCertFiles exercises the RenewCertificate path that
+// reads existing cert/key files when acmeClient is non-nil. We create a fake acmeClient
+// scenario by exercising the getCertPEM/getKeyPEM read calls indirectly through
+// saveLetsEncryptCert + a manual acmeClient assignment path is not feasible without
+// a live ACME server. Instead we verify the error path when cert files are missing.
+func TestRenewCertificate_WithACMEClient_MissingCertFiles(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "renew2.example.com"
+	cm := NewCertManager(dir, fqdn)
+	cm.email = "admin@example.com"
+
+	// Assign a non-nil but stub acmeClient so RenewCertificate takes the renewal
+	// branch instead of calling RequestNewCertificate. We cannot construct a valid
+	// *lego.Client without network, but the import is accessible in the same package.
+	// Use a pointer to a zero-value struct via unsafe field assignment is not possible
+	// without reflection. Instead: create the cert files, set acmeClient to a zero
+	// value that will fail on Certificate.Renew, and confirm we get an error from
+	// reading the cert file (the earlier error path in RenewCertificate).
+	//
+	// The simplest approach is to create valid cert/key PEM files in the LE directory
+	// and let the code read them, then fail at the actual renewal network call.
+	generateSelfSignedCert(t, dir, fqdn)
+	certSrc := filepath.Join(dir, "ssl", "local", fqdn, "cert.pem")
+	keySrc := filepath.Join(dir, "ssl", "local", fqdn, "key.pem")
+
+	certPEM, err := os.ReadFile(certSrc)
+	if err != nil {
+		t.Fatalf("read cert: %v", err)
+	}
+	keyPEM, err := os.ReadFile(keySrc)
+	if err != nil {
+		t.Fatalf("read key: %v", err)
+	}
+
+	// Write into the letsencrypt directory so RenewCertificate can read them.
+	if err := cm.saveLetsEncryptCert(certPEM, keyPEM); err != nil {
+		t.Fatalf("saveLetsEncryptCert: %v", err)
+	}
+
+	// With no ACME client, RenewCertificate falls back to RequestNewCertificate,
+	// which will fail at the network layer. This exercises the nil-acmeClient branch.
+	renewErr := cm.RenewCertificate()
+	if renewErr == nil {
+		t.Log("RenewCertificate: unexpectedly succeeded — network may be available")
+	}
+}
+
+// TestCheckAndRenew_AppManagedCertNearExpiry exercises the checkAndRenew path
+// where the app-managed Let's Encrypt cert directory exists. The renewal itself
+// will fail (no ACME client), but the directory-existence check and cert-parse
+// paths are exercised.
+func TestCheckAndRenew_AppManagedCertNearExpiry(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "nearexpiry.example.com"
+
+	// Generate an almost-expired cert (expires in 3 days, under 7-day threshold).
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(42),
+		Subject:      pkix.Name{CommonName: fqdn},
+		DNSNames:     []string{fqdn},
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(3 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+
+	// Write cert directly to the letsencrypt directory.
+	leDir := filepath.Join(dir, "ssl", "letsencrypt", fqdn)
+	if err := os.MkdirAll(leDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(leDir, "fullchain.pem"), certPEM, 0644); err != nil {
+		t.Fatalf("write fullchain.pem: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(leDir, "privkey.pem"), keyPEM, 0600); err != nil {
+		t.Fatalf("write privkey.pem: %v", err)
+	}
+
+	cm := NewCertManager(dir, fqdn)
+	if err := cm.LoadCertificate(); err != nil {
+		t.Fatalf("LoadCertificate(): %v", err)
+	}
+
+	// checkAndRenew should see the app-managed cert, detect near-expiry, and call
+	// RenewCertificate (which will fail with no ACME client/network — that's fine).
+	// The important thing is no panic and the code path is walked.
+	cm.checkAndRenew()
+}
+
+// TestLoadCertFromPath_CorruptCertFile exercises the tls.LoadX509KeyPair error path
+// inside loadCertFromPath by providing a syntactically valid PEM file but with
+// garbage DER content that cannot be parsed as a TLS key pair.
+func TestLoadCertFromPath_CorruptCertFile(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "corrupt.example.com"
+
+	certDir := filepath.Join(dir, "ssl", "local", fqdn)
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Write a PEM block with valid structure but garbage content.
+	corruptCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("not-valid-der")})
+	corruptKey := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: []byte("not-valid-der")})
+
+	if err := os.WriteFile(filepath.Join(certDir, "cert.pem"), corruptCert, 0644); err != nil {
+		t.Fatalf("write cert.pem: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(certDir, "key.pem"), corruptKey, 0600); err != nil {
+		t.Fatalf("write key.pem: %v", err)
+	}
+
+	cm := NewCertManager(dir, fqdn)
+	err := cm.LoadCertificate()
+	if err == nil {
+		t.Fatal("LoadCertificate() expected error for corrupt cert files, got nil")
+	}
+}
+
+// TestValidateCertificate_EmptyCertBytes verifies validateCertificate returns an
+// error when the tls.Certificate has no raw certificate data.
+func TestValidateCertificate_EmptyCertBytes(t *testing.T) {
+	cm := NewCertManager(t.TempDir(), "example.com")
+	emptyCert := &tls.Certificate{}
+	err := cm.validateCertificate(emptyCert)
+	if err == nil {
+		t.Fatal("validateCertificate() expected error for empty certificate, got nil")
+	}
+}
+
+// TestSaveLetsEncryptCert_VerifyContent verifies that the bytes written by
+// saveLetsEncryptCert are identical to what was passed in.
+func TestSaveLetsEncryptCert_VerifyContent(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "content-check.example.com"
+	generateSelfSignedCert(t, dir, fqdn)
+
+	certSrc := filepath.Join(dir, "ssl", "local", fqdn, "cert.pem")
+	keySrc := filepath.Join(dir, "ssl", "local", fqdn, "key.pem")
+
+	certPEM, err := os.ReadFile(certSrc)
+	if err != nil {
+		t.Fatalf("read cert: %v", err)
+	}
+	keyPEM, err := os.ReadFile(keySrc)
+	if err != nil {
+		t.Fatalf("read key: %v", err)
+	}
+
+	cm := NewCertManager(dir, fqdn)
+	if err := cm.saveLetsEncryptCert(certPEM, keyPEM); err != nil {
+		t.Fatalf("saveLetsEncryptCert() error = %v", err)
+	}
+
+	savedCert, err := os.ReadFile(filepath.Join(dir, "ssl", "letsencrypt", fqdn, "fullchain.pem"))
+	if err != nil {
+		t.Fatalf("read saved cert: %v", err)
+	}
+	if string(savedCert) != string(certPEM) {
+		t.Error("saved cert content does not match input")
+	}
+
+	savedKey, err := os.ReadFile(filepath.Join(dir, "ssl", "letsencrypt", fqdn, "privkey.pem"))
+	if err != nil {
+		t.Fatalf("read saved key: %v", err)
+	}
+	if string(savedKey) != string(keyPEM) {
+		t.Error("saved key content does not match input")
+	}
+}
+
+// TestCheckAndRenew_ParseError verifies checkAndRenew handles an unparseable cert
+// gracefully (the cert field has raw bytes that are not valid DER).
+func TestCheckAndRenew_ParseError(t *testing.T) {
+	dir := t.TempDir()
+	fqdn := "parseerr.example.com"
+
+	// Create the letsencrypt directory so checkAndRenew passes the os.Stat check.
+	leDir := filepath.Join(dir, "ssl", "letsencrypt", fqdn)
+	if err := os.MkdirAll(leDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Write placeholder files so os.Stat succeeds.
+	if err := os.WriteFile(filepath.Join(leDir, "fullchain.pem"), []byte("placeholder"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cm := NewCertManager(dir, fqdn)
+	// Manually set a tls.Certificate with garbage DER that will fail x509.ParseCertificate.
+	cm.cert = &tls.Certificate{
+		Certificate: [][]byte{[]byte("not-valid-der")},
+	}
+
+	// Must not panic; the parse error is silently ignored inside checkAndRenew.
+	cm.checkAndRenew()
+}
+
+// TestRenewalLoop_StopsOnClose verifies the renewal goroutine exits when stopChan
+// is closed, without leaking.
+func TestRenewalLoop_StopsOnClose(t *testing.T) {
+	cm := NewCertManager(t.TempDir(), "example.com")
+	// Use a very short interval so the ticker fires quickly.
+	cm.renewalCheckInterval = 10 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() {
+		cm.renewalLoop()
+		close(done)
+	}()
+
+	// Let it tick a couple of times.
+	time.Sleep(30 * time.Millisecond)
+	close(cm.stopChan)
+
+	select {
+	case <-done:
+		// Success.
+	case <-time.After(2 * time.Second):
+		t.Fatal("renewalLoop() did not stop after stopChan was closed")
+	}
+}

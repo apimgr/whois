@@ -346,3 +346,63 @@ func TestGetFQDN_DOMAINCommaFirstEntryEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestGetFQDN_HOSTNAMELoopback verifies that when DOMAIN is unset and the
+// HOSTNAME env var is set to a loopback value ("127.0.0.1"), GetFQDN falls
+// through steps 1-3 and returns a non-empty last-resort value (step 4/5 or "localhost").
+func TestGetFQDN_HOSTNAMELoopback(t *testing.T) {
+	t.Setenv("DOMAIN", "")
+	t.Setenv("HOSTNAME", "127.0.0.1")
+	got := GetFQDN()
+	if got == "" {
+		t.Error("GetFQDN() returned empty even after HOSTNAME loopback fallthrough")
+	}
+}
+
+// TestGetFQDN_HOSTNAMELocalhostString verifies that a HOSTNAME of "localhost"
+// is detected as loopback and causes step 3 to be skipped.
+func TestGetFQDN_HOSTNAMELocalhostString(t *testing.T) {
+	t.Setenv("DOMAIN", "")
+	t.Setenv("HOSTNAME", "localhost")
+	got := GetFQDN()
+	if got == "" {
+		t.Error("GetFQDN() returned empty after HOSTNAME=localhost fallthrough")
+	}
+}
+
+// TestDetect_PrimaryIPFields verifies that the PrimaryIPv4 and PrimaryIPv6 fields
+// in RuntimeInfo are either empty strings or valid IP addresses. This exercises the
+// getGlobalIPv4 and getGlobalIPv6 code paths through Detect().
+func TestDetect_PrimaryIPFields(t *testing.T) {
+	info := Detect()
+	if info.PrimaryIPv4 != "" {
+		ip := net.ParseIP(info.PrimaryIPv4)
+		if ip == nil {
+			t.Errorf("Detect().PrimaryIPv4 = %q is not a valid IP", info.PrimaryIPv4)
+		} else if ip.To4() == nil {
+			t.Errorf("Detect().PrimaryIPv4 = %q is not an IPv4 address", info.PrimaryIPv4)
+		}
+	}
+	if info.PrimaryIPv6 != "" {
+		ip := net.ParseIP(info.PrimaryIPv6)
+		if ip == nil {
+			t.Errorf("Detect().PrimaryIPv6 = %q is not a valid IP", info.PrimaryIPv6)
+		} else if ip.To4() != nil {
+			t.Errorf("Detect().PrimaryIPv6 = %q is actually IPv4", info.PrimaryIPv6)
+		}
+	}
+}
+
+// TestGetFQDN_PrivateHostnameFallsThrough verifies that HOSTNAME set to a
+// private IP (not loopback) is accepted as a non-loopback value and returned
+// by GetFQDN at step 3.
+func TestGetFQDN_PrivateHostnameFallsThrough(t *testing.T) {
+	t.Setenv("DOMAIN", "")
+	// 192.168.1.100 is a private non-loopback address; isLoopback returns false for it.
+	// If os.Hostname() also returns a loopback value in this environment, step 3 fires.
+	t.Setenv("HOSTNAME", "192.168.1.100")
+	got := GetFQDN()
+	if got == "" {
+		t.Error("GetFQDN() returned empty with a private HOSTNAME")
+	}
+}

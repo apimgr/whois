@@ -187,6 +187,97 @@ func TestStepConstants(t *testing.T) {
 	}
 }
 
+// TestUpdate_NonKeyNonDone_StepURL exercises the textinput update path on stepURL.
+func TestUpdate_NonKeyNonDone_StepURL(t *testing.T) {
+	m := New(newTestCfg())
+	m.step = stepURL
+	type customMsg struct{}
+	result, _ := m.Update(customMsg{})
+	updated := result.(Model)
+	if updated.step != stepURL {
+		t.Errorf("unhandled msg on stepURL should stay stepURL, got %d", updated.step)
+	}
+}
+
+// TestUpdate_NonKeyNonDone_StepToken exercises the textinput update path on stepToken.
+func TestUpdate_NonKeyNonDone_StepToken(t *testing.T) {
+	m := New(newTestCfg())
+	m.step = stepToken
+	type customMsg struct{}
+	result, _ := m.Update(customMsg{})
+	updated := result.(Model)
+	if updated.step != stepToken {
+		t.Errorf("unhandled msg on stepToken should stay stepToken, got %d", updated.step)
+	}
+}
+
+// TestUpdate_NonKeyNonDone_StepTest exercises no-op update on stepTest.
+func TestUpdate_NonKeyNonDone_StepTest(t *testing.T) {
+	m := New(newTestCfg())
+	m.step = stepTest
+	m.cfg.Server = "http://localhost:64580"
+	type customMsg struct{}
+	result, _ := m.Update(customMsg{})
+	updated := result.(Model)
+	if updated.step != stepTest {
+		t.Errorf("unhandled msg on stepTest should stay stepTest, got %d", updated.step)
+	}
+}
+
+// TestTestConnection_ReturnsCmd verifies testConnection returns a non-nil Cmd.
+func TestTestConnection_ReturnsCmd(t *testing.T) {
+	m := New(newTestCfg())
+	cmd := m.testConnection("http://127.0.0.1:1")
+	if cmd == nil {
+		t.Error("testConnection should return a non-nil cmd")
+	}
+}
+
+// TestTestConnection_CmdReturnsTestDoneMsg verifies the cmd returned by testConnection
+// produces a testDoneMsg when executed (error path with unreachable server).
+func TestTestConnection_CmdReturnsTestDoneMsg(t *testing.T) {
+	m := New(newTestCfg())
+	cmd := m.testConnection("http://127.0.0.1:1")
+	msg := cmd()
+	done, ok := msg.(testDoneMsg)
+	if !ok {
+		t.Fatalf("testConnection cmd returned %T, want testDoneMsg", msg)
+	}
+	if done.err == nil {
+		t.Error("connecting to 127.0.0.1:1 should produce an error")
+	}
+}
+
+// TestHandleEnter_StepDone_IsNoOp verifies handleEnter on stepDone is a no-op.
+func TestHandleEnter_StepDone_IsNoOp(t *testing.T) {
+	m := New(newTestCfg())
+	m.step = stepDone
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := result.(Model)
+	if updated.step != stepDone {
+		t.Errorf("handleEnter on stepDone should stay stepDone, got %d", updated.step)
+	}
+	if cmd != nil {
+		t.Error("handleEnter on stepDone should return nil cmd")
+	}
+}
+
+// TestUpdate_Enter_TokenStep_BlankToken verifies a blank token is accepted (optional).
+func TestUpdate_Enter_TokenStep_BlankToken(t *testing.T) {
+	m := New(newTestCfg())
+	m.step = stepToken
+	m.tokenIn.SetValue("")
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.Update(msg)
+	updated := result.(Model)
+	if updated.step != stepDone {
+		t.Errorf("blank token should still advance to stepDone, got %d", updated.step)
+	}
+	if updated.cfg.Token != "" {
+		t.Errorf("blank token should store empty string, got %q", updated.cfg.Token)
+	}
+}
+
 // testError is a simple error implementation for tests.
 type testError struct {
 	msg string

@@ -227,6 +227,155 @@ func TestRotate(t *testing.T) {
 	}
 }
 
+// TestAccessWriter_NilFile verifies AccessWriter returns io.Discard when the
+// logger was opened with an empty dir (no accessFile opened).
+func TestAccessWriter_NilFile(t *testing.T) {
+	l, err := Open("")
+	if err != nil {
+		t.Fatalf("Open(\"\") error: %v", err)
+	}
+	defer l.Close()
+
+	w := l.AccessWriter()
+	if w == nil {
+		t.Fatal("AccessWriter() returned nil, want io.Discard")
+	}
+	// Write a byte — must not panic.
+	_, _ = w.Write([]byte("test"))
+}
+
+// TestAccessWriter_WithFile verifies AccessWriter returns the real file handle
+// when the logger was opened with a valid directory.
+func TestAccessWriter_WithFile(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer l.Close()
+
+	w := l.AccessWriter()
+	if w == nil {
+		t.Fatal("AccessWriter() returned nil")
+	}
+	// Must not be io.Discard — verify it's a *os.File by writing to it.
+	n, err := w.Write([]byte("direct access line\n"))
+	if err != nil {
+		t.Errorf("AccessWriter().Write error: %v", err)
+	}
+	if n == 0 {
+		t.Error("AccessWriter().Write wrote 0 bytes")
+	}
+}
+
+// TestApp_WritesMessage verifies App() writes an INFO-level logfmt line to app.log.
+func TestApp_WritesMessage(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer l.Close()
+
+	l.App("app event fired", "component", "scheduler", "count", 42)
+
+	data, err := os.ReadFile(filepath.Join(dir, "app.log"))
+	if err != nil {
+		t.Fatalf("read app.log: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "app event fired") {
+		t.Errorf("app.log missing message: %q", content)
+	}
+}
+
+// TestApp_NilHandler verifies App() does not panic when the logger has no appHandler
+// (opened with empty dir).
+func TestApp_NilHandler(t *testing.T) {
+	l, err := Open("")
+	if err != nil {
+		t.Fatalf("Open(\"\") error: %v", err)
+	}
+	defer l.Close()
+
+	l.App("should not panic")
+}
+
+// TestAppWarn_WritesMessage verifies AppWarn() writes a WARN-level logfmt line to app.log.
+func TestAppWarn_WritesMessage(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer l.Close()
+
+	l.AppWarn("quota near limit", "used_pct", 92)
+
+	data, err := os.ReadFile(filepath.Join(dir, "app.log"))
+	if err != nil {
+		t.Fatalf("read app.log: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "quota near limit") {
+		t.Errorf("app.log missing warn message: %q", content)
+	}
+}
+
+// TestAppWarn_NilHandler verifies AppWarn() does not panic on empty logger.
+func TestAppWarn_NilHandler(t *testing.T) {
+	l, err := Open("")
+	if err != nil {
+		t.Fatalf("Open(\"\") error: %v", err)
+	}
+	defer l.Close()
+
+	l.AppWarn("should not panic")
+}
+
+// TestWriteAuth_WritesEntry verifies WriteAuth() appends a syslog-format line to auth.log.
+func TestWriteAuth_WritesEntry(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer l.Close()
+
+	l.WriteAuth("alice", "10.0.0.5", "success", "password")
+
+	data, err := os.ReadFile(filepath.Join(dir, "auth.log"))
+	if err != nil {
+		t.Fatalf("read auth.log: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "caswhois[") {
+		t.Errorf("auth.log missing process tag: %q", content)
+	}
+	if !strings.Contains(content, "user=alice") {
+		t.Errorf("auth.log missing user=alice: %q", content)
+	}
+	if !strings.Contains(content, "ip=10.0.0.5") {
+		t.Errorf("auth.log missing ip: %q", content)
+	}
+	if !strings.Contains(content, "result=success") {
+		t.Errorf("auth.log missing result: %q", content)
+	}
+}
+
+// TestWriteAuth_NilFile verifies WriteAuth() is a no-op (no panic) when the logger
+// was opened with an empty dir (no authFile opened).
+func TestWriteAuth_NilFile(t *testing.T) {
+	l, err := Open("")
+	if err != nil {
+		t.Fatalf("Open(\"\") error: %v", err)
+	}
+	defer l.Close()
+
+	// Must not panic when authFile is nil.
+	l.WriteAuth("alice", "10.0.0.5", "fail", "bad_password")
+}
+
 func TestTimeFormat(t *testing.T) {
 	dir := t.TempDir()
 	l, err := Open(dir)

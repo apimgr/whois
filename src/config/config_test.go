@@ -1451,6 +1451,201 @@ func TestNormalizePathDotOnly(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// IsDebug() / IsProduction() / IsDevelopment()
+// ---------------------------------------------------------------------------
+
+// TestIsDebug verifies the debug-mode accessor returns the config field value.
+func TestIsDebug(t *testing.T) {
+	cfg := Default()
+	if cfg.IsDebug() {
+		t.Error("IsDebug() = true on default config, want false")
+	}
+
+	cfg.Debug = true
+	if !cfg.IsDebug() {
+		t.Error("IsDebug() = false after setting Debug=true, want true")
+	}
+}
+
+// TestIsProduction verifies the mode accessor for all production aliases.
+func TestIsProduction(t *testing.T) {
+	cases := []struct {
+		mode string
+		want bool
+	}{
+		{"production", true},
+		{"prod", true},
+		// Empty string means default = production per spec
+		{"", true},
+		{"development", false},
+		{"dev", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.mode, func(t *testing.T) {
+			cfg := Default()
+			cfg.Mode = tc.mode
+			got := cfg.IsProduction()
+			if got != tc.want {
+				t.Errorf("IsProduction() with Mode=%q = %v, want %v", tc.mode, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestIsDevelopment verifies the mode accessor for all development aliases.
+func TestIsDevelopment(t *testing.T) {
+	cases := []struct {
+		mode string
+		want bool
+	}{
+		{"development", true},
+		{"dev", true},
+		{"production", false},
+		{"prod", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.mode, func(t *testing.T) {
+			cfg := Default()
+			cfg.Mode = tc.mode
+			got := cfg.IsDevelopment()
+			if got != tc.want {
+				t.Errorf("IsDevelopment() with Mode=%q = %v, want %v", tc.mode, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Sanitized()
+// ---------------------------------------------------------------------------
+
+// TestSanitized verifies that Sanitized() always redacts the server token
+// and includes the expected keys.
+func TestSanitized(t *testing.T) {
+	cfg := Default()
+	cfg.Address = "0.0.0.0"
+	cfg.Port = 64100
+	cfg.Mode = "development"
+	cfg.Debug = true
+	cfg.DataDir = "/var/data"
+	cfg.LogDir = "/var/log"
+	cfg.Backup.Dir = "/var/backups"
+	cfg.Notifications.Email.SMTP.Host = "smtp.example.com"
+	cfg.Notifications.Email.SMTP.TLS = "starttls"
+	cfg.Metrics.Enabled = true
+	cfg.Metrics.Endpoint = "/metrics"
+	cfg.RateLimit.Enabled = false
+	// Set a real token — Sanitized must redact it.
+	cfg.ServerToken = "tok_supersecrettoken123456789012"
+
+	s := cfg.Sanitized()
+
+	// server_token must always be redacted regardless of actual value
+	if tok, ok := s["server_token"]; !ok || tok != "xxxxx" {
+		t.Errorf("Sanitized()[\"server_token\"] = %v, want \"xxxxx\"", tok)
+	}
+
+	// Spot-check a few non-sensitive fields pass through as-is
+	if s["address"] != "0.0.0.0" {
+		t.Errorf("Sanitized()[\"address\"] = %v, want 0.0.0.0", s["address"])
+	}
+	if s["port"] != 64100 {
+		t.Errorf("Sanitized()[\"port\"] = %v, want 64100", s["port"])
+	}
+	if s["mode"] != "development" {
+		t.Errorf("Sanitized()[\"mode\"] = %v, want development", s["mode"])
+	}
+	if s["debug"] != true {
+		t.Errorf("Sanitized()[\"debug\"] = %v, want true", s["debug"])
+	}
+	if s["smtp_host"] != "smtp.example.com" {
+		t.Errorf("Sanitized()[\"smtp_host\"] = %v, want smtp.example.com", s["smtp_host"])
+	}
+}
+
+// TestSanitizedDefaultConfig verifies Sanitized() on an unmodified Default().
+func TestSanitizedDefaultConfig(t *testing.T) {
+	cfg := Default()
+	s := cfg.Sanitized()
+
+	// Token must be redacted even when the real token is empty
+	if tok, ok := s["server_token"]; !ok || tok != "xxxxx" {
+		t.Errorf("Sanitized()[\"server_token\"] = %v, want \"xxxxx\"", tok)
+	}
+
+	// Required keys must all be present
+	required := []string{
+		"address", "port", "mode", "debug",
+		"data_dir", "log_dir", "backup_dir",
+		"smtp_host", "smtp_tls_mode",
+		"metrics_enabled", "metrics_endpoint",
+		"rate_limit_enabled", "server_token",
+	}
+	for _, k := range required {
+		if _, ok := s[k]; !ok {
+			t.Errorf("Sanitized() missing required key %q", k)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetLogDir()
+// ---------------------------------------------------------------------------
+
+// TestGetLogDir covers the resolution tiers for the log directory.
+func TestGetLogDir(t *testing.T) {
+	// Tier 1: explicit LogDir in config wins over everything
+	t.Run("explicit config field", func(t *testing.T) {
+		cfg := Default()
+		cfg.LogDir = "/explicit/logs"
+		got := cfg.GetLogDir()
+		if got != "/explicit/logs" {
+			t.Errorf("GetLogDir() = %q, want /explicit/logs", got)
+		}
+	})
+
+	// Tiers 2-4: no explicit config — always returns a non-empty path
+	t.Run("fallback returns non-empty string", func(t *testing.T) {
+		if isContainer() {
+			t.Skip("skipping non-container tiers: running inside a container")
+		}
+		cfg := Default()
+		cfg.LogDir = ""
+		got := cfg.GetLogDir()
+		if got == "" {
+			t.Error("GetLogDir() returned empty string — must always return a usable path")
+		}
+	})
+
+	// Container tier: when running in a container the container default is returned
+	t.Run("container default path", func(t *testing.T) {
+		if !isContainer() {
+			t.Skip("skipping container tier: not running inside a container")
+		}
+		cfg := Default()
+		cfg.LogDir = ""
+		got := cfg.GetLogDir()
+		want := "/data/log/caswhois"
+		if got != want {
+			t.Errorf("GetLogDir() (container) = %q, want %q", got, want)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// IsContainer() / isContainer()
+// ---------------------------------------------------------------------------
+
+// TestIsContainerConsistency verifies that IsContainer() and isContainer()
+// always return the same value — they must be identical aliases.
+func TestIsContainerConsistency(t *testing.T) {
+	if IsContainer() != isContainer() {
+		t.Error("IsContainer() and isContainer() returned different values")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 

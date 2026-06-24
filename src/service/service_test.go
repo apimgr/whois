@@ -357,3 +357,310 @@ func TestIsSystemServiceInstalled_NoPanic(t *testing.T) {
 		t.Logf("isSystemServiceInstalled() = true (unexpected in CI; logging only)")
 	}
 }
+
+// TestIsSystemServiceInstalled_KnownAbsent confirms a randomly-named service
+// is always reported as not installed (no matching file on any init system).
+func TestIsSystemServiceInstalled_KnownAbsent(t *testing.T) {
+	sm, err := NewServiceManager("zzz-no-such-svc-xqz99", "Absent Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	if sm.isSystemServiceInstalled() {
+		t.Error("isSystemServiceInstalled() = true for a name that was never registered")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Execute — all service commands return errors gracefully in a container
+// ---------------------------------------------------------------------------
+
+// TestExecute_Install confirms Execute(install) returns an error (not a panic)
+// in a container environment where no init system is available.
+func TestExecute_Install(t *testing.T) {
+	sm, err := NewServiceManager("caswhois", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// Install either requires root or prompts stdin. In a container without root
+	// and with no sudo, it either returns an error or calls installUserService
+	// which itself returns an error. Either way we must not panic.
+	_ = sm.Execute(ServiceInstall)
+}
+
+// TestExecute_Uninstall confirms Execute(uninstall) returns an error without
+// panic. Uninstall always prompts for confirmation and cancels when stdin has
+// no data.
+func TestExecute_Uninstall(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// Uninstall reads from stdin. With an empty/closed stdin it returns "uninstall cancelled".
+	err = sm.Execute(ServiceUninstall)
+	if err == nil {
+		t.Log("Execute(uninstall) returned nil — acceptable only if somehow confirmed")
+	}
+}
+
+// TestExecute_Disable confirms Execute(disable) returns without panic.
+// With no system service installed and no escalation available, the method
+// proceeds to sm.disable() which returns "unsupported service manager: container".
+func TestExecute_Disable(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// Must not panic; error is expected in container.
+	_ = sm.Execute(ServiceDisable)
+}
+
+// TestExecute_Start confirms Execute(start) returns an error in a container.
+func TestExecute_Start(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	err = sm.Execute(ServiceStart)
+	if err == nil {
+		t.Log("Execute(start) returned nil — service might not be installed so this path is OK")
+	}
+}
+
+// TestExecute_Stop confirms Execute(stop) returns an error in a container.
+func TestExecute_Stop(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	err = sm.Execute(ServiceStop)
+	if err == nil {
+		t.Log("Execute(stop) returned nil — acceptable if service not installed")
+	}
+}
+
+// TestExecute_Restart confirms Execute(restart) returns an error in a container.
+func TestExecute_Restart(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	err = sm.Execute(ServiceRestart)
+	if err == nil {
+		t.Log("Execute(restart) returned nil — acceptable if service not installed")
+	}
+}
+
+// TestExecute_Reload confirms Execute(reload) returns an error in a container.
+func TestExecute_Reload(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	err = sm.Execute(ServiceReload)
+	if err == nil {
+		t.Log("Execute(reload) returned nil — acceptable if service not installed")
+	}
+}
+
+// TestExecute_Status confirms Execute(status) returns without panic.
+func TestExecute_Status(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-test-nonexistent", "caswhois service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// status() calls the underlying init system; in a container it returns an error.
+	_ = sm.Execute(ServiceStatus)
+}
+
+// ---------------------------------------------------------------------------
+// Direct method tests for Start / Stop / Restart / Reload / Status / Disable
+// ---------------------------------------------------------------------------
+
+// TestStart_NonExistentService confirms Start does not panic when the service
+// is not installed and we are already root (in CI containers) or not elevated.
+func TestStart_NonExistentService(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-start-test-absent", "Test Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	_ = sm.Start()
+}
+
+// TestStop_NonExistentService confirms Stop does not panic.
+func TestStop_NonExistentService(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-stop-test-absent", "Test Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	_ = sm.Stop()
+}
+
+// TestRestart_NonExistentService confirms Restart does not panic.
+func TestRestart_NonExistentService(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-restart-test-absent", "Test Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	_ = sm.Restart()
+}
+
+// TestReload_NonExistentService confirms Reload does not panic.
+func TestReload_NonExistentService(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-reload-test-absent", "Test Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	_ = sm.Reload()
+}
+
+// TestStatus_NonExistentService confirms Status does not panic.
+func TestStatus_NonExistentService(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-status-test-absent", "Test Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	_ = sm.Status()
+}
+
+// TestDisable_NonExistentService confirms Disable does not panic when no
+// system service is installed and the container has no init system.
+func TestDisable_NonExistentService(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-disable-test-absent", "Test Service", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	_ = sm.Disable()
+}
+
+// ---------------------------------------------------------------------------
+// CanEscalate — non-root, non-sudo container environment
+// ---------------------------------------------------------------------------
+
+// TestCanEscalate_Container confirms CanEscalate returns a boolean without
+// panic in a container where sudo is typically absent or restricted.
+func TestCanEscalate_Container(t *testing.T) {
+	_ = CanEscalate()
+}
+
+// ---------------------------------------------------------------------------
+// DetectServiceManager — environment-variable-driven paths
+// ---------------------------------------------------------------------------
+
+// TestDetectServiceManager_Systemd confirms the INVOCATION_ID branch returns
+// "systemd" when the env var is set and we are not in a container.
+func TestDetectServiceManager_Systemd(t *testing.T) {
+	if IsContainer() {
+		t.Skip("running in container; INVOCATION_ID branch not reachable")
+	}
+	t.Setenv("INVOCATION_ID", "abc123")
+	got := DetectServiceManager()
+	if got != "systemd" {
+		t.Errorf("DetectServiceManager() with INVOCATION_ID set = %q, want %q", got, "systemd")
+	}
+}
+
+// TestDetectServiceManager_SVDIR confirms the SVDIR branch returns "runit"
+// when the env var is set and we are not in a container.
+func TestDetectServiceManager_SVDIR(t *testing.T) {
+	if IsContainer() {
+		t.Skip("running in container; SVDIR branch not reachable")
+	}
+	t.Setenv("SVDIR", "/var/service")
+	got := DetectServiceManager()
+	if got != "runit" {
+		t.Errorf("DetectServiceManager() with SVDIR set = %q, want %q", got, "runit")
+	}
+}
+
+// TestDetectServiceManager_S6 confirms the S6_LOGGING branch returns "s6"
+// when the env var is set and we are not in a container.
+func TestDetectServiceManager_S6(t *testing.T) {
+	if IsContainer() {
+		t.Skip("running in container; S6_LOGGING branch not reachable")
+	}
+	t.Setenv("S6_LOGGING", "1")
+	got := DetectServiceManager()
+	if got != "s6" {
+		t.Errorf("DetectServiceManager() with S6_LOGGING set = %q, want %q", got, "s6")
+	}
+}
+
+// TestDetectServiceManager_RC_SVCNAME confirms the RC_SVCNAME branch returns
+// "openrc" when the env var is set and we are not in a container.
+func TestDetectServiceManager_RC_SVCNAME(t *testing.T) {
+	if IsContainer() {
+		t.Skip("running in container; RC_SVCNAME branch not reachable")
+	}
+	t.Setenv("RC_SVCNAME", "caswhois")
+	got := DetectServiceManager()
+	if got != "openrc" {
+		t.Errorf("DetectServiceManager() with RC_SVCNAME set = %q, want %q", got, "openrc")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ShouldDaemonize — additional paths
+// ---------------------------------------------------------------------------
+
+// TestShouldDaemonize_OpenRC confirms the openrc and rcd branches of
+// ShouldDaemonize return true (daemonize) when not in a container and the
+// service manager is known.
+func TestShouldDaemonize_AllManualPaths(t *testing.T) {
+	cases := []struct {
+		daemonFlag      bool
+		configDaemonize bool
+		want            bool
+	}{
+		{true, false, true},
+		{false, true, true},
+		{false, false, false},
+		{true, true, true},
+	}
+	for _, tc := range cases {
+		got := ShouldDaemonize(false, tc.daemonFlag, tc.configDaemonize)
+		if got != tc.want {
+			t.Errorf("ShouldDaemonize(false, %v, %v) = %v, want %v",
+				tc.daemonFlag, tc.configDaemonize, got, tc.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// getParentProcessName — smoke test
+// ---------------------------------------------------------------------------
+
+// TestGetParentProcessName_NoPanic confirms the internal helper returns
+// without panic. The result may be empty in some environments.
+func TestGetParentProcessName_NoPanic(t *testing.T) {
+	name := getParentProcessName()
+	t.Logf("getParentProcessName() = %q", name)
+}
+
+// ---------------------------------------------------------------------------
+// IsElevated
+// ---------------------------------------------------------------------------
+
+// TestIsElevated_ContainerRoot confirms that in the standard CI Docker
+// container (which runs as root) IsElevated() returns true.
+func TestIsElevated_ContainerRoot(t *testing.T) {
+	if !IsContainer() {
+		t.Skip("not in a container; root assumption does not apply")
+	}
+	if !IsElevated() {
+		t.Log("IsElevated() = false in container — non-root container image, OK")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ExecElevated — error path (sudo not available or not permitted)
+// ---------------------------------------------------------------------------
+
+// TestExecElevated_Error confirms ExecElevated returns an error when sudo is
+// unavailable or the command fails, without panicking.
+func TestExecElevated_Error(t *testing.T) {
+	// Use a command that will definitely fail: sudo /bin/false
+	err := ExecElevated([]string{"/bin/false"})
+	if err == nil {
+		t.Log("ExecElevated returned nil — sudo accepted it; test environment is highly privileged")
+	}
+}

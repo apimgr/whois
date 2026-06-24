@@ -222,11 +222,12 @@ func main() {
 
 // colorEnabled returns whether color output is enabled, respecting PART 8 priority order:
 // 1. CLI --color flag  2. NO_COLOR env var  3. Auto-detect (TTY)
+// "yes"/"always" force color on regardless of NO_COLOR; "no"/"never" force off.
 func colorEnabled(flag string) bool {
 	switch flag {
-	case "yes":
+	case "yes", "always":
 		return true
-	case "no":
+	case "no", "never":
 		return false
 	}
 	// auto: respect NO_COLOR, then TTY

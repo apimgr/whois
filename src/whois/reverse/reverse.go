@@ -46,6 +46,12 @@ func SearchByOwner(ctx context.Context, provider, apiKey, owner string, maxResul
 // searchSecurityTrails queries the SecurityTrails domain-search API.
 // Doc: https://docs.securitytrails.com/reference/domain-search
 func searchSecurityTrails(ctx context.Context, apiKey, owner string, maxResults int) ([]Result, error) {
+	return searchSecurityTrailsWithURL(ctx, apiKey, owner, maxResults, "https://api.securitytrails.com/v1/domains/list")
+}
+
+// searchSecurityTrailsWithURL is the testable implementation of searchSecurityTrails.
+// It accepts an explicit endpoint URL so tests can substitute an httptest server.
+func searchSecurityTrailsWithURL(ctx context.Context, apiKey, owner string, maxResults int, endpoint string) ([]Result, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("securitytrails: api_key is required")
 	}
@@ -77,7 +83,7 @@ func searchSecurityTrails(ctx context.Context, apiKey, owner string, maxResults 
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://api.securitytrails.com/v1/domains/list",
+		endpoint,
 		strings.NewReader(string(bodyBytes)),
 	)
 	if err != nil {
@@ -123,6 +129,12 @@ func searchSecurityTrails(ctx context.Context, apiKey, owner string, maxResults 
 // searchWhoxy queries the Whoxy reverse-WHOIS API.
 // Doc: https://www.whoxy.com/reverse-whois/
 func searchWhoxy(ctx context.Context, apiKey, owner string, maxResults int) ([]Result, error) {
+	return searchWhoxyWithURL(ctx, apiKey, owner, maxResults, "https://api.whoxy.com/")
+}
+
+// searchWhoxyWithURL is the testable implementation of searchWhoxy.
+// It accepts an explicit base URL so tests can substitute an httptest server.
+func searchWhoxyWithURL(ctx context.Context, apiKey, owner string, maxResults int, baseURL string) ([]Result, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("whoxy: api_key is required")
 	}
@@ -134,7 +146,8 @@ func searchWhoxy(ctx context.Context, apiKey, owner string, maxResults int) ([]R
 	}
 
 	endpoint := fmt.Sprintf(
-		"https://api.whoxy.com/?key=%s&reverse=whois&%s=%s&mode=micro&page=1",
+		"%s?key=%s&reverse=whois&%s=%s&mode=micro&page=1",
+		baseURL,
 		url.QueryEscape(apiKey),
 		filterKey,
 		url.QueryEscape(owner),
@@ -180,12 +193,19 @@ func searchWhoxy(ctx context.Context, apiKey, owner string, maxResults int) ([]R
 // searchViewDNS queries the ViewDNS reverse-WHOIS API.
 // Doc: https://viewdns.info/api/docs/#reverse-whois-lookup
 func searchViewDNS(ctx context.Context, apiKey, owner string, maxResults int) ([]Result, error) {
+	return searchViewDNSWithURL(ctx, apiKey, owner, maxResults, "https://api.viewdns.info/reversewhois/")
+}
+
+// searchViewDNSWithURL is the testable implementation of searchViewDNS.
+// It accepts an explicit base URL so tests can substitute an httptest server.
+func searchViewDNSWithURL(ctx context.Context, apiKey, owner string, maxResults int, baseURL string) ([]Result, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("viewdns: api_key is required")
 	}
 
 	endpoint := fmt.Sprintf(
-		"https://api.viewdns.info/reversewhois/?q=%s&apikey=%s&output=json",
+		"%s?q=%s&apikey=%s&output=json",
+		baseURL,
 		url.QueryEscape(owner),
 		url.QueryEscape(apiKey),
 	)

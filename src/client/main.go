@@ -25,6 +25,11 @@ var (
 )
 
 func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+// run parses args and drives the CLI, returning an exit code.
+func run(args []string) int {
 	var (
 		flagServer  string
 		flagToken   string
@@ -39,27 +44,33 @@ func main() {
 		flagStatus  bool
 	)
 
-	flag.StringVar(&flagServer, "server", "", "Server base URL")
-	flag.StringVar(&flagToken, "token", "", "API token")
-	flag.StringVar(&flagOutput, "output", "", "Output format: json/text/raw (default: text)")
-	flag.StringVar(&flagFormat, "format", "", "Output format alias for --output")
-	flag.BoolVar(&flagNoColor, "no-color", false, "Disable color output")
-	flag.StringVar(&flagLang, "lang", "", "Language code (en, es, zh, fr, ar, de, ja)")
-	flag.StringVar(&flagColor, "color", "", "Color output: always/never/auto (default: auto)")
-	flag.StringVar(&flagUpdate, "update", "", "Update command: check/yes/branch=<name>")
-	flag.BoolVar(&flagDebug, "debug", false, "Debug mode")
-	flag.BoolVar(&flagVersion, "version", false, "Show version information")
-	flag.BoolVar(&flagVersion, "v", false, "Show version information")
-	flag.BoolVar(&flagStatus, "status", false, "Health check (exit 0=healthy, 1=unhealthy)")
+	fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
 
-	flag.Usage = func() {
+	fs.StringVar(&flagServer, "server", "", "Server base URL")
+	fs.StringVar(&flagToken, "token", "", "API token")
+	fs.StringVar(&flagOutput, "output", "", "Output format: json/text/raw (default: text)")
+	fs.StringVar(&flagFormat, "format", "", "Output format alias for --output")
+	fs.BoolVar(&flagNoColor, "no-color", false, "Disable color output")
+	fs.StringVar(&flagLang, "lang", "", "Language code (en, es, zh, fr, ar, de, ja)")
+	fs.StringVar(&flagColor, "color", "", "Color output: always/never/auto (default: auto)")
+	fs.StringVar(&flagUpdate, "update", "", "Update command: check/yes/branch=<name>")
+	fs.BoolVar(&flagDebug, "debug", false, "Debug mode")
+	fs.BoolVar(&flagVersion, "version", false, "Show version information")
+	fs.BoolVar(&flagVersion, "v", false, "Show version information")
+	fs.BoolVar(&flagStatus, "status", false, "Health check (exit 0=healthy, 1=unhealthy)")
+
+	fs.Usage = func() {
 		showHelp()
 	}
-	flag.Parse()
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
 
 	if flagVersion {
 		showVersion()
-		return
+		return 0
 	}
 
 	cfg, err := config.Load()
@@ -114,46 +125,47 @@ func main() {
 	// Handle --update before any server interaction
 	if flagUpdate != "" {
 		runUpdateCommand(flagUpdate, cfg)
-		return
+		return 0
 	}
 
 	if flagStatus {
 		runStatusCheck(cfg)
-		return
+		return 0
 	}
 
-	args := flag.Args()
+	remaining := fs.Args()
 
 	if cfg.Server == "" {
 		if display.Detect(false) == display.ModePlain {
 			fmt.Fprintln(os.Stderr, "Error: no server configured. Set --server or run the client interactively to complete setup.")
-			os.Exit(1)
+			return 1
 		}
 		newCfg, wizErr := setup.Run(cfg)
 		if wizErr != nil {
 			fmt.Fprintf(os.Stderr, "Setup failed: %v\n", wizErr)
-			os.Exit(1)
+			return 1
 		}
 		cfg = newCfg
 	}
 
-	mode := display.Detect(len(args) > 0)
+	mode := display.Detect(len(remaining) > 0)
 
 	switch mode {
 	case display.ModeTUI:
 		client := lookup.New(cfg.Server, cfg.Token, Version)
 		if err := tui.Run(client); err != nil {
 			fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 
 	default:
-		if len(args) == 0 {
+		if len(remaining) == 0 {
 			showHelp()
-			return
+			return 0
 		}
-		runCLICommand(args, cfg)
+		runCLICommand(remaining, cfg)
 	}
+	return 0
 }
 
 // resolveColor returns true if ANSI color output should be used.

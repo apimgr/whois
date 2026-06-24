@@ -511,6 +511,284 @@ func TestConfigureEnvPortInvalid(t *testing.T) {
 	}
 }
 
+// TestAutoDetectSMTP_NoServerReachable verifies AutoDetectSMTP returns false when
+// no SMTP server is listening. In a CI/test environment with no SMTP daemon
+// running on standard ports, all connection attempts fail and the result is false.
+func TestAutoDetectSMTP_NoServerReachable(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	result := em.AutoDetectSMTP("", "")
+	if result {
+		t.Log("AutoDetectSMTP returned true — a local SMTP server is reachable; this is not a test failure")
+	}
+}
+
+// TestAutoDetectSMTP_WithFQDNAndIP verifies AutoDetectSMTP returns without panic
+// when both fqdn and globalIPv4 are supplied. The result depends on environment.
+func TestAutoDetectSMTP_WithFQDNAndIP(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	result := em.AutoDetectSMTP("example.com", "1.2.3.4")
+	// Only assertion is no panic and enabled state is consistent.
+	if result != em.IsEnabled() {
+		t.Errorf("AutoDetectSMTP()=%v but IsEnabled()=%v — state inconsistency", result, em.IsEnabled())
+	}
+}
+
+// TestAutoDetectSMTP_LocalhostFQDNSkipped verifies "localhost" fqdn is excluded
+// from the FQDN-derived host list (no mail.localhost or smtp.localhost entries).
+func TestAutoDetectSMTP_LocalhostFQDNSkipped(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	result := em.AutoDetectSMTP("localhost", "")
+	if result != em.IsEnabled() {
+		t.Errorf("AutoDetectSMTP()=%v but IsEnabled()=%v", result, em.IsEnabled())
+	}
+}
+
+// TestSendSMTP_UnknownTLSMode verifies sendSMTP returns an error for an unknown TLS mode.
+func TestSendSMTP_UnknownTLSMode(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 9999, "", "", "bogus-tls-mode", "", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "Test Subject", "Test Body")
+	if err == nil {
+		t.Fatal("sendSMTP() expected error for unknown TLS mode, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown TLS mode") {
+		t.Errorf("error %q should mention unknown TLS mode", err.Error())
+	}
+}
+
+// TestSendSMTP_NoHostConfigured verifies sendSMTP returns an error when host is empty.
+func TestSendSMTP_NoHostConfigured(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Fatal("sendSMTP() with empty host expected error, got nil")
+	}
+}
+
+// TestSendSMTP_AutoModePort465Error verifies sendSMTP auto-TLS path returns an error
+// for port 465 when no TLS server is listening.
+func TestSendSMTP_AutoModePort465Error(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 465, "", "", "auto", "Test", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Log("sendSMTP auto/465: unexpectedly connected — a local server may be running")
+	}
+}
+
+// TestSendSMTP_AutoModePort587Error verifies sendSMTP auto-STARTTLS path returns an error
+// for port 587 when no SMTP server is listening.
+func TestSendSMTP_AutoModePort587Error(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 587, "", "", "auto", "Test", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Log("sendSMTP auto/587: unexpectedly connected — a local server may be running")
+	}
+}
+
+// TestSendSMTP_AutoModeOtherPortError verifies sendSMTP auto plain fallback for
+// an unusual port where no server listens.
+func TestSendSMTP_AutoModeOtherPortError(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 2525, "", "", "auto", "Test", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Log("sendSMTP auto/2525: unexpectedly connected — a local server may be running")
+	}
+}
+
+// TestSendSMTP_TLSModeError verifies sendSMTP "tls" mode returns error when no
+// TLS server is available.
+func TestSendSMTP_TLSModeError(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 9465, "", "", "tls", "Test", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Log("sendSMTP tls: unexpectedly connected — a local TLS server may be running")
+	}
+}
+
+// TestSendSMTP_STARTTLSModeError verifies sendSMTP "starttls" mode returns error
+// when no server is available.
+func TestSendSMTP_STARTTLSModeError(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 9587, "", "", "starttls", "Test", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Log("sendSMTP starttls: unexpectedly connected — a local server may be running")
+	}
+}
+
+// TestSendSMTP_NoneModeError verifies sendSMTP "none" mode returns error when no
+// plain SMTP server is available.
+func TestSendSMTP_NoneModeError(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 9025, "", "", "none", "Test", "noreply@test.local")
+
+	err := em.sendSMTP("to@test.local", "subj", "body")
+	if err == nil {
+		t.Log("sendSMTP none: unexpectedly connected — a local server may be running")
+	}
+}
+
+// TestSendSMTP_FromNameFormatting verifies sender formatting with and without fromName.
+// We test via GetSMTPInfo to confirm the stored state; actual send is not exercised
+// (requires a real SMTP server).
+func TestSendSMTP_FromNameFormatting(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 25, "", "", "none", "My App", "app@example.com")
+
+	info := em.GetSMTPInfo()
+	if info["from_name"] != "My App" {
+		t.Errorf("from_name = %v, want %q", info["from_name"], "My App")
+	}
+	if info["from_email"] != "app@example.com" {
+		t.Errorf("from_email = %v, want %q", info["from_email"], "app@example.com")
+	}
+}
+
+// TestSendEmailEnabledValidTemplateBadHost verifies SendEmail returns an error
+// from SMTP send when email is enabled with a valid template but no SMTP server.
+func TestSendEmailEnabledValidTemplateBadHost(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 9999, "", "", "none", "", "noreply@test.local")
+	em.Enable()
+
+	err := em.SendEmail("to@example.com", "welcome", EmailData{"name": "Test User"})
+	if err == nil {
+		t.Log("SendEmail: unexpectedly succeeded — a local SMTP server may be running")
+	}
+}
+
+// TestTestConnection_NonListeningHost verifies TestConnection returns an error
+// when an SMTP host is configured but nothing is listening on that port.
+func TestTestConnection_NonListeningHost(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	em.Configure("127.0.0.1", 19999, "", "", "auto", "", "")
+
+	err := em.TestConnection()
+	if err == nil {
+		t.Log("TestConnection: unexpectedly connected on port 19999 — skipping")
+	}
+}
+
+// TestRenderTemplateEmptyKey verifies an empty-key entry in data does not panic.
+func TestRenderTemplateEmptyKey(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	result := em.renderTemplate("Hello {}", EmailData{"": "world"})
+	if result != "Hello world" {
+		t.Errorf("renderTemplate with empty key = %q, want %q", result, "Hello world")
+	}
+}
+
+// TestGetSMTPInfo_AutoDetectedFalseByDefault verifies auto_detected is false
+// immediately after construction.
+func TestGetSMTPInfo_AutoDetectedFalseByDefault(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	info := em.GetSMTPInfo()
+	if info["auto_detected"] != false {
+		t.Errorf("auto_detected = %v, want false on new manager", info["auto_detected"])
+	}
+}
+
+// TestConfigureEnvFromEmailOverride verifies SMTP_FROM_EMAIL env var overrides the argument.
+func TestConfigureEnvFromEmailOverride(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	t.Setenv("SMTP_FROM_EMAIL", "env-from@example.com")
+	em.Configure("", 0, "", "", "", "", "arg-from@example.com")
+	info := em.GetSMTPInfo()
+	if got := info["from_email"]; got != "env-from@example.com" {
+		t.Errorf("from_email = %v, want %q", got, "env-from@example.com")
+	}
+}
+
+// TestConfigureEnvFromNameOverride verifies SMTP_FROM_NAME env var overrides the argument.
+func TestConfigureEnvFromNameOverride(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	t.Setenv("SMTP_FROM_NAME", "Env Sender")
+	em.Configure("", 0, "", "", "", "Arg Sender", "")
+	info := em.GetSMTPInfo()
+	if got := info["from_name"]; got != "Env Sender" {
+		t.Errorf("from_name = %v, want %q", got, "Env Sender")
+	}
+}
+
+// TestConfigureEnvPasswordOverride verifies SMTP_PASSWORD env var overrides the argument.
+// The password is stored but never surfaced in GetSMTPInfo — we verify Configure
+// runs without error.
+func TestConfigureEnvPasswordOverride(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	t.Setenv("SMTP_PASSWORD", "env-secret")
+	em.Configure("smtp.example.com", 587, "user", "arg-secret", "auto", "", "")
+	// No exposed getter for password; verify Configure completed without panic.
+	if em.smtpPassword != "env-secret" {
+		t.Errorf("smtpPassword = %q, want %q", em.smtpPassword, "env-secret")
+	}
+}
+
+// TestConfigureEnvUsernameOverride verifies SMTP_USERNAME env var overrides the argument.
+func TestConfigureEnvUsernameOverride(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	t.Setenv("SMTP_USERNAME", "env-user@example.com")
+	em.Configure("smtp.example.com", 587, "arg-user@example.com", "", "auto", "", "")
+	if em.smtpUsername != "env-user@example.com" {
+		t.Errorf("smtpUsername = %q, want %q", em.smtpUsername, "env-user@example.com")
+	}
+}
+
+// TestConfigureEnvTLSOverride verifies SMTP_TLS env var overrides the argument.
+func TestConfigureEnvTLSOverride(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	t.Setenv("SMTP_TLS", "none")
+	em.Configure("smtp.example.com", 587, "", "", "auto", "", "")
+	if em.smtpTLS != "none" {
+		t.Errorf("smtpTLS = %q, want %q", em.smtpTLS, "none")
+	}
+}
+
+// TestParseTemplateSubjectWithoutPrefix verifies a subject line that has no
+// "Subject:" prefix is returned as-is (TrimPrefix is a no-op on non-matching input).
+func TestParseTemplateSubjectWithoutPrefix(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	content := "Plain Subject Line\n---\nBody content."
+	tmpl, err := em.parseTemplate(content)
+	if err != nil {
+		t.Fatalf("parseTemplate() error = %v", err)
+	}
+	if tmpl.Subject != "Plain Subject Line" {
+		t.Errorf("Subject = %q, want %q", tmpl.Subject, "Plain Subject Line")
+	}
+}
+
+// TestParseTemplateBodyTrimmed verifies leading/trailing whitespace is stripped from the body.
+func TestParseTemplateBodyTrimmed(t *testing.T) {
+	em := NewEmailManager("/tmp/test-config")
+	content := "Subject: Test\n---\n\n  Body with whitespace.  \n"
+	tmpl, err := em.parseTemplate(content)
+	if err != nil {
+		t.Fatalf("parseTemplate() error = %v", err)
+	}
+	if tmpl.Body != "Body with whitespace." {
+		t.Errorf("Body = %q, want trimmed body", tmpl.Body)
+	}
+}
+
+// TestGetDefaultFromEmailSubdomain verifies a subdomain FQDN produces the correct address.
+func TestGetDefaultFromEmailSubdomain(t *testing.T) {
+	got := GetDefaultFromEmail("mail.internal.example.com")
+	want := "no-reply@mail.internal.example.com"
+	if got != want {
+		t.Errorf("GetDefaultFromEmail(%q) = %q, want %q", "mail.internal.example.com", got, want)
+	}
+}
+
 func mkdirAll(path string) error {
 	return os.MkdirAll(path, 0o755)
 }

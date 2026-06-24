@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -104,9 +105,11 @@ type StatsInfo struct {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response := s.buildHealthResponse()
 
-	// Content negotiation per AI.md PART 14 — text/plain clients (curl, wget)
-	// get the numbered text format; everyone else gets JSON.
-	if DetectClientType(r) == ClientTypeText {
+	// Content negotiation per AI.md PART 14:
+	// Only serve text/plain when the client explicitly requests it.
+	// Default (no Accept header, or unknown) → JSON.
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
 		s.renderHealthText(w, response)
 		return
 	}

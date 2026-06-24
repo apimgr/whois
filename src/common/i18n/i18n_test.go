@@ -109,6 +109,109 @@ func TestLoadAllLanguages(t *testing.T) {
 	}
 }
 
+// TestLocaleJSON verifies that LocaleJSON returns valid non-empty JSON for all
+// supported languages and returns an error for unsupported ones.
+func TestLocaleJSON(t *testing.T) {
+	for _, lang := range Supported {
+		data, err := LocaleJSON(lang)
+		if err != nil {
+			t.Errorf("LocaleJSON(%q) error: %v", lang, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("LocaleJSON(%q) returned empty bytes", lang)
+			continue
+		}
+		// Minimal check: first byte of a JSON object is '{'
+		if data[0] != '{' {
+			t.Errorf("LocaleJSON(%q) does not start with '{': %q", lang, string(data[:1]))
+		}
+	}
+}
+
+// TestLocaleJSONUnsupported verifies that LocaleJSON returns an error for
+// an unsupported language (the file does not exist in the embedded FS).
+func TestLocaleJSONUnsupported(t *testing.T) {
+	_, err := LocaleJSON("xx")
+	if err == nil {
+		t.Error("LocaleJSON(\"xx\") expected error for unsupported language, got nil")
+	}
+}
+
+// TestDir verifies the text-direction accessor for all supported languages.
+func TestDir(t *testing.T) {
+	cases := []struct {
+		lang string
+		want string
+	}{
+		// Arabic is the only RTL language in the supported set
+		{"ar", "rtl"},
+		// All others must be LTR
+		{"en", "ltr"},
+		{"es", "ltr"},
+		{"zh", "ltr"},
+		{"fr", "ltr"},
+		{"de", "ltr"},
+		{"ja", "ltr"},
+		// Unknown languages fall through to LTR
+		{"xx", "ltr"},
+		{"", "ltr"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.lang, func(t *testing.T) {
+			got := Dir(tc.lang)
+			if got != tc.want {
+				t.Errorf("Dir(%q) = %q, want %q", tc.lang, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTranslatorT_FallbackToEnglish verifies that when a non-English translator
+// does not have a key but the English locale does, the English value is returned.
+func TestTranslatorT_FallbackToEnglish(t *testing.T) {
+	// Load a non-English language — all keys in "en" must be present in
+	// every supported locale per spec, so we fabricate a scenario by looking
+	// up a key that exists in English. If the non-English locale also has it
+	// the result is still correct (it returns that locale's value). We verify
+	// the invariant: T never returns an empty string for known keys.
+	tr, err := Load("es")
+	if err != nil {
+		t.Fatalf("Load(\"es\") error: %v", err)
+	}
+
+	// "common.save" must exist in both es and en; result must be non-empty
+	got := tr.T("common.save")
+	if got == "" {
+		t.Error("T(\"common.save\") on Spanish translator returned empty string")
+	}
+
+	// A missing key on a non-English translator must fall back to English,
+	// and if not found there either, must return the key itself.
+	key := "totally.nonexistent.key.xyz"
+	got = tr.T(key)
+	if got != key {
+		t.Errorf("T(%q) = %q, want the key itself as last resort", key, got)
+	}
+}
+
+// TestLookupKeyNestedMissing exercises the nested-miss branch in lookupKey
+// (where the top-level key exists but the value is not a nested map).
+func TestLookupKeyNestedMissing(t *testing.T) {
+	tr, err := Load("en")
+	if err != nil {
+		t.Fatalf("Load(\"en\") error: %v", err)
+	}
+
+	// "common.save" is a leaf string; asking for "common.save.extra" should
+	// fail to descend and return the key itself.
+	key := "common.save.extra"
+	got := tr.T(key)
+	if got != key {
+		t.Errorf("T(%q) = %q, want key itself for unreachable nested path", key, got)
+	}
+}
+
 func TestParseAcceptLanguage(t *testing.T) {
 	cases := []struct {
 		header string

@@ -521,6 +521,52 @@ func TestApplyRetentionPolicy_EncryptedFilesHandled(t *testing.T) {
 	}
 }
 
+// TestApplyRetentionPolicy_ShortFilenameSkipped verifies that filenames shorter
+// than 28 characters are skipped rather than causing a slice-bounds panic.
+func TestApplyRetentionPolicy_ShortFilenameSkipped(t *testing.T) {
+	dir := t.TempDir()
+	// A filename that matches the glob (*.tar.gz) but is too short for date parsing.
+	if err := os.WriteFile(filepath.Join(dir, "short.tar.gz"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Must complete without error or panic.
+	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2); err != nil {
+		t.Fatalf("ApplyRetentionPolicy with short filename: %v", err)
+	}
+}
+
+// TestApplyRetentionPolicy_YearlyRetention verifies that a January-1st backup
+// is kept when the yearly limit has not been reached.
+func TestApplyRetentionPolicy_YearlyRetention(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create one Jan-1 backup (qualifies for yearly keep) and several daily backups.
+	jan1 := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	jan1File := retentionFilename(jan1, ".tar.gz")
+	if err := os.WriteFile(filepath.Join(dir, jan1File), []byte("yearly"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create more regular backups than the keep limit so the policy has to decide.
+	for i := 1; i <= 10; i++ {
+		date := time.Date(2025, time.March, i, 0, 0, 0, 0, time.UTC)
+		name := retentionFilename(date, ".tar.gz")
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("daily"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// keepYearly=1 keeps the Jan 1 backup; keepMonthly=0, keepWeekly=0, keepDaily=2.
+	if err := ApplyRetentionPolicy(dir, 2, 0, 0, 1); err != nil {
+		t.Fatalf("ApplyRetentionPolicy yearly: %v", err)
+	}
+
+	// The January 1 backup must still exist.
+	if _, err := os.Stat(filepath.Join(dir, jan1File)); err != nil {
+		t.Errorf("Jan-1 yearly backup was deleted: %v", err)
+	}
+}
+
 // ---- CreateIncremental tests ----
 
 func TestCreateIncremental_Daily(t *testing.T) {
@@ -952,6 +998,338 @@ func TestRestore_EncryptedWrongPassword(t *testing.T) {
 	}
 	if err := Restore(opts); err == nil {
 		t.Fatal("expected error for wrong decryption password")
+	}
+}
+
+// ---- copyDir tests ----
+
+// TestCopyDir_BasicCopy verifies that copyDir duplicates all files and
+// subdirectories from source to destination.
+func TestCopyDir_BasicCopy(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	// Create nested structure in src.
+	if err := os.MkdirAll(filepath.Join(src, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "sub", "nested.txt"), []byte("nested"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyDir(src, dst); err != nil {
+		t.Fatalf("copyDir: %v", err)
+	}
+
+	// Verify all files were copied.
+	rootData, err := os.ReadFile(filepath.Join(dst, "root.txt"))
+	if err != nil {
+		t.Fatalf("root.txt missing: %v", err)
+	}
+	if string(rootData) != "root" {
+		t.Errorf("root.txt content = %q, want \"root\"", rootData)
+	}
+
+	nestedData, err := os.ReadFile(filepath.Join(dst, "sub", "nested.txt"))
+	if err != nil {
+		t.Fatalf("sub/nested.txt missing: %v", err)
+	}
+	if string(nestedData) != "nested" {
+		t.Errorf("sub/nested.txt content = %q, want \"nested\"", nestedData)
+	}
+}
+
+// TestCopyDir_EmptyDirectory verifies copyDir handles an empty source gracefully.
+func TestCopyDir_EmptyDirectory(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	if err := copyDir(src, dst); err != nil {
+		t.Fatalf("copyDir on empty dir: %v", err)
+	}
+}
+
+// TestCopyDir_MissingSource verifies copyDir returns an error for a non-existent source.
+func TestCopyDir_MissingSource(t *testing.T) {
+	err := copyDir("/no/such/source/dir", t.TempDir())
+	if err == nil {
+		t.Fatal("copyDir with missing source expected error, got nil")
+	}
+}
+
+// ---- copyFile tests ----
+
+// TestCopyFile_BasicCopy verifies file content and mode are preserved.
+func TestCopyFile_BasicCopy(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "dst.txt")
+
+	if err := os.WriteFile(src, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile: %v", err)
+	}
+
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("read dst: %v", err)
+	}
+	if string(got) != "hello" {
+		t.Errorf("copyFile content = %q, want \"hello\"", got)
+	}
+}
+
+// TestCopyFile_CreatesParentDir verifies copyFile creates missing parent directories.
+func TestCopyFile_CreatesParentDir(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "deep", "nested", "dst.txt")
+
+	if err := os.WriteFile(src, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile into deep path: %v", err)
+	}
+
+	if _, err := os.Stat(dst); err != nil {
+		t.Fatalf("dst file missing: %v", err)
+	}
+}
+
+// TestCopyFile_MissingSource verifies copyFile returns an error for a missing source.
+func TestCopyFile_MissingSource(t *testing.T) {
+	err := copyFile("/no/such/file.txt", filepath.Join(t.TempDir(), "dst.txt"))
+	if err == nil {
+		t.Fatal("copyFile with missing source expected error, got nil")
+	}
+}
+
+// ---- Restore with optional directories tests ----
+
+// TestRestore_WithTemplatesAndThemes verifies that a backup containing template
+// and theme directories is fully restored.
+func TestRestore_WithTemplatesAndThemes(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	makeFixtures(t, configDir, dataDir)
+
+	// Add template and theme directories.
+	for _, sub := range []string{"template", "theme"} {
+		subDir := filepath.Join(configDir, sub)
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("content"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	outFile := filepath.Join(dir, "backup.tar.gz")
+	if err := Create(&BackupOptions{
+		ConfigDir:  configDir,
+		DataDir:    dataDir,
+		OutputFile: outFile,
+		AdminUser:  "test",
+		AppVersion: "1.0.0",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	restoreDir := t.TempDir()
+	configOut := filepath.Join(restoreDir, "config")
+	dataOut := filepath.Join(restoreDir, "data")
+
+	if err := Restore(&RestoreOptions{
+		BackupFile: outFile,
+		ConfigDir:  configOut,
+		DataDir:    dataOut,
+		Force:      true,
+	}); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	// Verify template and theme directories were restored.
+	for _, sub := range []string{"template", "theme"} {
+		path := filepath.Join(configOut, sub, "file.txt")
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s/file.txt not restored: %v", sub, err)
+		}
+	}
+}
+
+// TestRestore_WithSSLAndData verifies restore of SSL and data directories.
+func TestRestore_WithSSLAndData(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	makeFixtures(t, configDir, dataDir)
+
+	// Add ssl and extra data file.
+	sslDir := filepath.Join(configDir, "ssl")
+	if err := os.MkdirAll(sslDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sslDir, "cert.pem"), []byte("CERT"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "extra.json"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	outFile := filepath.Join(dir, "backup.tar.gz")
+	if err := Create(&BackupOptions{
+		ConfigDir:   configDir,
+		DataDir:     dataDir,
+		OutputFile:  outFile,
+		IncludeSSL:  true,
+		IncludeData: true,
+		AdminUser:   "test",
+		AppVersion:  "1.0.0",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	restoreDir := t.TempDir()
+	configOut := filepath.Join(restoreDir, "config")
+	dataOut := filepath.Join(restoreDir, "data")
+
+	if err := Restore(&RestoreOptions{
+		BackupFile: outFile,
+		ConfigDir:  configOut,
+		DataDir:    dataOut,
+		Force:      true,
+	}); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	// SSL cert should be restored.
+	if _, err := os.Stat(filepath.Join(configOut, "ssl", "cert.pem")); err != nil {
+		t.Errorf("ssl/cert.pem not restored: %v", err)
+	}
+}
+
+// TestRestore_UsersDB verifies that users.db is restored when present in the backup.
+func TestRestore_UsersDB(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	makeFixtures(t, configDir, dataDir)
+
+	// Also create users.db with a valid SQLite header.
+	if err := os.WriteFile(filepath.Join(dataDir, "users.db"), sqliteHeader(), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	outFile := filepath.Join(dir, "backup.tar.gz")
+	if err := Create(&BackupOptions{
+		ConfigDir:  configDir,
+		DataDir:    dataDir,
+		OutputFile: outFile,
+		AdminUser:  "test",
+		AppVersion: "1.0.0",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	restoreDir := t.TempDir()
+	configOut := filepath.Join(restoreDir, "config")
+	dataOut := filepath.Join(restoreDir, "data")
+
+	if err := Restore(&RestoreOptions{
+		BackupFile: outFile,
+		ConfigDir:  configOut,
+		DataDir:    dataOut,
+		Force:      true,
+	}); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dataOut, "users.db")); err != nil {
+		t.Errorf("users.db not restored: %v", err)
+	}
+}
+
+// TestAddFileToTar verifies that addFileToTar writes both header and content
+// to the tar writer correctly.
+func TestAddFileToTar(t *testing.T) {
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+
+	data := []byte("test file content")
+	if err := addFileToTar(tw, "test.txt", data); err != nil {
+		t.Fatalf("addFileToTar: %v", err)
+	}
+
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Extract and verify the written file.
+	dest := t.TempDir()
+	if err := extractTarGz(buf.Bytes(), dest); err != nil {
+		t.Fatalf("extractTarGz: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "test.txt"))
+	if err != nil {
+		t.Fatalf("read extracted file: %v", err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Errorf("addFileToTar content = %q, want %q", got, data)
+	}
+}
+
+// ---- verifyBackupIntegrity tests ----
+
+// TestVerifyBackupIntegrity_Valid verifies that a freshly created backup
+// passes the integrity check.
+func TestVerifyBackupIntegrity_Valid(t *testing.T) {
+	_, _, backupFile := makePlainBackup(t)
+	data, err := os.ReadFile(backupFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyBackupIntegrity(data); err != nil {
+		t.Fatalf("verifyBackupIntegrity: %v", err)
+	}
+}
+
+// TestVerifyBackupIntegrity_Corrupt verifies that corrupted archive data
+// returns an error.
+func TestVerifyBackupIntegrity_Corrupt(t *testing.T) {
+	err := verifyBackupIntegrity([]byte("not-a-gzip"))
+	if err == nil {
+		t.Fatal("expected error for corrupt data")
 	}
 }
 
