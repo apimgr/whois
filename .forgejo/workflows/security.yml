@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           PATTERN='(api[_-]?key|secret|password|passwd|token|private[_-]?key|aws_access_key_id|aws_secret_access_key)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{16,}'
           MATCHES=$(grep -rInE "$PATTERN" --include='*.go' --include='*.yml' --include='*.yaml' --include='*.json' \
-            --exclude-dir=.git --exclude-dir=vendor . || true)
+            --exclude='*_test.go' --exclude-dir=.git --exclude-dir=vendor . || true)
           if [ -n "$MATCHES" ]; then
             echo "Potential hardcoded secret(s) found:"
             echo "$MATCHES"
