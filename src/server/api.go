@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	appdata "github.com/casapps/caswhois/src/data"
+	appdata "github.com/apimgr/whois/src/data"
 )
 
 // ServerInfo represents a WHOIS server entry (AI.md PART 7 — application data from src/data/).

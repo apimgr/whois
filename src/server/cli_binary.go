@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casapps/caswhois/src/common/i18n"
+	"github.com/apimgr/whois/src/common/i18n"
 )
 
 // handleCLIBinaryDownload serves prebuilt caswhois-cli binaries.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casapps/caswhois/src/cache"
-	"github.com/casapps/caswhois/src/whois/parser"
+	"github.com/apimgr/whois/src/cache"
+	"github.com/apimgr/whois/src/whois/parser"
 )
 
 // WHOISQueryType represents the type of WHOIS query

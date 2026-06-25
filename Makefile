@@ -1,6 +1,6 @@
 # Frozen project identity (set at creation from IDEA.md - never changes even if git remote changes)
 INTERNAL_NAME := caswhois
-PROJECTORG    := casapps
+PROJECTORG    := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename $$(dirname $$(pwd)))
 
 # Infer PROJECTNAME from git remote or directory path (NEVER hardcode)
 PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")

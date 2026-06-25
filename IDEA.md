@@ -7,14 +7,14 @@ Target users include system administrators, network engineers, security research
 ## Project variables
 
 project_name:      caswhois
-project_org:       casapps
+project_org:       apimgr
 internal_name:     caswhois
 app_name:          caswhois
 binary:            caswhois
 binary_cli:        caswhois-cli
-module:            github.com/casapps/caswhois
+module:            github.com/apimgr/whois
 api_version:       v1
-official_site:     https://caswhois.casapps.dev
+official_site:     https://caswhois.apimgr.dev
 maintainer_name:   CasJay
 maintainer_email:  casjay@yahoo.com
 

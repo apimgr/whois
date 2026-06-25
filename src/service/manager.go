@@ -231,7 +231,7 @@ func (sm *ServiceManager) isSystemServiceInstalled() bool {
 		}
 	case "darwin":
 		// Check launchd
-		if _, err := os.Stat("/Library/LaunchDaemons/casapps." + sm.Name + ".plist"); err == nil {
+		if _, err := os.Stat("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist"); err == nil {
 			return true
 		}
 	case "freebsd", "openbsd", "netbsd":

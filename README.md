@@ -1,8 +1,8 @@
 # caswhois
 
-[![Security](https://github.com/casapps/caswhois/actions/workflows/security.yml/badge.svg)](https://github.com/casapps/caswhois/actions/workflows/security.yml)
-[![Release](https://img.shields.io/github/v/release/casapps/caswhois)](https://github.com/casapps/caswhois/releases)
-[![License](https://img.shields.io/github/license/casapps/caswhois)](LICENSE.md)
+[![Security](https://github.com/apimgr/whois/actions/workflows/security.yml/badge.svg)](https://github.com/apimgr/whois/actions/workflows/security.yml)
+[![Release](https://img.shields.io/github/v/release/apimgr/caswhois)](https://github.com/apimgr/whois/releases)
+[![License](https://img.shields.io/github/license/apimgr/caswhois)](LICENSE.md)
 
 A comprehensive WHOIS lookup service that provides detailed information about domain names, IP addresses, and ASN (Autonomous System Numbers). Features both REST API endpoints and a web interface with intelligent caching and rate limiting.
 
@@ -32,9 +32,9 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 
 ## Official Site
 
-- Website: https://caswhois.casapps.dev
+- Website: https://caswhois.apimgr.dev
 - Documentation: https://caswhois.readthedocs.io
-- Source: https://github.com/casapps/caswhois
+- Source: https://github.com/apimgr/whois
 
 ---
 
@@ -69,7 +69,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 mkdir -p /tmp/caswhois-deploy && cd /tmp/caswhois-deploy
 
 # Download docker-compose.yml
-curl -q -LSsf -O https://raw.githubusercontent.com/casapps/caswhois/main/docker/docker-compose.yml
+curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/caswhois/main/docker/docker-compose.yml
 
 # Start the service
 docker-compose up -d
@@ -83,7 +83,7 @@ Access the service at `http://localhost:64580`
 **Production Setup:**
 ```bash
 # Clone repository
-git clone https://github.com/casapps/caswhois.git
+git clone https://github.com/apimgr/whois.git
 cd caswhois/docker
 
 # Edit docker-compose.yml (set timezone, ports, etc.)
@@ -104,8 +104,8 @@ docker-compose down
 **Download:**
 ```bash
 # Download latest release
-VERSION=$(curl -s https://api.github.com/repos/casapps/caswhois/releases/latest | grep tag_name | cut -d '"' -f 4)
-wget https://github.com/casapps/caswhois/releases/download/${VERSION}/caswhois-linux-amd64
+VERSION=$(curl -s https://api.github.com/repos/apimgr/caswhois/releases/latest | grep tag_name | cut -d '"' -f 4)
+wget https://github.com/apimgr/whois/releases/download/${VERSION}/caswhois-linux-amd64
 
 # Make executable
 chmod +x caswhois-linux-amd64
@@ -151,8 +151,8 @@ The client binary (`caswhois-cli`) provides CLI/TUI/GUI interfaces:
 **Installation:**
 ```bash
 # Download client
-VERSION=$(curl -s https://api.github.com/repos/casapps/caswhois/releases/latest | grep tag_name | cut -d '"' -f 4)
-wget https://github.com/casapps/caswhois/releases/download/${VERSION}/caswhois-cli-linux-amd64
+VERSION=$(curl -s https://api.github.com/repos/apimgr/caswhois/releases/latest | grep tag_name | cut -d '"' -f 4)
+wget https://github.com/apimgr/whois/releases/download/${VERSION}/caswhois-cli-linux-amd64
 
 # Make executable
 chmod +x caswhois-cli-linux-amd64
@@ -180,7 +180,7 @@ caswhois-cli --gui
 
 ## Configuration
 
-Configuration file: `/etc/casapps/caswhois/server.yml`
+Configuration file: `/etc/apimgr/caswhois/server.yml`
 
 All settings live in `server.yml`. There is no admin web UI; the operator edits the
 file and the server hot-reloads safe changes (a restart is required only for listen
@@ -198,7 +198,7 @@ server:
     burst: 10
   database:
     driver: sqlite
-    path: /var/lib/casapps/caswhois/db/caswhois.db
+    path: /var/lib/apimgr/caswhois/db/caswhois.db
   cache:
     type: memory
     ttl:
@@ -336,7 +336,7 @@ caswhois --update branch beta
 **Quick Build:**
 ```bash
 # Clone repository
-git clone https://github.com/casapps/caswhois.git
+git clone https://github.com/apimgr/whois.git
 cd caswhois
 
 # Quick development build (to temp directory)

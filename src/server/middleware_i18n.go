@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/casapps/caswhois/src/common/i18n"
+	"github.com/apimgr/whois/src/common/i18n"
 )
 
 type contextKey string

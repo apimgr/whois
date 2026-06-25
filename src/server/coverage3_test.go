@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casapps/caswhois/src/cache"
-	"github.com/casapps/caswhois/src/metrics"
-	"github.com/casapps/caswhois/src/ratelimit"
-	"github.com/casapps/caswhois/src/scheduler"
-	castor "github.com/casapps/caswhois/src/tor"
-	"github.com/casapps/caswhois/src/whois/parser"
-	"github.com/casapps/caswhois/src/whois/records"
+	"github.com/apimgr/whois/src/cache"
+	"github.com/apimgr/whois/src/metrics"
+	"github.com/apimgr/whois/src/ratelimit"
+	"github.com/apimgr/whois/src/scheduler"
+	castor "github.com/apimgr/whois/src/tor"
+	"github.com/apimgr/whois/src/whois/parser"
+	"github.com/apimgr/whois/src/whois/records"
 )
 
 // --- debug.go: registerDebugRoutes ---
@@ -407,8 +407,8 @@ func TestGetPIDFilePathContainsProjectName(t *testing.T) {
 	if !strings.Contains(path, "caswhois") {
 		t.Errorf("getPIDFilePath() = %q, expected to contain 'caswhois'", path)
 	}
-	if !strings.Contains(path, "casapps") {
-		t.Errorf("getPIDFilePath() = %q, expected to contain 'casapps'", path)
+	if !strings.Contains(path, "apimgr") {
+		t.Errorf("getPIDFilePath() = %q, expected to contain 'apimgr'", path)
 	}
 }
 

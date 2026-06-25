@@ -729,17 +729,17 @@ func (c *ServerConfig) GetDatabaseDir() string {
 		return filepath.Join(c.DataDir, "db")
 	}
 
-	// 5. Root native: /var/lib/casapps/caswhois/db (AI.md PART 4)
+	// 5. Root native: /var/lib/apimgr/caswhois/db (AI.md PART 4)
 	if os.Getuid() == 0 {
-		return "/var/lib/casapps/caswhois/db"
+		return "/var/lib/apimgr/caswhois/db"
 	}
 
-	// 6. User native: ~/.local/share/casapps/caswhois/db (AI.md PART 4)
+	// 6. User native: ~/.local/share/apimgr/caswhois/db (AI.md PART 4)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./db"
 	}
-	return filepath.Join(home, ".local", "share", "casapps", "caswhois", "db")
+	return filepath.Join(home, ".local", "share", "apimgr", "caswhois", "db")
 }
 
 // GetBackupDir returns the backup directory per AI.md PART 4.
@@ -755,17 +755,17 @@ func (c *ServerConfig) GetBackupDir() string {
 		return "/data/backups/caswhois"
 	}
 
-	// 3. Root native: /mnt/Backups/casapps/caswhois (AI.md PART 4)
+	// 3. Root native: /mnt/Backups/apimgr/caswhois (AI.md PART 4)
 	if os.Getuid() == 0 {
-		return "/mnt/Backups/casapps/caswhois"
+		return "/mnt/Backups/apimgr/caswhois"
 	}
 
-	// 4. User native: ~/.local/share/Backups/casapps/caswhois (AI.md PART 4)
+	// 4. User native: ~/.local/share/Backups/apimgr/caswhois (AI.md PART 4)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./backups"
 	}
-	return filepath.Join(home, ".local", "share", "Backups", "casapps", "caswhois")
+	return filepath.Join(home, ".local", "share", "Backups", "apimgr", "caswhois")
 }
 
 // GetLogDir returns the log directory per AI.md PART 4.
@@ -781,17 +781,17 @@ func (c *ServerConfig) GetLogDir() string {
 		return "/data/log/caswhois"
 	}
 
-	// 3. Root native: /var/log/casapps/caswhois (AI.md PART 4)
+	// 3. Root native: /var/log/apimgr/caswhois (AI.md PART 4)
 	if os.Getuid() == 0 {
-		return "/var/log/casapps/caswhois"
+		return "/var/log/apimgr/caswhois"
 	}
 
-	// 4. User native: ~/.local/log/casapps/caswhois (AI.md PART 4)
+	// 4. User native: ~/.local/log/apimgr/caswhois (AI.md PART 4)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./logs"
 	}
-	return filepath.Join(home, ".local", "log", "casapps", "caswhois")
+	return filepath.Join(home, ".local", "log", "apimgr", "caswhois")
 }
 
 // GetDatabaseConfig returns database configuration from environment and config

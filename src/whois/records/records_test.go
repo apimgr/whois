@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casapps/caswhois/src/whois/parser"
+	"github.com/apimgr/whois/src/whois/parser"
 	_ "modernc.org/sqlite"
 )
 

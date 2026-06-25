@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casapps/caswhois/src/backup"
-	"github.com/casapps/caswhois/src/config"
-	"github.com/casapps/caswhois/src/update"
+	"github.com/apimgr/whois/src/backup"
+	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/update"
 )
 
 // checkStatus queries the running server's health endpoint
@@ -124,24 +124,24 @@ func getConfigDir(configDir string) string {
 
 	// Check if running as root
 	if os.Geteuid() == 0 {
-		return "/etc/casapps/caswhois"
+		return "/etc/apimgr/caswhois"
 	}
 
 	// User mode
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".config", "casapps", "caswhois")
+	return filepath.Join(homeDir, ".config", "apimgr", "caswhois")
 }
 
 // getDataDir returns the data directory
 func getDataDir(configDir string) string {
 	// Check if running as root
 	if os.Geteuid() == 0 {
-		return "/var/lib/casapps/caswhois"
+		return "/var/lib/apimgr/caswhois"
 	}
 
 	// User mode
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".local", "share", "casapps", "caswhois")
+	return filepath.Join(homeDir, ".local", "share", "apimgr", "caswhois")
 }
 
 // handleMaintenance processes --maintenance commands (PART 22)

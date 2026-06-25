@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casapps/caswhois/src/client/config"
-	"github.com/casapps/caswhois/src/client/lookup"
+	"github.com/apimgr/whois/src/client/config"
+	"github.com/apimgr/whois/src/client/lookup"
 )
 
 func TestResolveColor_Always(t *testing.T) {

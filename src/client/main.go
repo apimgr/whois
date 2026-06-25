@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casapps/caswhois/src/client/config"
-	"github.com/casapps/caswhois/src/client/display"
-	"github.com/casapps/caswhois/src/client/lookup"
-	"github.com/casapps/caswhois/src/client/setup"
-	"github.com/casapps/caswhois/src/client/tui"
-	"github.com/casapps/caswhois/src/common/i18n"
-	"github.com/casapps/caswhois/src/update"
+	"github.com/apimgr/whois/src/client/config"
+	"github.com/apimgr/whois/src/client/display"
+	"github.com/apimgr/whois/src/client/lookup"
+	"github.com/apimgr/whois/src/client/setup"
+	"github.com/apimgr/whois/src/client/tui"
+	"github.com/apimgr/whois/src/common/i18n"
+	"github.com/apimgr/whois/src/update"
 )
 
 // Build info — set via -ldflags at build time

@@ -10,7 +10,7 @@ docker run -d \
   -p 64580:64580 \
   -v ./config:/config \
   -v ./data:/data \
-  ghcr.io/casapps/caswhois:latest
+  ghcr.io/apimgr/caswhois:latest
 ```
 
 ### Binary Installation
@@ -19,12 +19,12 @@ Download the latest release for your platform:
 
 ```bash
 # Linux (amd64)
-wget https://github.com/casapps/caswhois/releases/latest/download/caswhois-linux-amd64
+wget https://github.com/apimgr/whois/releases/latest/download/caswhois-linux-amd64
 chmod +x caswhois-linux-amd64
 sudo mv caswhois-linux-amd64 /usr/local/bin/caswhois
 
 # macOS (arm64)
-wget https://github.com/casapps/caswhois/releases/latest/download/caswhois-darwin-arm64
+wget https://github.com/apimgr/whois/releases/latest/download/caswhois-darwin-arm64
 chmod +x caswhois-darwin-arm64
 sudo mv caswhois-darwin-arm64 /usr/local/bin/caswhois
 
@@ -77,7 +77,7 @@ sudo systemctl start caswhois
 
 ```bash
 sudo caswhois --service install
-sudo launchctl load /Library/LaunchDaemons/org.casapps.caswhois.plist
+sudo launchctl load /Library/LaunchDaemons/org.apimgr.caswhois.plist
 ```
 
 ### Windows (Windows Service)
@@ -97,7 +97,7 @@ version: '3.8'
 
 services:
   caswhois:
-    image: ghcr.io/casapps/caswhois:latest
+    image: ghcr.io/apimgr/caswhois:latest
     container_name: caswhois
     ports:
       - "64580:64580"
@@ -114,7 +114,7 @@ version: '3.8'
 
 services:
   caswhois:
-    image: ghcr.io/casapps/caswhois:latest-aio
+    image: ghcr.io/apimgr/caswhois:latest-aio
     container_name: caswhois-aio
     ports:
       - "64580:64580"
@@ -130,7 +130,7 @@ services:
 
 ```bash
 # Clone repository
-git clone https://github.com/casapps/caswhois.git
+git clone https://github.com/apimgr/whois.git
 cd caswhois
 
 # Build using Docker (via Makefile)
@@ -143,8 +143,8 @@ make build
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CASWHOIS_CONFIG` | Config directory | `/etc/casapps/caswhois` |
-| `CASWHOIS_DATA` | Data directory | `/var/lib/casapps/caswhois` |
+| `CASWHOIS_CONFIG` | Config directory | `/etc/apimgr/caswhois` |
+| `CASWHOIS_DATA` | Data directory | `/var/lib/apimgr/caswhois` |
 | `CASWHOIS_PORT` | Listen port | `64580` |
 | `CASWHOIS_ADDRESS` | Listen address | `0.0.0.0` |
 | `CASWHOIS_MODE` | Application mode | `production` |
@@ -169,7 +169,7 @@ curl http://localhost:64580/healthz
 caswhois --maintenance backup
 
 # Download new version
-wget https://github.com/casapps/caswhois/releases/latest/download/caswhois-linux-amd64
+wget https://github.com/apimgr/whois/releases/latest/download/caswhois-linux-amd64
 
 # Replace binary
 sudo systemctl stop caswhois

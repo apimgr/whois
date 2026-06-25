@@ -8,10 +8,10 @@ The server uses `server.yml` in the config directory.
 
 | OS | Config Path |
 |----|-------------|
-| Linux (root) | `/etc/casapps/caswhois/server.yml` |
-| Linux (user) | `~/.config/casapps/caswhois/server.yml` |
-| macOS | `~/Library/Application Support/casapps/caswhois/server.yml` |
-| Windows | `%APPDATA%\casapps\caswhois\server.yml` |
+| Linux (root) | `/etc/apimgr/caswhois/server.yml` |
+| Linux (user) | `~/.config/apimgr/caswhois/server.yml` |
+| macOS | `~/Library/Application Support/apimgr/caswhois/server.yml` |
+| Windows | `%APPDATA%\apimgr\caswhois\server.yml` |
 | Docker | `/config/server.yml` |
 
 ## Configuration Hierarchy
@@ -69,7 +69,7 @@ logging:
   level: info  # debug, info, warn, error
   format: json  # json, text
   output: stdout  # stdout, file
-  file: /var/log/casapps/caswhois/server.log
+  file: /var/log/apimgr/caswhois/server.log
 
 # Rate Limiting
 ratelimit:
@@ -340,7 +340,7 @@ journalctl -u caswhois | grep error
 Ensure config directory is writable:
 
 ```bash
-sudo chown -R caswhois:caswhois /etc/casapps/caswhois
+sudo chown -R caswhois:caswhois /etc/apimgr/caswhois
 ```
 
 ### Environment Variables Not Working

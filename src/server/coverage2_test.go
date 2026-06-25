@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casapps/caswhois/src/whois"
+	"github.com/apimgr/whois/src/whois"
 )
 
 // --- server.go: handleSecurityTxt, handleSitemap, handleRobotsTxt, parseDurationDefault, handleMetrics, getPIDFilePath ---

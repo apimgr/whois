@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/casapps/caswhois/src/common/i18n"
+	"github.com/apimgr/whois/src/common/i18n"
 )
 
 // translatablePageData embeds language and translation fields into page data structs.

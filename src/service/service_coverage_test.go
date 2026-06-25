@@ -33,6 +33,17 @@ func withCanEscalate(t *testing.T, escalate bool, f func()) {
 	f()
 }
 
+// withExecElevated temporarily replaces execElevatedFn with a no-op stub so
+// tests that reach ExecElevated do not actually invoke sudo (which would
+// re-execute the test binary and recurse).
+func withExecElevated(t *testing.T, f func()) {
+	t.Helper()
+	orig := execElevatedFn
+	execElevatedFn = func(_ []string) error { return nil }
+	defer func() { execElevatedFn = orig }()
+	f()
+}
+
 // withoutContainer temporarily replaces isContainerFn so that
 // detectServiceManagerImpl does not short-circuit on container detection.
 func withoutContainer(t *testing.T, f func()) {
@@ -558,7 +569,7 @@ func TestInstallRunit_ServiceDirPresent(t *testing.T) {
 	t.Cleanup(func() {
 		os.Remove(linkPath)
 		os.RemoveAll("/etc/sv/" + sm.Name)
-		os.RemoveAll("/var/log/casapps/" + sm.Name)
+		os.RemoveAll("/var/log/apimgr/" + sm.Name)
 	})
 
 	withManager(t, "runit", func() {
@@ -624,7 +635,7 @@ func TestUninstallLaunchd_UserAgentPath(t *testing.T) {
 	if err := os.MkdirAll(agentDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	plistPath := filepath.Join(agentDir, "casapps."+sm.Name+".plist")
+	plistPath := filepath.Join(agentDir, "io.github.apimgr."+sm.Name+".plist")
 	if err := os.WriteFile(plistPath, []byte("<?xml?>\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -762,7 +773,7 @@ func TestUninstallSystemd_SystemPath(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestUninstallLaunchd_SystemPath confirms that when
-// /Library/LaunchDaemons/casapps.<name>.plist exists, uninstallLaunchd exercises
+// /Library/LaunchDaemons/io.github.apimgr.<name>.plist exists, uninstallLaunchd exercises
 // the system-daemon branch (launchctl unload, os.Remove) before returning nil.
 func TestUninstallLaunchd_SystemPath(t *testing.T) {
 	if !IsElevated() {
@@ -776,7 +787,7 @@ func TestUninstallLaunchd_SystemPath(t *testing.T) {
 	if err := os.MkdirAll(systemDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	plistPath := filepath.Join(systemDir, "casapps."+sm.Name+".plist")
+	plistPath := filepath.Join(systemDir, "io.github.apimgr."+sm.Name+".plist")
 	if err := os.WriteFile(plistPath, []byte("<plist/>"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -959,7 +970,7 @@ func TestStart_Launchd_SystemPlist(t *testing.T) {
 	if err := os.MkdirAll(systemDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	plistPath := filepath.Join(systemDir, "casapps."+sm.Name+".plist")
+	plistPath := filepath.Join(systemDir, "io.github.apimgr."+sm.Name+".plist")
 	if err := os.WriteFile(plistPath, []byte("<plist/>"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -992,7 +1003,7 @@ func TestDisable_Launchd_SystemPlist(t *testing.T) {
 	if err := os.MkdirAll(systemDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	plistPath := filepath.Join(systemDir, "casapps."+sm.Name+".plist")
+	plistPath := filepath.Join(systemDir, "io.github.apimgr."+sm.Name+".plist")
 	if err := os.WriteFile(plistPath, []byte("<plist/>"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -1026,7 +1037,7 @@ func TestInstallLaunchd_WithDir(t *testing.T) {
 	if err := os.MkdirAll(systemDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	plistPath := filepath.Join(systemDir, "casapps."+sm.Name+".plist")
+	plistPath := filepath.Join(systemDir, "io.github.apimgr."+sm.Name+".plist")
 	t.Cleanup(func() {
 		os.Remove(plistPath)
 		os.Remove(systemDir)
@@ -1084,5 +1095,82 @@ func TestDetectServiceManagerImpl_RCSubr(t *testing.T) {
 func TestDefaultCanEscalate_Direct(t *testing.T) {
 	// Just invoke to cover statements; result is environment-dependent.
 	_ = defaultCanEscalate()
+}
+
+// ---------------------------------------------------------------------------
+// ExecElevated call-site coverage — accept paths in Install/Disable/Uninstall
+// ---------------------------------------------------------------------------
+
+// TestInstall_NotElevated_CanEscalate_Accept covers the return ExecElevated(os.Args)
+// stmt in Install() when the user accepts escalation (empty response = default yes).
+// execElevatedFn is stubbed to prevent recursive sudo re-execution.
+func TestInstall_NotElevated_CanEscalate_Accept(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-cov-inst-acc", "Test", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// Empty response accepts escalation (default yes).
+	pipeStdin(t, "\n")
+	withElevated(t, false, func() {
+		withCanEscalate(t, true, func() {
+			withExecElevated(t, func() {
+				_ = sm.Install()
+			})
+		})
+	})
+}
+
+// TestDisable_SystemService_NotElevated_CanEscalate_Accept covers the return
+// ExecElevated(os.Args) stmt in Disable() when the system service is installed
+// and the user accepts escalation.
+// execElevatedFn is stubbed to prevent recursive sudo re-execution.
+func TestDisable_SystemService_NotElevated_CanEscalate_Accept(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-cov-dis-acc", "Test", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// Create an /etc/sv/<name> dir so isSystemServiceInstalled() returns true.
+	svcDir := "/etc/sv/" + sm.Name
+	if err := os.MkdirAll(svcDir, 0755); err != nil {
+		t.Skipf("cannot create %s (not root?): %v", svcDir, err)
+	}
+	t.Cleanup(func() { os.RemoveAll(svcDir) })
+
+	// Empty response accepts escalation (default yes).
+	pipeStdin(t, "\n")
+	withElevated(t, false, func() {
+		withCanEscalate(t, true, func() {
+			withExecElevated(t, func() {
+				_ = sm.Disable()
+			})
+		})
+	})
+}
+
+// TestUninstall_YesPrompt_NotElevated_CanEscalate_Accept covers the return
+// ExecElevated(os.Args) stmt in Uninstall() when the user confirms the warning
+// and accepts escalation.
+// execElevatedFn is stubbed to prevent recursive sudo re-execution.
+func TestUninstall_YesPrompt_NotElevated_CanEscalate_Accept(t *testing.T) {
+	sm, err := NewServiceManager("caswhois-cov-uninst-acc", "Test", "desc")
+	if err != nil {
+		t.Fatalf("NewServiceManager: %v", err)
+	}
+	// Create an /etc/sv/<name> dir so isSystemServiceInstalled() returns true.
+	svcDir := "/etc/sv/" + sm.Name
+	if err := os.MkdirAll(svcDir, 0755); err != nil {
+		t.Skipf("cannot create %s (not root?): %v", svcDir, err)
+	}
+	t.Cleanup(func() { os.RemoveAll(svcDir) })
+
+	// "y\n" accepts the uninstall warning; "\n" (empty) accepts escalation.
+	pipeStdin(t, "y\n\n")
+	withElevated(t, false, func() {
+		withCanEscalate(t, true, func() {
+			withExecElevated(t, func() {
+				_ = sm.Uninstall()
+			})
+		})
+	})
 }
 

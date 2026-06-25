@@ -23,8 +23,8 @@ func TestGetConfigDir_WithExplicitDir(t *testing.T) {
 func TestGetConfigDir_Empty_Root(t *testing.T) {
 	if os.Geteuid() == 0 {
 		got := getConfigDir("")
-		if got != "/etc/casapps/caswhois" {
-			t.Errorf("getConfigDir() as root = %q, want /etc/casapps/caswhois", got)
+		if got != "/etc/apimgr/caswhois" {
+			t.Errorf("getConfigDir() as root = %q, want /etc/apimgr/caswhois", got)
 		}
 	} else {
 		got := getConfigDir("")
@@ -40,8 +40,8 @@ func TestGetConfigDir_Empty_Root(t *testing.T) {
 func TestGetDataDir_Root(t *testing.T) {
 	if os.Geteuid() == 0 {
 		got := getDataDir("")
-		if got != "/var/lib/casapps/caswhois" {
-			t.Errorf("getDataDir() as root = %q, want /var/lib/casapps/caswhois", got)
+		if got != "/var/lib/apimgr/caswhois" {
+			t.Errorf("getDataDir() as root = %q, want /var/lib/apimgr/caswhois", got)
 		}
 	} else {
 		got := getDataDir("")

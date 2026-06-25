@@ -10,7 +10,7 @@ services:
         VERSION: dev
         COMMIT_ID: dev
         BUILD_DATE: ${BUILD_DATE:-unknown}
-        OFFICIAL_SITE: https://github.com/casapps/caswhois
+        OFFICIAL_SITE: https://github.com/apimgr/whois
     container_name: caswhois-dev
     restart: unless-stopped
     

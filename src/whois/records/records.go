@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casapps/caswhois/src/whois/parser"
+	"github.com/apimgr/whois/src/whois/parser"
 )
 
 // Record represents one row in the whois_records table.

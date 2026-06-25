@@ -24,7 +24,7 @@ func TestConfigPathXDGConfigHome(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	got := ConfigPath()
-	want := filepath.Join(dir, "casapps", "caswhois", "cli.yml")
+	want := filepath.Join(dir, "apimgr", "caswhois", "cli.yml")
 	if got != want {
 		t.Errorf("ConfigPath() = %q, want %q", got, want)
 	}
@@ -43,7 +43,7 @@ func TestConfigPathXDGEmpty(t *testing.T) {
 	if err != nil {
 		t.Skipf("os.UserHomeDir() error: %v", err)
 	}
-	want := filepath.Join(home, ".config", "casapps", "caswhois", "cli.yml")
+	want := filepath.Join(home, ".config", "apimgr", "caswhois", "cli.yml")
 	if got != want {
 		t.Errorf("ConfigPath() with empty XDG_CONFIG_HOME = %q, want %q", got, want)
 	}
@@ -105,7 +105,7 @@ func TestLoadValidYAML(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	configDir := filepath.Join(dir, "casapps", "caswhois")
+	configDir := filepath.Join(dir, "apimgr", "caswhois")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestLoadEmptyFormatDefaultsToText(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	configDir := filepath.Join(dir, "casapps", "caswhois")
+	configDir := filepath.Join(dir, "apimgr", "caswhois")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestLoadInvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	configDir := filepath.Join(dir, "casapps", "caswhois")
+	configDir := filepath.Join(dir, "apimgr", "caswhois")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestLoadReadFileError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	configDir := filepath.Join(dir, "casapps", "caswhois")
+	configDir := filepath.Join(dir, "apimgr", "caswhois")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -303,8 +303,8 @@ func TestSaveMkdirAllError(t *testing.T) {
 
 	dir := t.TempDir()
 
-	// Place a regular file where the casapps/ directory must be created.
-	blockingFile := filepath.Join(dir, "casapps")
+	// Place a regular file where the apimgr/ directory must be created.
+	blockingFile := filepath.Join(dir, "apimgr")
 	if err := os.WriteFile(blockingFile, []byte("block"), 0644); err != nil {
 		t.Fatalf("WriteFile blocker: %v", err)
 	}

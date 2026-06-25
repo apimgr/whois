@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casapps/caswhois/src/client/lookup"
-	"github.com/casapps/caswhois/src/common/theme"
+	"github.com/apimgr/whois/src/client/lookup"
+	"github.com/apimgr/whois/src/common/theme"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

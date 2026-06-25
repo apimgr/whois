@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casapps/caswhois/src/client/config"
+	"github.com/apimgr/whois/src/client/config"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

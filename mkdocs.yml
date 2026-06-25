@@ -2,11 +2,11 @@
 
 site_name: caswhois
 site_description: WHOIS lookup service
-site_author: casapps
+site_author: apimgr
 site_url: https://caswhois.readthedocs.io
 
-repo_name: casapps/caswhois
-repo_url: https://github.com/casapps/caswhois
+repo_name: apimgr/caswhois
+repo_url: https://github.com/apimgr/whois
 edit_uri: edit/main/docs/
 
 theme:

@@ -406,7 +406,7 @@ func TestInstallRunit_AsRoot(t *testing.T) {
 	// Cleanup any leftover directories or files.
 	os.RemoveAll("/etc/sv/" + sm.Name)
 	os.Remove("/etc/service/" + sm.Name)
-	os.RemoveAll("/var/log/casapps/" + sm.Name)
+	os.RemoveAll("/var/log/apimgr/" + sm.Name)
 }
 
 // ---------------------------------------------------------------------------
@@ -420,14 +420,14 @@ func TestInstallLaunchd_PermissionDenied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServiceManager: %v", err)
 	}
-	// On Linux /Library/LaunchDaemons does not exist; MkdirAll /var/log/casapps/…
+	// On Linux /Library/LaunchDaemons does not exist; MkdirAll /var/log/apimgr/…
 	// will succeed (we're root in CI) but os.WriteFile to /Library/LaunchDaemons/
 	// will fail. Either log dir creation or plist write will error.
 	err = sm.installLaunchd()
 	if err == nil {
 		// Cleanup if it somehow succeeded.
-		os.RemoveAll("/Library/LaunchDaemons/casapps." + sm.Name + ".plist")
-		os.RemoveAll("/var/log/casapps/" + sm.Name)
+		os.RemoveAll("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist")
+		os.RemoveAll("/var/log/apimgr/" + sm.Name)
 		t.Log("installLaunchd() succeeded unexpectedly; cleaned up")
 	}
 }
@@ -447,7 +447,7 @@ func TestInstallLaunchdUser_CreatesDir(t *testing.T) {
 
 	home, _ := os.UserHomeDir()
 	agentDir := filepath.Join(home, "Library", "LaunchAgents")
-	plistPath := filepath.Join(agentDir, "casapps."+sm.Name+".plist")
+	plistPath := filepath.Join(agentDir, "io.github.apimgr."+sm.Name+".plist")
 
 	// Call; expect it to fail at launchctl (not on macOS).
 	_ = sm.installLaunchdUser()
@@ -1133,8 +1133,8 @@ func TestInstallSystemService_LaunchdManager(t *testing.T) {
 			t.Fatalf("NewServiceManager: %v", err)
 		}
 		_ = sm.installSystemService()
-		os.RemoveAll("/var/log/casapps/" + sm.Name)
-		os.Remove("/Library/LaunchDaemons/casapps." + sm.Name + ".plist")
+		os.RemoveAll("/var/log/apimgr/" + sm.Name)
+		os.Remove("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist")
 	})
 }
 
@@ -1178,7 +1178,7 @@ func TestInstallUserService_LaunchdManager(t *testing.T) {
 		}
 		_ = sm.installUserService()
 		home, _ := os.UserHomeDir()
-		os.Remove(filepath.Join(home, "Library", "LaunchAgents", "casapps."+sm.Name+".plist"))
+		os.Remove(filepath.Join(home, "Library", "LaunchAgents", "io.github.apimgr."+sm.Name+".plist"))
 	})
 }
 

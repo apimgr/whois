@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/casapps/caswhois/src/common/i18n"
+	"github.com/apimgr/whois/src/common/i18n"
 )
 
 // handleManifest serves /manifest.json for PWA support (AI.md PART 16).

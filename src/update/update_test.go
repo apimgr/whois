@@ -396,7 +396,7 @@ func buildChecksumContent(content []byte) (checksumLine string, hexHash string) 
 // TestGetLatestRelease_StableChannel drives the stable (single-object) decode path.
 func TestGetLatestRelease_StableChannel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Serve only the /repos/casapps/caswhois/releases/latest path
+		// Serve only the /repos/apimgr/whois/releases/latest path
 		if !strings.Contains(r.URL.Path, "releases/latest") {
 			http.NotFound(w, r)
 			return

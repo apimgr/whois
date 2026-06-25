@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casapps/caswhois/src/common/i18n"
-	"github.com/casapps/caswhois/src/whois"
+	"github.com/apimgr/whois/src/common/i18n"
+	"github.com/apimgr/whois/src/whois"
 )
 
 // newTranslatorFunc returns a T(key) function for template use, loaded from request context.

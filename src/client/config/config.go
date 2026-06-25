@@ -39,7 +39,7 @@ func ConfigPath() string {
 			base = filepath.Join(home, ".config")
 		}
 	}
-	return filepath.Join(base, "casapps", "caswhois", "cli.yml")
+	return filepath.Join(base, "apimgr", "caswhois", "cli.yml")
 }
 
 // Load reads the config file and returns a CLIConfig with defaults applied

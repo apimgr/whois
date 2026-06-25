@@ -32,7 +32,7 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT_ID=unknown
 ARG BUILD_DATE=unknown
-ARG OFFICIAL_SITE=https://github.com/casapps/caswhois
+ARG OFFICIAL_SITE=https://github.com/apimgr/whois
 
 # Build the binary (multi-arch via TARGETARCH per AI.md PART 26)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \

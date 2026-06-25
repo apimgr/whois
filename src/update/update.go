@@ -187,7 +187,7 @@ func SetUpdateChannel(channel UpdateChannel, configPath string) error {
 // getLatestRelease fetches latest release from GitHub API
 func getLatestRelease(channel UpdateChannel) (*Release, error) {
 	// GitHub API endpoint
-	apiURL := "https://api.github.com/repos/casapps/caswhois/releases"
+	apiURL := "https://api.github.com/repos/apimgr/whois/releases"
 
 	// Adjust endpoint based on channel
 	switch channel {

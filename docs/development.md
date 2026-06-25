@@ -14,7 +14,7 @@
 ### Clone Repository
 
 ```bash
-git clone https://github.com/casapps/caswhois.git
+git clone https://github.com/apimgr/whois.git
 cd caswhois
 ```
 
@@ -121,7 +121,7 @@ package whois_test
 
 import (
     "testing"
-    "github.com/casapps/caswhois/src/whois"
+    "github.com/apimgr/whois/src/whois"
 )
 
 func TestParseDomain(t *testing.T) {

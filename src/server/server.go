@@ -14,19 +14,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/casapps/caswhois/src/cache"
-	"github.com/casapps/caswhois/src/config"
-	"github.com/casapps/caswhois/src/db"
-	"github.com/casapps/caswhois/src/email"
-	"github.com/casapps/caswhois/src/geoip"
-	caslogger "github.com/casapps/caswhois/src/logger"
-	"github.com/casapps/caswhois/src/metrics"
-	"github.com/casapps/caswhois/src/ratelimit"
-	runtimeinfo "github.com/casapps/caswhois/src/runtime"
-	"github.com/casapps/caswhois/src/scheduler"
-	castor "github.com/casapps/caswhois/src/tor"
-	"github.com/casapps/caswhois/src/whois"
-	"github.com/casapps/caswhois/src/whois/records"
+	"github.com/apimgr/whois/src/cache"
+	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/db"
+	"github.com/apimgr/whois/src/email"
+	"github.com/apimgr/whois/src/geoip"
+	caslogger "github.com/apimgr/whois/src/logger"
+	"github.com/apimgr/whois/src/metrics"
+	"github.com/apimgr/whois/src/ratelimit"
+	runtimeinfo "github.com/apimgr/whois/src/runtime"
+	"github.com/apimgr/whois/src/scheduler"
+	castor "github.com/apimgr/whois/src/tor"
+	"github.com/apimgr/whois/src/whois"
+	"github.com/apimgr/whois/src/whois/records"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -565,11 +565,11 @@ func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getPIDFilePath() string {
 	// System-wide PID file when running as root.
 	if os.Geteuid() == 0 {
-		return "/var/run/casapps/caswhois.pid"
+		return "/var/run/apimgr/caswhois.pid"
 	}
 	// User-specific PID file otherwise.
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".local", "share", "casapps", "caswhois", "caswhois.pid")
+	return filepath.Join(homeDir, ".local", "share", "apimgr", "caswhois", "caswhois.pid")
 }
 
 

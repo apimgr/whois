@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casapps/caswhois/src/cache"
-	"github.com/casapps/caswhois/src/config"
-	"github.com/casapps/caswhois/src/db"
-	"github.com/casapps/caswhois/src/ratelimit"
-	"github.com/casapps/caswhois/src/scheduler"
+	"github.com/apimgr/whois/src/cache"
+	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/db"
+	"github.com/apimgr/whois/src/ratelimit"
+	"github.com/apimgr/whois/src/scheduler"
 )
 
 // newTestServer builds the minimal *Server needed for handler unit tests.

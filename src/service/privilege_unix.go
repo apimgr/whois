@@ -15,6 +15,9 @@ var isElevatedFn = defaultIsElevated
 // canEscalateFn is the escalation-check implementation; tests may replace it.
 var canEscalateFn = defaultCanEscalate
 
+// execElevatedFn is the privilege-escalation implementation; tests may replace it.
+var execElevatedFn = defaultExecElevated
+
 // defaultIsElevated returns true when the effective UID is 0 (Unix).
 func defaultIsElevated() bool {
 	return os.Geteuid() == 0
@@ -48,12 +51,17 @@ func CanEscalate() bool {
 	return canEscalateFn()
 }
 
-// ExecElevated re-executes with elevated privileges (Unix).
-func ExecElevated(args []string) error {
+// defaultExecElevated is the real privilege-escalation implementation.
+func defaultExecElevated(args []string) error {
 	sudoArgs := append([]string{args[0]}, args[1:]...)
 	cmd := exec.Command("sudo", sudoArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// ExecElevated re-executes with elevated privileges (Unix).
+func ExecElevated(args []string) error {
+	return execElevatedFn(args)
 }

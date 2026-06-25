@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/casapps/caswhois/src/config"
-	"github.com/casapps/caswhois/src/ratelimit"
+	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/ratelimit"
 )
 
 // URLNormalizeMiddleware normalizes URLs for consistent routing

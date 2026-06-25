@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casapps/caswhois/src/common/i18n"
-	"github.com/casapps/caswhois/src/whois"
-	"github.com/casapps/caswhois/src/whois/records"
-	"github.com/casapps/caswhois/src/whois/reverse"
+	"github.com/apimgr/whois/src/common/i18n"
+	"github.com/apimgr/whois/src/whois"
+	"github.com/apimgr/whois/src/whois/records"
+	"github.com/apimgr/whois/src/whois/reverse"
 )
 
 // handleWHOISDomainLookup handles domain-specific WHOIS lookups

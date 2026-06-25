@@ -13,5 +13,5 @@ var (
 	BuildDate = "unknown"
 
 	// OfficialSite is the project website URL
-	OfficialSite = "https://github.com/casapps/caswhois"
+	OfficialSite = "https://github.com/apimgr/whois"
 )

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casapps/caswhois/src/cache"
+	"github.com/apimgr/whois/src/cache"
 )
 
 // newTestCache creates a short-lived in-memory cache suitable for unit tests.

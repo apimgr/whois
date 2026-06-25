@@ -108,7 +108,7 @@ func (sm *ServiceManager) installSystemd() error {
 
 	content := fmt.Sprintf(`[Unit]
 Description=%s
-Documentation=https://casapps.github.io/%s
+Documentation=https://apimgr.github.io/%s
 After=network-online.target
 Wants=network-online.target
 
@@ -124,10 +124,10 @@ StandardError=journal
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/casapps/%s
-ReadWritePaths=/var/lib/casapps/%s
-ReadWritePaths=/var/cache/casapps/%s
-ReadWritePaths=/var/log/casapps/%s
+ReadWritePaths=/etc/apimgr/%s
+ReadWritePaths=/var/lib/apimgr/%s
+ReadWritePaths=/var/cache/apimgr/%s
+ReadWritePaths=/var/log/apimgr/%s
 
 [Install]
 WantedBy=multi-user.target
@@ -174,7 +174,7 @@ func (sm *ServiceManager) installSystemdUser() error {
 
 	content := fmt.Sprintf(`[Unit]
 Description=%s (user service)
-Documentation=https://casapps.github.io/%s
+Documentation=https://apimgr.github.io/%s
 
 [Service]
 Type=simple
@@ -221,10 +221,10 @@ description="%s"
 command="%s"
 command_args=""
 command_user="%s:%s"
-pidfile="/var/run/casapps/%s.pid"
+pidfile="/var/run/apimgr/%s.pid"
 command_background=true
-output_log="/var/log/casapps/%s/server.log"
-error_log="/var/log/casapps/%s/error.log"
+output_log="/var/log/apimgr/%s/server.log"
+error_log="/var/log/apimgr/%s/error.log"
 
 depend() {
     need net
@@ -233,8 +233,8 @@ depend() {
 }
 
 start_pre() {
-    checkpath -d -m 0755 -o %s:%s /var/run/casapps
-    checkpath -d -m 0755 -o %s:%s /var/log/casapps/%s
+    checkpath -d -m 0755 -o %s:%s /var/run/apimgr
+    checkpath -d -m 0755 -o %s:%s /var/log/apimgr/%s
 }
 `, sm.Name, sm.Name, sm.DisplayName, sm.BinaryPath,
 		sm.Name, sm.Name, sm.Name, sm.Name, sm.Name,
@@ -256,20 +256,20 @@ start_pre() {
 
 	fmt.Printf("Service installed and started: %s\n", sm.Name)
 	fmt.Printf("Status: rc-service %s status\n", sm.Name)
-	fmt.Printf("Logs: tail -f /var/log/casapps/%s/server.log\n", sm.Name)
+	fmt.Printf("Logs: tail -f /var/log/apimgr/%s/server.log\n", sm.Name)
 	return nil
 }
 
 // installLaunchd installs launchd system daemon (macOS)
 func (sm *ServiceManager) installLaunchd() error {
-	plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"
+	plistPath := "/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist"
 
 	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>casapps.%s</string>
+	<string>io.github.apimgr.%s</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>%s</string>
@@ -279,15 +279,15 @@ func (sm *ServiceManager) installLaunchd() error {
 	<key>KeepAlive</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>/var/log/casapps/%s/stdout.log</string>
+	<string>/var/log/apimgr/%s/stdout.log</string>
 	<key>StandardErrorPath</key>
-	<string>/var/log/casapps/%s/stderr.log</string>
+	<string>/var/log/apimgr/%s/stderr.log</string>
 </dict>
 </plist>
 `, sm.Name, sm.BinaryPath, sm.Name, sm.Name)
 
 	// Create log directory
-	logDir := "/var/log/casapps/" + sm.Name
+	logDir := "/var/log/apimgr/" + sm.Name
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return fmt.Errorf("creating log directory: %w", err)
 	}
@@ -319,14 +319,14 @@ func (sm *ServiceManager) installLaunchdUser() error {
 		return fmt.Errorf("creating agent directory: %w", err)
 	}
 
-	plistPath := agentDir + "/casapps." + sm.Name + ".plist"
+	plistPath := agentDir + "/io.github.apimgr." + sm.Name + ".plist"
 
 	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>casapps.%s</string>
+	<string>io.github.apimgr.%s</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>%s</string>
@@ -373,14 +373,14 @@ func (sm *ServiceManager) installRunit() error {
 	}
 
 	// Log run script
-	logRunScript := fmt.Sprintf("#!/bin/sh\nexec svlogd -tt /var/log/casapps/%s\n", sm.Name)
+	logRunScript := fmt.Sprintf("#!/bin/sh\nexec svlogd -tt /var/log/apimgr/%s\n", sm.Name)
 	logRunPath := logDir + "/run"
 	if err := os.WriteFile(logRunPath, []byte(logRunScript), 0755); err != nil {
 		return fmt.Errorf("writing log run script: %w", err)
 	}
 
 	// Create log directory
-	if err := os.MkdirAll("/var/log/casapps/"+sm.Name, 0755); err != nil {
+	if err := os.MkdirAll("/var/log/apimgr/"+sm.Name, 0755); err != nil {
 		return fmt.Errorf("creating log directory: %w", err)
 	}
 
@@ -392,7 +392,7 @@ func (sm *ServiceManager) installRunit() error {
 
 	fmt.Printf("Service installed and started: %s\n", sm.Name)
 	fmt.Printf("Status: sv status %s\n", sm.Name)
-	fmt.Printf("Logs: tail -f /var/log/casapps/%s/current\n", sm.Name)
+	fmt.Printf("Logs: tail -f /var/log/apimgr/%s/current\n", sm.Name)
 	return nil
 }
 
@@ -506,14 +506,14 @@ func (sm *ServiceManager) uninstallOpenRC() error {
 // uninstallLaunchd removes launchd service
 func (sm *ServiceManager) uninstallLaunchd() error {
 	// Try system daemon first
-	plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"
+	plistPath := "/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist"
 	if _, err := os.Stat(plistPath); err == nil {
 		exec.Command("launchctl", "unload", plistPath).Run()
 		os.Remove(plistPath)
 	} else {
 		// Try user agent
 		home, _ := os.UserHomeDir()
-		plistPath = home + "/Library/LaunchAgents/casapps." + sm.Name + ".plist"
+		plistPath = home + "/Library/LaunchAgents/io.github.apimgr." + sm.Name + ".plist"
 		if _, err := os.Stat(plistPath); err == nil {
 			exec.Command("launchctl", "unload", plistPath).Run()
 			os.Remove(plistPath)
@@ -583,12 +583,12 @@ func (sm *ServiceManager) disable() error {
 		return exec.Command("rc-update", "del", sm.Name, "default").Run()
 	case "launchd":
 		// Launchd unload
-		plistPath := "/Library/LaunchDaemons/casapps." + sm.Name + ".plist"
+		plistPath := "/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist"
 		if _, err := os.Stat(plistPath); err == nil {
 			return exec.Command("launchctl", "unload", plistPath).Run()
 		}
 		home, _ := os.UserHomeDir()
-		plistPath = home + "/Library/LaunchAgents/casapps." + sm.Name + ".plist"
+		plistPath = home + "/Library/LaunchAgents/io.github.apimgr." + sm.Name + ".plist"
 		return exec.Command("launchctl", "unload", plistPath).Run()
 	case "runit":
 		// Remove symlink

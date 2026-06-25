@@ -1,4 +1,4 @@
-module github.com/casapps/caswhois
+module github.com/apimgr/whois
 
 go 1.25.0
 

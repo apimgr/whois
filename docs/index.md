@@ -18,7 +18,7 @@
 
 ```bash
 # Download latest release
-wget https://github.com/casapps/caswhois/releases/latest/download/caswhois-linux-amd64
+wget https://github.com/apimgr/whois/releases/latest/download/caswhois-linux-amd64
 
 # Make executable
 chmod +x caswhois-linux-amd64

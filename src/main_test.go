@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casapps/caswhois/src/config"
+	"github.com/apimgr/whois/src/config"
 )
 
 // captureStderrStr captures stderr output from fn and returns it as a string.
@@ -375,8 +375,8 @@ func TestGetDefaultConfigDir_Root(t *testing.T) {
 		t.Skip("skipped in Docker: container path /config/caswhois is correct there")
 	}
 	got := getDefaultConfigDir()
-	if got != "/etc/casapps/caswhois" {
-		t.Errorf("getDefaultConfigDir() as root = %q, want /etc/casapps/caswhois", got)
+	if got != "/etc/apimgr/caswhois" {
+		t.Errorf("getDefaultConfigDir() as root = %q, want /etc/apimgr/caswhois", got)
 	}
 }
 
@@ -412,8 +412,8 @@ func TestGetDefaultDataDir_Root(t *testing.T) {
 		t.Skip("skipped in Docker: container path /data/caswhois is correct there")
 	}
 	got := getDefaultDataDir()
-	if got != "/var/lib/casapps/caswhois" {
-		t.Errorf("getDefaultDataDir() as root = %q, want /var/lib/casapps/caswhois", got)
+	if got != "/var/lib/apimgr/caswhois" {
+		t.Errorf("getDefaultDataDir() as root = %q, want /var/lib/apimgr/caswhois", got)
 	}
 }
 
@@ -446,8 +446,8 @@ func TestGetDefaultLogDir_Root(t *testing.T) {
 		t.Skip("skipped in Docker: container path /data/log/caswhois is correct there")
 	}
 	got := getDefaultLogDir()
-	if got != "/var/log/casapps/caswhois" {
-		t.Errorf("getDefaultLogDir() as root = %q, want /var/log/casapps/caswhois", got)
+	if got != "/var/log/apimgr/caswhois" {
+		t.Errorf("getDefaultLogDir() as root = %q, want /var/log/apimgr/caswhois", got)
 	}
 }
 
@@ -483,8 +483,8 @@ func TestGetDefaultBackupDir_Root(t *testing.T) {
 		t.Skip("skipped in Docker: container path /data/backups/caswhois is correct there")
 	}
 	got := getDefaultBackupDir()
-	if got != "/mnt/Backups/casapps/caswhois" {
-		t.Errorf("getDefaultBackupDir() as root = %q, want /mnt/Backups/casapps/caswhois", got)
+	if got != "/mnt/Backups/apimgr/caswhois" {
+		t.Errorf("getDefaultBackupDir() as root = %q, want /mnt/Backups/apimgr/caswhois", got)
 	}
 }
 

@@ -3,7 +3,7 @@ version: '3.8'
 services:
   caswhois:
     # Production: Pull from registry
-    image: ghcr.io/casapps/caswhois:latest
+    image: ghcr.io/apimgr/caswhois:latest
     container_name: caswhois
     restart: unless-stopped
     

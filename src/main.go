@@ -10,11 +10,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/casapps/caswhois/src/config"
-	"github.com/casapps/caswhois/src/db"
-	"github.com/casapps/caswhois/src/logger"
-	"github.com/casapps/caswhois/src/server"
-	"github.com/casapps/caswhois/src/service"
+	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/db"
+	"github.com/apimgr/whois/src/logger"
+	"github.com/apimgr/whois/src/server"
+	"github.com/apimgr/whois/src/service"
 )
 
 // Build info - set via -ldflags at build time
@@ -22,7 +22,7 @@ var (
 	Version      = "dev"
 	CommitID     = "unknown"
 	BuildDate    = "unknown"
-	OfficialSite = "https://github.com/casapps/caswhois"
+	OfficialSite = "https://github.com/apimgr/whois"
 )
 
 func main() {
@@ -479,7 +479,7 @@ func getDefaultConfigDir() string {
 
 	// Running as root on Linux/Unix: use system-wide path
 	if os.Getuid() == 0 {
-		return "/etc/casapps/caswhois"
+		return "/etc/apimgr/caswhois"
 	}
 
 	// Non-root user: XDG-compatible per-user config directory
@@ -489,7 +489,7 @@ func getDefaultConfigDir() string {
 		return "."
 	}
 
-	return filepath.Join(home, ".config", "casapps", "caswhois")
+	return filepath.Join(home, ".config", "apimgr", "caswhois")
 }
 
 // getDefaultDataDir returns the platform-specific data directory (AI.md PART 4).
@@ -500,14 +500,14 @@ func getDefaultDataDir() string {
 	}
 
 	if os.Getuid() == 0 {
-		return "/var/lib/casapps/caswhois"
+		return "/var/lib/apimgr/caswhois"
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "share", "casapps", "caswhois")
+	return filepath.Join(home, ".local", "share", "apimgr", "caswhois")
 }
 
 // getDefaultLogDir returns the platform-specific log directory (AI.md PART 4).
@@ -518,14 +518,14 @@ func getDefaultLogDir() string {
 	}
 
 	if os.Getuid() == 0 {
-		return "/var/log/casapps/caswhois"
+		return "/var/log/apimgr/caswhois"
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "log", "casapps", "caswhois")
+	return filepath.Join(home, ".local", "log", "apimgr", "caswhois")
 }
 
 // getDefaultBackupDir returns the platform-specific backup directory (AI.md PART 4).
@@ -536,14 +536,14 @@ func getDefaultBackupDir() string {
 	}
 
 	if os.Getuid() == 0 {
-		return "/mnt/Backups/casapps/caswhois"
+		return "/mnt/Backups/apimgr/caswhois"
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "share", "Backups", "casapps", "caswhois")
+	return filepath.Join(home, ".local", "share", "Backups", "apimgr", "caswhois")
 }
 
 func printStartupBanner(cfg *config.ServerConfig) {

@@ -92,7 +92,7 @@ caswhois --shell fish > ~/.config/fish/completions/caswhois.fish
 caswhois version 0.1.0
 Commit: abc1234
 Built:  2026-05-30T00:00:00Z
-Site:   https://github.com/casapps/caswhois
+Site:   https://github.com/apimgr/whois
 ```
 
 ## Environment Variables
@@ -117,17 +117,17 @@ Site:   https://github.com/casapps/caswhois
 
 | Purpose | Path |
 |---------|------|
-| Config | `/etc/casapps/caswhois/` |
-| Data | `/var/lib/casapps/caswhois/` |
-| Logs | `/var/log/casapps/caswhois/` |
+| Config | `/etc/apimgr/caswhois/` |
+| Data | `/var/lib/apimgr/caswhois/` |
+| Logs | `/var/log/apimgr/caswhois/` |
 
 ### Linux (running as user)
 
 | Purpose | Path |
 |---------|------|
-| Config | `~/.config/casapps/caswhois/` |
-| Data | `~/.local/share/casapps/caswhois/` |
-| Logs | `~/.local/share/casapps/caswhois/logs/` |
+| Config | `~/.config/apimgr/caswhois/` |
+| Data | `~/.local/share/apimgr/caswhois/` |
+| Logs | `~/.local/share/apimgr/caswhois/logs/` |
 
 ### Container
 

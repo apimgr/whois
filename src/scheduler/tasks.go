@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/casapps/caswhois/src/whois/records"
+	"github.com/apimgr/whois/src/whois/records"
 )
 
 // RegisterBuiltInTasks registers all required built-in tasks (AI.md PART 18).
