@@ -406,3 +406,85 @@ func TestGetFQDN_PrivateHostnameFallsThrough(t *testing.T) {
 		t.Error("GetFQDN() returned empty with a private HOSTNAME")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// getGlobalIPv6 — error path via interfaceAddrsFunc mock
+// ---------------------------------------------------------------------------
+
+// TestGetGlobalIPv6_InterfaceError confirms getGlobalIPv6 returns "" when
+// interfaceAddrsFunc returns an error (e.g. permission denied, no interfaces).
+func TestGetGlobalIPv6_InterfaceError(t *testing.T) {
+	orig := interfaceAddrsFunc
+	interfaceAddrsFunc = func() ([]net.Addr, error) {
+		return nil, os.ErrPermission
+	}
+	defer func() { interfaceAddrsFunc = orig }()
+
+	if got := getGlobalIPv6(); got != "" {
+		t.Errorf("getGlobalIPv6() on error = %q, want empty string", got)
+	}
+}
+
+// TestGetGlobalIPv6_PublicAddress confirms getGlobalIPv6 returns the first
+// globally-routable IPv6 address injected via interfaceAddrsFunc.
+func TestGetGlobalIPv6_PublicAddress(t *testing.T) {
+	_, pubNet, _ := net.ParseCIDR("2001:db8::1/64")
+	orig := interfaceAddrsFunc
+	interfaceAddrsFunc = func() ([]net.Addr, error) {
+		return []net.Addr{pubNet}, nil
+	}
+	defer func() { interfaceAddrsFunc = orig }()
+
+	got := getGlobalIPv6()
+	if got == "" {
+		t.Error("getGlobalIPv6() = empty, want a public IPv6 address")
+	}
+	ip := net.ParseIP(got)
+	if ip == nil {
+		t.Fatalf("getGlobalIPv6() = %q is not a valid IP", got)
+	}
+	if ip.To4() != nil {
+		t.Errorf("getGlobalIPv6() = %q is IPv4, want IPv6", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// getGlobalIPv4 — error path via interfaceAddrsFunc mock
+// ---------------------------------------------------------------------------
+
+// TestGetGlobalIPv4_InterfaceError confirms getGlobalIPv4 returns "" when
+// interfaceAddrsFunc returns an error.
+func TestGetGlobalIPv4_InterfaceError(t *testing.T) {
+	orig := interfaceAddrsFunc
+	interfaceAddrsFunc = func() ([]net.Addr, error) {
+		return nil, os.ErrPermission
+	}
+	defer func() { interfaceAddrsFunc = orig }()
+
+	if got := getGlobalIPv4(); got != "" {
+		t.Errorf("getGlobalIPv4() on error = %q, want empty string", got)
+	}
+}
+
+// TestGetGlobalIPv4_PublicAddress confirms getGlobalIPv4 returns the first
+// globally-routable IPv4 address injected via interfaceAddrsFunc.
+func TestGetGlobalIPv4_PublicAddress(t *testing.T) {
+	_, pubNet, _ := net.ParseCIDR("8.8.8.8/32")
+	orig := interfaceAddrsFunc
+	interfaceAddrsFunc = func() ([]net.Addr, error) {
+		return []net.Addr{pubNet}, nil
+	}
+	defer func() { interfaceAddrsFunc = orig }()
+
+	got := getGlobalIPv4()
+	if got == "" {
+		t.Error("getGlobalIPv4() = empty, want a public IPv4 address")
+	}
+	ip := net.ParseIP(got)
+	if ip == nil {
+		t.Fatalf("getGlobalIPv4() = %q is not a valid IP", got)
+	}
+	if ip.To4() == nil {
+		t.Errorf("getGlobalIPv4() = %q is not IPv4", got)
+	}
+}

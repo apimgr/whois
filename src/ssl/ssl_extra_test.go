@@ -29,25 +29,27 @@ func TestSaveLetsEncryptCert_MkdirAllFails(t *testing.T) {
 }
 
 // TestSaveLetsEncryptCert_WriteCertFails verifies that an error is returned when
-// the certificate file cannot be written (directory is read-only after creation).
+// the certificate file cannot be written. We block os.WriteFile by pre-creating
+// a directory at the exact cert file path (os.WriteFile fails with EISDIR).
 func TestSaveLetsEncryptCert_WriteCertFails(t *testing.T) {
 	dir := t.TempDir()
 	fqdn := "readonly.example.com"
 
-	// Pre-create the letsencrypt directory and make it read-only so WriteFile fails.
+	// Pre-create the letsencrypt dir so MkdirAll succeeds.
 	leDir := filepath.Join(dir, "ssl", "letsencrypt", fqdn)
 	if err := os.MkdirAll(leDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.Chmod(leDir, 0555); err != nil {
-		t.Fatalf("chmod: %v", err)
+	// Place a directory at fullchain.pem path — os.WriteFile(dir) returns EISDIR.
+	certDirPath := filepath.Join(leDir, "fullchain.pem")
+	if err := os.Mkdir(certDirPath, 0755); err != nil {
+		t.Fatalf("mkdir cert blocker: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(leDir, 0755) })
 
 	cm := NewCertManager(dir, fqdn)
 	err := cm.saveLetsEncryptCert([]byte("cert"), []byte("key"))
 	if err == nil {
-		t.Fatal("expected error when cert WriteFile fails, got nil")
+		t.Fatal("expected error when cert WriteFile fails (EISDIR), got nil")
 	}
 }
 
@@ -72,25 +74,27 @@ func TestGenerateSelfSignedCertificate_MkdirAllFails(t *testing.T) {
 }
 
 // TestGenerateSelfSignedCertificate_WriteCertFails verifies that an error is
-// returned when the certificate file cannot be written.
+// returned when the certificate file cannot be written. We block os.WriteFile
+// by pre-creating a directory at the cert.pem path (os.WriteFile fails with EISDIR).
 func TestGenerateSelfSignedCertificate_WriteCertFails(t *testing.T) {
 	dir := t.TempDir()
 	fqdn := "readonly-selfsigned.example.com"
 
-	// Pre-create the local cert directory and make it read-only.
+	// Pre-create the local cert directory so MkdirAll succeeds.
 	localDir := filepath.Join(dir, "ssl", "local", fqdn)
 	if err := os.MkdirAll(localDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.Chmod(localDir, 0555); err != nil {
-		t.Fatalf("chmod: %v", err)
+	// Place a directory at cert.pem path — os.WriteFile(dir) returns EISDIR.
+	certDirPath := filepath.Join(localDir, "cert.pem")
+	if err := os.Mkdir(certDirPath, 0755); err != nil {
+		t.Fatalf("mkdir cert blocker: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(localDir, 0755) })
 
 	cm := NewCertManager(dir, fqdn)
 	err := cm.GenerateSelfSignedCertificate()
 	if err == nil {
-		t.Fatal("expected error when cert WriteFile fails, got nil")
+		t.Fatal("expected error when cert WriteFile fails (EISDIR), got nil")
 	}
 }
 

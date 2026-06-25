@@ -58,7 +58,7 @@ func (sm *ServiceManager) ensureServiceUser() error {
 // installSystemService installs service as system service (requires root)
 func (sm *ServiceManager) installSystemService() error {
 	// Detect service manager
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	// Create the dedicated unprivileged service account the binary drops to
 	// after binding a privileged port (AI.md PART 23). launchd manages its own
@@ -90,7 +90,7 @@ func (sm *ServiceManager) installSystemService() error {
 
 // installUserService installs service as user service (no root)
 func (sm *ServiceManager) installUserService() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	switch manager {
 	case "systemd":
@@ -449,7 +449,7 @@ run_rc_command "$1"
 
 // uninstall removes the service
 func (sm *ServiceManager) uninstall() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	// Stop service first
 	sm.stop()
@@ -568,7 +568,7 @@ func (sm *ServiceManager) uninstallRCD() error {
 
 // disable stops and disables the service
 func (sm *ServiceManager) disable() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	// Stop service first
 	sm.stop()

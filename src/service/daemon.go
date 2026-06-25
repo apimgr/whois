@@ -9,9 +9,20 @@ import (
 	"strings"
 )
 
-// IsContainer returns true if running inside a container
-func IsContainer() bool {
-	// File-based detection across Docker, Podman, and LXC/LXD/Incus.
+// detectServiceManagerFn is the service-manager detection implementation.
+// Tests may replace this variable to simulate different init systems.
+var detectServiceManagerFn = detectServiceManagerImpl
+
+// isContainerFn is the container-detection implementation used inside
+// detectServiceManagerImpl; tests may replace it to bypass container checks.
+var isContainerFn = IsContainer
+
+// containerFilesCheckFn checks for well-known container indicator files.
+// Tests may replace this variable to bypass the file-based detection.
+var containerFilesCheckFn = defaultContainerFilesCheck
+
+// defaultContainerFilesCheck checks for /.dockerenv, /run/.containerenv, and /dev/lxc.
+func defaultContainerFilesCheck() bool {
 	containerFiles := []string{
 		"/.dockerenv",
 		"/run/.containerenv",
@@ -21,6 +32,15 @@ func IsContainer() bool {
 		if _, err := os.Stat(f); err == nil {
 			return true
 		}
+	}
+	return false
+}
+
+// IsContainer returns true if running inside a container
+func IsContainer() bool {
+	// File-based detection across Docker, Podman, and LXC/LXD/Incus.
+	if containerFilesCheckFn() {
+		return true
 	}
 
 	// Generic container detection (systemd-nspawn, lxc, etc.)
@@ -55,10 +75,10 @@ func IsContainer() bool {
 	return false
 }
 
-// DetectServiceManager returns the active service manager
-func DetectServiceManager() string {
+// detectServiceManagerImpl contains the real service-manager detection logic.
+func detectServiceManagerImpl() string {
 	// Check for container environment first
-	if IsContainer() {
+	if isContainerFn() {
 		return "container"
 	}
 
@@ -119,6 +139,13 @@ func DetectServiceManager() string {
 	return "manual"
 }
 
+// DetectServiceManager returns the active service manager.
+// It delegates to detectServiceManagerFn so that tests can replace the
+// implementation without modifying production paths.
+func DetectServiceManager() string {
+	return detectServiceManagerFn()
+}
+
 // getParentProcessName returns the name of the parent process
 func getParentProcessName() string {
 	ppid := os.Getppid()
@@ -141,7 +168,7 @@ func getParentProcessName() string {
 func ShouldDaemonize(isServiceStart bool, daemonFlag bool, configDaemonize bool) bool {
 	if isServiceStart {
 		// Service start - detect manager and ignore config
-		switch DetectServiceManager() {
+		switch detectServiceManagerFn() {
 		case "systemd", "launchd", "runit", "s6", "container":
 			// Always foreground
 			return false

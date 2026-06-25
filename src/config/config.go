@@ -418,7 +418,8 @@ type ServerConfig struct {
 	Compliance ComplianceConfig `yaml:"compliance"`
 
 	// Update settings (AI.md PART 22)
-	UpdateChannel string `yaml:"update_channel"` // stable, beta, daily
+	// UpdateChannel selects the release channel: stable, beta, or daily
+	UpdateChannel string `yaml:"update_channel"`
 
 	// Tor hidden service settings (AI.md PART 31 — server.tor.*)
 	Tor TorConfig `yaml:"tor"`
@@ -451,7 +452,8 @@ type ServerConfig struct {
 // Default returns a ServerConfig with sane defaults
 func Default() *ServerConfig {
 	return &ServerConfig{
-		Port:                0, // Random port 64000-64999 on first run
+		// Port 0 triggers random selection in range 64000-64999 on first run
+		Port:                0,
 		Address:             "127.0.0.1",
 		Mode:                "production",
 		FQDN:                "",
@@ -459,14 +461,16 @@ func Default() *ServerConfig {
 		PIDFile:             true,
 		User:                "caswhois",
 		Group:               "caswhois",
-		ConfigDir:           "", // Will be determined by OS
-		DataDir:             "", // Will be determined by OS
-		LogDir:              "", // Will be determined by OS
+		// ConfigDir, DataDir, LogDir are resolved to OS-appropriate paths at runtime
+		ConfigDir:           "",
+		DataDir:             "",
+		LogDir:              "",
+		// Database defaults: driver auto-detected from DATABASE_URL; paths resolved at runtime
 		Database: DatabaseConfig{
-			Driver: "", // Auto-detect: sqlite or libsql from DATABASE_URL env var
-			URL:    "", // From DATABASE_URL env var
-			Token:  "", // From TURSO_AUTH_TOKEN env var
-			Dir:    "", // Applied at runtime (AI.md PART 4)
+			Driver: "",
+			URL:    "",
+			Token:  "",
+			Dir:    "",
 		},
 		BaseURL: "/",
 		TLS: TLSConfig{

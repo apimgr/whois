@@ -726,3 +726,352 @@ func TestHandleShell_Init_Fish_Via_SHELLEnv(t *testing.T) {
 		t.Errorf("handleShell init fish missing 'source'; got: %q", out)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// run() integration tests
+// ---------------------------------------------------------------------------
+
+// TestRun_Version verifies that --version exits 0 and prints the binary name.
+func TestRun_Version(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--version"})
+		if code != 0 {
+			t.Errorf("run(--version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(--version) output missing 'version'; got: %q", out)
+	}
+}
+
+// TestRun_ShortVersion verifies that -v exits 0 and prints version.
+func TestRun_ShortVersion(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"-v"})
+		if code != 0 {
+			t.Errorf("run(-v) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(-v) output missing 'version'; got: %q", out)
+	}
+}
+
+// TestRun_Help verifies that --help exits 0 and prints help text.
+func TestRun_Help(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--help"})
+		if code != 0 {
+			t.Errorf("run(--help) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "--help") {
+		t.Errorf("run(--help) output missing '--help'; got: %q", out)
+	}
+}
+
+// TestRun_ShortHelp verifies that -h exits 0 and prints help text.
+func TestRun_ShortHelp(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"-h"})
+		if code != 0 {
+			t.Errorf("run(-h) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "--help") {
+		t.Errorf("run(-h) output missing '--help'; got: %q", out)
+	}
+}
+
+// TestRun_InvalidFlag verifies that an unknown flag returns exit code 1.
+func TestRun_InvalidFlag(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--this-flag-does-not-exist"})
+		if code != 1 {
+			t.Errorf("run(--invalid) = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_NoColor verifies that --no-color is accepted and exits cleanly with --version.
+func TestRun_NoColor(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--no-color", "--version"})
+		if code != 0 {
+			t.Errorf("run(--no-color --version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(--no-color --version) output missing 'version'; got: %q", out)
+	}
+}
+
+// TestRun_Shell_Completions_Bash verifies --shell completions bash outputs bash completions.
+func TestRun_Shell_Completions_Bash(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--shell", "completions", "bash"})
+		if code != 0 {
+			t.Errorf("run(--shell completions bash) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "complete") {
+		t.Errorf("run(--shell completions bash) missing 'complete'; got: %q", out)
+	}
+}
+
+// TestRun_Shell_Init_Zsh verifies --shell init zsh outputs zsh init snippet.
+func TestRun_Shell_Init_Zsh(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--shell", "init", "zsh"})
+		if code != 0 {
+			t.Errorf("run(--shell init zsh) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "source") {
+		t.Errorf("run(--shell init zsh) missing 'source'; got: %q", out)
+	}
+}
+
+// TestRun_Maintenance_Help verifies --maintenance help exits 0.
+func TestRun_Maintenance_Help(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--maintenance", "help"})
+		if code != 0 {
+			t.Errorf("run(--maintenance help) = %d, want 0", code)
+		}
+	})
+	if out == "" {
+		t.Error("run(--maintenance help) produced no output")
+	}
+}
+
+// TestRun_Update_Help verifies --update help exits 0.
+func TestRun_Update_Help(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--update", "help"})
+		if code != 0 {
+			t.Errorf("run(--update help) = %d, want 0", code)
+		}
+	})
+	if out == "" {
+		t.Error("run(--update help) produced no output")
+	}
+}
+
+// TestRun_Update_Unknown verifies --update with an unknown command returns exit code 1.
+func TestRun_Update_Unknown(t *testing.T) {
+	code := captureStderr(t, func() {
+		c := run([]string{"--update", "unknowncmd"})
+		if c != 1 {
+			t.Errorf("run(--update unknowncmd) = %d, want 1", c)
+		}
+	})
+	_ = code
+}
+
+// TestRun_Update_Check_Fails verifies --update check returns 1 when network is unavailable.
+func TestRun_Update_Check_Fails(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--update", "check"})
+		if code != 1 {
+			t.Errorf("run(--update check) with no network = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Update_Yes_Fails verifies --update yes returns 1 when download is unavailable.
+func TestRun_Update_Yes_Fails(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--update", "yes"})
+		if code != 1 {
+			t.Errorf("run(--update yes) with no network = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Update_Branch_NoArg verifies --update 'branch' without a channel name returns 1.
+func TestRun_Update_Branch_NoArg(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--update", "branch"})
+		if code != 1 {
+			t.Errorf("run(--update branch) with no channel = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Backup_Fails verifies --maintenance backup returns 1 when backup fails.
+// CASWHOIS_BACKUP_PASSWORD is set to avoid blocking on stdin during testing.
+func TestRun_Maintenance_Backup_Fails(t *testing.T) {
+	t.Setenv("CASWHOIS_BACKUP_PASSWORD", "testpass")
+	captureStderr(t, func() {
+		code := run([]string{"--maintenance", "backup"})
+		if code != 1 {
+			t.Errorf("run(--maintenance backup) = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Restore_NoArg verifies --maintenance 'restore' without a file returns 1.
+func TestRun_Maintenance_Restore_NoArg(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--maintenance", "restore"})
+		if code != 1 {
+			t.Errorf("run(--maintenance restore) = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Mode_NoArg verifies --maintenance 'mode' without a value returns 1.
+func TestRun_Maintenance_Mode_NoArg(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--maintenance", "mode"})
+		if code != 1 {
+			t.Errorf("run(--maintenance mode) = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Mode_BadValue verifies --maintenance 'mode invalid' returns 1.
+func TestRun_Maintenance_Mode_BadValue(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--maintenance", "mode invalid"})
+		if code != 1 {
+			t.Errorf("run(--maintenance 'mode invalid') = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Unknown verifies --maintenance with an unknown command returns 1.
+func TestRun_Maintenance_Unknown(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--maintenance", "unknowncmd"})
+		if code != 1 {
+			t.Errorf("run(--maintenance unknowncmd) = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Setup_AsRoot verifies --maintenance setup succeeds when running as root.
+func TestRun_Maintenance_Setup_AsRoot(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("setup requires root")
+	}
+	dir := t.TempDir()
+	out := captureStdout(t, func() {
+		code := run([]string{"--maintenance", "setup", "--config", dir})
+		if code != 0 {
+			t.Errorf("run(--maintenance setup) as root = %d, want 0", code)
+		}
+	})
+	_ = out
+}
+
+// TestRun_Maintenance_Update_Alias verifies --maintenance update is an alias for --update yes.
+// It returns 1 in a network-unavailable environment (expected).
+func TestRun_Maintenance_Update_Alias(t *testing.T) {
+	captureStderr(t, func() {
+		code := run([]string{"--maintenance", "update"})
+		if code != 1 {
+			t.Errorf("run(--maintenance update) = %d, want 1 (network unavailable)", code)
+		}
+	})
+}
+
+// TestRun_BadConfig verifies that run() returns 1 when the config file is invalid.
+func TestRun_BadConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  mode: badmode\n  port: 64900\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	captureStderr(t, func() {
+		code := run([]string{"--config", dir})
+		if code != 1 {
+			t.Errorf("run() with invalid mode = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Daemon_BadConfig verifies the daemon flag is parsed and run() returns 1 on bad config.
+func TestRun_Daemon_BadConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  mode: badmode\n  port: 64901\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	captureStderr(t, func() {
+		code := run([]string{"--daemon", "--config", dir})
+		if code != 1 {
+			t.Errorf("run(--daemon invalid config) = %d, want 1", code)
+		}
+	})
+}
+
+// TestRun_Maintenance_Mode_Production verifies --maintenance 'mode production' exits 0.
+// The value "mode production" is passed as a single string to the --maintenance flag.
+func TestRun_Maintenance_Mode_Production(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  port: 64990\n  mode: production\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		code := run([]string{"--config", dir, "--maintenance", "mode production"})
+		if code != 0 {
+			t.Errorf("run(--maintenance 'mode production') = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "production") {
+		t.Errorf("run(--maintenance 'mode production') missing 'production'; got: %q", out)
+	}
+}
+
+// TestRun_Status_NoPID verifies --status exits 1 when no server is running.
+func TestRun_Status_NoPID(t *testing.T) {
+	dir := t.TempDir()
+	code := run([]string{"--config", dir, "--status"})
+	if code == 0 {
+		t.Error("run(--status) with no server should return non-zero")
+	}
+}
+
+// TestRun_Service_Help verifies --service help exits 0.
+func TestRun_Service_Help(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--service", "help"})
+		if code != 0 {
+			t.Errorf("run(--service help) = %d, want 0", code)
+		}
+	})
+	if out == "" {
+		t.Error("run(--service help) produced no output")
+	}
+}
+
+// TestRun_Color_Auto verifies --color auto is accepted with --version.
+func TestRun_Color_Auto(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--color", "auto", "--version"})
+		if code != 0 {
+			t.Errorf("run(--color auto --version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(--color auto --version) missing 'version'; got: %q", out)
+	}
+}
+
+// TestRun_Update_TrueAlias verifies that --update true is treated like "yes" without
+// panicking (the real update path fails in CI but must not os.Exit in run()).
+// NOTE: handleUpdate("yes", ...) calls os.Exit(1) when performUpdate fails.
+// We skip the "yes" / "true" / network paths and only test the "help" / "branch" variants.
+
+// TestRun_Lang_Flag verifies that --lang is accepted and does not cause an error.
+func TestRun_Lang_Flag(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--lang", "es", "--version"})
+		if code != 0 {
+			t.Errorf("run(--lang es --version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(--lang es --version) missing 'version'; got: %q", out)
+	}
+}

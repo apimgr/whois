@@ -20,10 +20,12 @@ import (
 // RestoreOptions configures restore behavior
 type RestoreOptions struct {
 	BackupFile string
-	Password   string // Required for encrypted backups
+	// Password is required when restoring an encrypted backup
+	Password   string
 	ConfigDir  string
 	DataDir    string
-	Force      bool // Skip confirmation prompts
+	// Force skips interactive confirmation prompts
+	Force      bool
 }
 
 // Restore restores from backup per AI.md PART 21 specification

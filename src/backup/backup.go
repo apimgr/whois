@@ -35,11 +35,14 @@ type BackupOptions struct {
 	ConfigDir   string
 	DataDir     string
 	OutputFile  string
-	Password    string // Optional encryption password
+	// Password is an optional encryption passphrase; leave empty for unencrypted backup
+	Password    string
 	IncludeSSL  bool
 	IncludeData bool
-	AdminUser   string // Username of admin creating backup
-	AppVersion  string // Current app version
+	// AdminUser is the username of the admin initiating the backup (for audit log)
+	AdminUser   string
+	// AppVersion is the current application version embedded in the backup manifest
+	AppVersion  string
 }
 
 // Create creates a backup per AI.md PART 21 specification

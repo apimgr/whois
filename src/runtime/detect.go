@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+// interfaceAddrsFunc is the network interface listing implementation.
+// Tests may replace this variable to inject synthetic addresses.
+var interfaceAddrsFunc = net.InterfaceAddrs
+
 // RuntimeInfo holds detected runtime information
 type RuntimeInfo struct {
 	// Host information
@@ -97,7 +101,7 @@ func isLoopback(host string) bool {
 // getGlobalIPv6 returns first public IPv6 address
 // Excludes: loopback (::1), link-local (fe80::/10), unique local (fc00::/7)
 func getGlobalIPv6() string {
-	addrs, err := net.InterfaceAddrs()
+	addrs, err := interfaceAddrsFunc()
 	if err != nil {
 		return ""
 	}
@@ -116,7 +120,7 @@ func getGlobalIPv6() string {
 // getGlobalIPv4 returns first public IPv4 address
 // Excludes: loopback (127.0.0.0/8), private (10/8, 172.16/12, 192.168/16), link-local (169.254/16)
 func getGlobalIPv4() string {
-	addrs, err := net.InterfaceAddrs()
+	addrs, err := interfaceAddrsFunc()
 	if err != nil {
 		return ""
 	}

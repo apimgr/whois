@@ -84,7 +84,8 @@ func (u *ACMEUser) GetPrivateKey() crypto.PrivateKey {
 type CertificatePaths struct {
 	CertPath string
 	KeyPath  string
-	Source   string // "system", "app-letsencrypt", "app-local"
+	// Source is one of: "system", "app-letsencrypt", "app-local"
+	Source   string
 }
 
 // NewCertManager creates a new SSL certificate manager

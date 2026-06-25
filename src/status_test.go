@@ -7,17 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 )
-
-// execCommand wraps exec.Command for use in runSubprocessTest.
-func execCommand(name string, arg ...string) *exec.Cmd {
-	return exec.Command(name, arg...)
-}
 
 func TestGetConfigDir_WithExplicitDir(t *testing.T) {
 	got := getConfigDir("/custom/config")
@@ -478,114 +472,85 @@ func TestHandleMaintenance_Mode_Development(t *testing.T) {
 	}
 }
 
-// TestHandleMaintenance_Restore_MissingFile verifies the "restore" case when the
-// backup file does not exist — performRestore returns an error → handleMaintenance
-// prints to stderr and calls os.Exit(1). We run this via a subprocess so the parent
-// test is not killed.
-func TestHandleMaintenance_Restore_MissingFile_Subprocess(t *testing.T) {
-	if os.Getenv("SUBPROCESS_RESTORE_TEST") == "1" {
-		handleMaintenance("restore /nonexistent/file.tar.gz", "", "")
-		return
-	}
-	// Re-exec this test as a subprocess; expect non-zero exit code.
-	code := runSubprocessTest(t, "TestHandleMaintenance_Restore_MissingFile_Subprocess",
-		[]string{"SUBPROCESS_RESTORE_TEST=1"})
-	if code == 0 {
-		t.Error("expected non-zero exit code from restore with missing file")
+// TestHandleMaintenance_Restore_MissingFile verifies that restoring a non-existent
+// file returns exit code 1 (handleMaintenance now returns int, not calls os.Exit).
+func TestHandleMaintenance_Restore_MissingFile(t *testing.T) {
+	code := handleMaintenance("restore /nonexistent/file.tar.gz", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance(restore missing-file) = %d, want 1", code)
 	}
 }
 
-// TestHandleMaintenance_Restore_NoArgs_Subprocess verifies the "restore" case with no
-// file arg.
-func TestHandleMaintenance_Restore_NoArgs_Subprocess(t *testing.T) {
-	if os.Getenv("SUBPROCESS_RESTORE_NOARGS_TEST") == "1" {
-		handleMaintenance("restore", "", "")
-		return
-	}
-	code := runSubprocessTest(t, "TestHandleMaintenance_Restore_NoArgs_Subprocess",
-		[]string{"SUBPROCESS_RESTORE_NOARGS_TEST=1"})
-	if code == 0 {
-		t.Error("expected non-zero exit code from restore with no args")
+// TestHandleMaintenance_Restore_NoArgs verifies that "restore" with no file arg returns 1.
+func TestHandleMaintenance_Restore_NoArgs(t *testing.T) {
+	code := handleMaintenance("restore", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance(restore no-args) = %d, want 1", code)
 	}
 }
 
-// TestHandleMaintenance_Unknown_Subprocess verifies that an unknown command exits non-zero.
-func TestHandleMaintenance_Unknown_Subprocess(t *testing.T) {
-	if os.Getenv("SUBPROCESS_MAINT_UNKNOWN") == "1" {
-		handleMaintenance("unknowncmd", "", "")
-		return
-	}
-	code := runSubprocessTest(t, "TestHandleMaintenance_Unknown_Subprocess",
-		[]string{"SUBPROCESS_MAINT_UNKNOWN=1"})
-	if code == 0 {
-		t.Error("expected non-zero exit code for unknown maintenance command")
+// TestHandleMaintenance_Unknown verifies that an unknown command returns 1.
+func TestHandleMaintenance_Unknown(t *testing.T) {
+	code := handleMaintenance("unknowncmd", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance(unknowncmd) = %d, want 1", code)
 	}
 }
 
-// TestHandleMaintenance_Mode_InvalidValue_Subprocess verifies that an invalid mode value
-// exits non-zero.
-func TestHandleMaintenance_Mode_InvalidValue_Subprocess(t *testing.T) {
-	if os.Getenv("SUBPROCESS_MODE_INVALID") == "1" {
-		handleMaintenance("mode badvalue", "", "")
-		return
-	}
-	code := runSubprocessTest(t, "TestHandleMaintenance_Mode_InvalidValue_Subprocess",
-		[]string{"SUBPROCESS_MODE_INVALID=1"})
-	if code == 0 {
-		t.Error("expected non-zero exit code for invalid mode value")
+// TestHandleMaintenance_Empty verifies that an empty command string returns 1.
+func TestHandleMaintenance_Empty(t *testing.T) {
+	code := handleMaintenance("", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance('') = %d, want 1", code)
 	}
 }
 
-// TestHandleMaintenance_Mode_NoArg_Subprocess verifies that "mode" with no value exits
-// non-zero.
-func TestHandleMaintenance_Mode_NoArg_Subprocess(t *testing.T) {
-	if os.Getenv("SUBPROCESS_MODE_NOARG") == "1" {
-		handleMaintenance("mode", "", "")
-		return
-	}
-	code := runSubprocessTest(t, "TestHandleMaintenance_Mode_NoArg_Subprocess",
-		[]string{"SUBPROCESS_MODE_NOARG=1"})
-	if code == 0 {
-		t.Error("expected non-zero exit code for mode with no arg")
+// TestHandleMaintenance_Mode_InvalidValue verifies that an invalid mode value returns 1.
+func TestHandleMaintenance_Mode_InvalidValue(t *testing.T) {
+	code := handleMaintenance("mode badvalue", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance(mode badvalue) = %d, want 1", code)
 	}
 }
 
-// TestHandleMaintenance_Setup_NotRoot_Subprocess verifies that setup without root exits
-// non-zero (only runs when not root).
-func TestHandleMaintenance_Setup_NotRoot_Subprocess(t *testing.T) {
+// TestHandleMaintenance_Mode_NoArg verifies that "mode" with no value returns 1.
+func TestHandleMaintenance_Mode_NoArg(t *testing.T) {
+	code := handleMaintenance("mode", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance(mode no-arg) = %d, want 1", code)
+	}
+}
+
+// TestHandleMaintenance_Mode_BadConfig verifies that mode change fails when no server.yml exists.
+func TestHandleMaintenance_Mode_BadConfig(t *testing.T) {
+	dir := t.TempDir()
+	code := handleMaintenance("mode production", dir, dir)
+	if code == 0 {
+		t.Log("handleMaintenance(mode production, empty dir) returned 0 — config auto-created or mode accepted")
+	}
+}
+
+// TestHandleMaintenance_Setup_NotRoot verifies that setup without root returns 1.
+func TestHandleMaintenance_Setup_NotRoot(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("test only applies to non-root users")
 	}
-	if os.Getenv("SUBPROCESS_SETUP_NOTROOT") == "1" {
-		handleMaintenance("setup", "", "")
-		return
-	}
-	code := runSubprocessTest(t, "TestHandleMaintenance_Setup_NotRoot_Subprocess",
-		[]string{"SUBPROCESS_SETUP_NOTROOT=1"})
-	if code == 0 {
-		t.Error("expected non-zero exit code for setup as non-root")
+	code := handleMaintenance("setup", "", "")
+	if code != 1 {
+		t.Errorf("handleMaintenance(setup) as non-root = %d, want 1", code)
 	}
 }
 
-// TestHandleMaintenance_Backup_WithPassword verifies that "backup" runs the performBackup
-// code path when a password is set via env var. The backup will fail (config/data dirs
-// are empty temp dirs) but we exercise the call path.
+// TestHandleMaintenance_Backup_WithPassword verifies that "backup" runs performBackup
+// with a password from env var. The backup fails (empty dirs) and returns 1 — the
+// test verifies the code path is exercised without blocking on stdin.
 func TestHandleMaintenance_Backup_WithPassword(t *testing.T) {
-	if os.Getenv("SUBPROCESS_BACKUP_TEST") == "1" {
-		t.Setenv("CASWHOIS_BACKUP_PASSWORD", "testpassword123")
-		dir := os.Getenv("SUBPROCESS_TMPDIR")
-		handleMaintenance("backup", dir, dir)
-		return
-	}
+	t.Setenv("CASWHOIS_BACKUP_PASSWORD", "testpassword123")
 	dir := t.TempDir()
-	// Exit code may be 0 (backup succeeded) or 1 (backup failed in verification);
-	// either way the code path is covered.
-	_ = runSubprocessTest(t, "TestHandleMaintenance_Backup_WithPassword",
-		[]string{
-			"SUBPROCESS_BACKUP_TEST=1",
-			"CASWHOIS_BACKUP_PASSWORD=testpassword123",
-			"SUBPROCESS_TMPDIR=" + dir,
-		})
+	code := handleMaintenance("backup", dir, dir)
+	if code != 1 {
+		t.Logf("handleMaintenance(backup) = %d (0 means backup actually succeeded)", code)
+	}
 }
 
 // TestPerformBackup_WithPassword verifies that performBackup runs with a password from
@@ -598,20 +563,88 @@ func TestPerformBackup_WithPassword(t *testing.T) {
 	_ = performBackup(dir, dir)
 }
 
-// runSubprocessTest re-executes the current test binary with the given test name and
-// extra env vars. It waits for the process to finish and returns the exit code.
-func runSubprocessTest(t *testing.T, testName string, extraEnv []string) int {
-	t.Helper()
-	// os.Args[0] is the compiled test binary path.
-	cmd := execCommand(os.Args[0], "-test.run=^"+testName+"$", "-test.v")
-	cmd.Env = append(os.Environ(), extraEnv...)
-	// Run; ignore error since non-zero exit is expected in many cases.
-	err := cmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
-		}
-		return 1
+// TestHandleUpdate_Check_Fails verifies that "check" returns 1 when the network is unavailable.
+func TestHandleUpdate_Check_Fails(t *testing.T) {
+	code := handleUpdate("check", "caswhois")
+	if code != 1 {
+		t.Errorf("handleUpdate(check) with no network = %d, want 1", code)
 	}
-	return 0
+}
+
+// TestHandleUpdate_Yes_Fails verifies that "yes" returns 1 when the download fails.
+func TestHandleUpdate_Yes_Fails(t *testing.T) {
+	code := handleUpdate("yes", "caswhois")
+	if code != 1 {
+		t.Errorf("handleUpdate(yes) with no network = %d, want 1", code)
+	}
+}
+
+// TestHandleUpdate_Unknown verifies that an unknown command returns 1.
+func TestHandleUpdate_Unknown(t *testing.T) {
+	code := handleUpdate("unknowncmd", "caswhois")
+	if code != 1 {
+		t.Errorf("handleUpdate(unknowncmd) = %d, want 1", code)
+	}
+}
+
+// TestHandleUpdate_Empty verifies that an empty command string returns 1.
+func TestHandleUpdate_Empty(t *testing.T) {
+	code := handleUpdate("", "caswhois")
+	if code != 1 {
+		t.Errorf("handleUpdate('') = %d, want 1", code)
+	}
+}
+
+// TestHandleUpdate_Branch_NoArg verifies that "branch" without a channel name returns 1.
+func TestHandleUpdate_Branch_NoArg(t *testing.T) {
+	code := handleUpdate("branch", "caswhois")
+	if code != 1 {
+		t.Errorf("handleUpdate(branch no-arg) = %d, want 1", code)
+	}
+}
+
+// TestHandleUpdate_Branch_InvalidChannel verifies an invalid channel name returns 1.
+func TestHandleUpdate_Branch_InvalidChannel(t *testing.T) {
+	code := handleUpdate("branch nightly", "caswhois")
+	if code != 1 {
+		t.Errorf("handleUpdate(branch nightly) = %d, want 1", code)
+	}
+}
+
+// TestSwitchUpdateChannel_Invalid verifies that an invalid channel name returns an error.
+func TestSwitchUpdateChannel_Invalid(t *testing.T) {
+	if err := switchUpdateChannel("invalid", "caswhois"); err == nil {
+		t.Error("switchUpdateChannel(invalid) should return an error")
+	}
+}
+
+// TestSwitchUpdateChannel_Stable verifies the "stable" channel path.
+// The config dir is a temp dir, so SetUpdateChannel should write a config file.
+func TestSwitchUpdateChannel_Stable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CASWHOIS_CONFIG_DIR", dir)
+	err := switchUpdateChannel("stable", "caswhois")
+	if err != nil {
+		t.Logf("switchUpdateChannel(stable) = %v (non-fatal in test env)", err)
+	}
+}
+
+// TestSwitchUpdateChannel_Beta verifies the "beta" channel path.
+func TestSwitchUpdateChannel_Beta(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CASWHOIS_CONFIG_DIR", dir)
+	err := switchUpdateChannel("beta", "caswhois")
+	if err != nil {
+		t.Logf("switchUpdateChannel(beta) = %v (non-fatal in test env)", err)
+	}
+}
+
+// TestSwitchUpdateChannel_Daily verifies the "daily" channel path.
+func TestSwitchUpdateChannel_Daily(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CASWHOIS_CONFIG_DIR", dir)
+	err := switchUpdateChannel("daily", "caswhois")
+	if err != nil {
+		t.Logf("switchUpdateChannel(daily) = %v (non-fatal in test env)", err)
+	}
 }

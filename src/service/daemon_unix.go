@@ -9,6 +9,9 @@ import (
 	"syscall"
 )
 
+// osExitFn is the os.Exit implementation; tests may replace it to capture exits.
+var osExitFn = os.Exit
+
 // Daemonize forks the process and detaches from the controlling terminal.
 // The parent exits; the child continues as a daemon process.
 func Daemonize() error {
@@ -44,6 +47,6 @@ func Daemonize() error {
 	}
 
 	fmt.Printf("Daemon started with PID %d\n", cmd.Process.Pid)
-	os.Exit(0)
+	osExitFn(0)
 	return nil
 }

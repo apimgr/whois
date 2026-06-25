@@ -34,7 +34,8 @@ type EmailManager struct {
 	smtpPort     int
 	smtpUsername string
 	smtpPassword string
-	smtpTLS      string // "auto", "starttls", "tls", "none"
+	// smtpTLS is one of: "auto", "starttls", "tls", "none"
+	smtpTLS      string
 
 	// Sender configuration
 	fromName  string

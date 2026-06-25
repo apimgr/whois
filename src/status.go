@@ -145,13 +145,14 @@ func getDataDir(configDir string) string {
 }
 
 // handleMaintenance processes --maintenance commands (PART 22)
-func handleMaintenance(cmd, configDir, dataDir string) {
+// handleMaintenance processes --maintenance commands and returns an exit code (0 = success, 1 = error).
+func handleMaintenance(cmd, configDir, dataDir string) int {
 	// Parse command and arguments
 	args := strings.Fields(cmd)
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: No maintenance command specified\n")
 		fmt.Fprintf(os.Stderr, "Use: --maintenance help\n")
-		os.Exit(1)
+		return 1
 	}
 
 	operation := args[0]
@@ -160,7 +161,7 @@ func handleMaintenance(cmd, configDir, dataDir string) {
 	case "backup":
 		if err := performBackup(configDir, dataDir); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Backup failed: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("✓ Backup completed successfully")
 
@@ -168,12 +169,12 @@ func handleMaintenance(cmd, configDir, dataDir string) {
 		if len(args) < 2 {
 			fmt.Fprintf(os.Stderr, "Error: Restore requires backup file path\n")
 			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'restore /path/to/backup.tar.gz'\n")
-			os.Exit(1)
+			return 1
 		}
 		backupFile := args[1]
 		if err := performRestore(backupFile, configDir, dataDir); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Restore failed: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("✓ Restore completed successfully")
 
@@ -182,22 +183,22 @@ func handleMaintenance(cmd, configDir, dataDir string) {
 		if len(args) < 2 {
 			fmt.Fprintf(os.Stderr, "Error: mode requires a value: production or development\n")
 			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'mode production'\n")
-			os.Exit(1)
+			return 1
 		}
 		newMode := args[1]
 		if newMode != "production" && newMode != "development" {
 			fmt.Fprintf(os.Stderr, "Error: mode must be 'production' or 'development'\n")
-			os.Exit(1)
+			return 1
 		}
 		cfg, err := config.LoadServerConfig(configDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: could not load config: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		cfg.Mode = newMode
 		if saveErr := cfg.Save(configDir); saveErr != nil {
 			fmt.Fprintf(os.Stderr, "Error: could not save config: %v\n", saveErr)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("Mode set to %s. Restart the server for the change to take effect.\n", newMode)
 
@@ -207,13 +208,13 @@ func handleMaintenance(cmd, configDir, dataDir string) {
 			fmt.Fprintf(os.Stderr, "Error: Setup requires root privileges or a fresh install.\n")
 			fmt.Fprintf(os.Stderr, "  To reconfigure: edit server.yml directly and restart.\n")
 			fmt.Fprintf(os.Stderr, "  Or run: sudo caswhois --maintenance setup\n")
-			os.Exit(1)
+			return 1
 		}
 		cfg := config.Default()
 		cfg.ConfigDir = configDir
 		if saveErr := cfg.Save(configDir); saveErr != nil {
 			fmt.Fprintf(os.Stderr, "Error: could not write config: %v\n", saveErr)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("Server configuration reset to defaults.")
 		fmt.Printf("Edit %s/server.yml to customize, then restart.\n", configDir)
@@ -237,17 +238,18 @@ func handleMaintenance(cmd, configDir, dataDir string) {
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown maintenance command: %s\n", operation)
 		fmt.Fprintf(os.Stderr, "Use: --maintenance help\n")
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
-// handleUpdate processes --update commands (PART 23)
-func handleUpdate(cmd, binaryName string) {
+// handleUpdate processes --update commands and returns an exit code (0 = success, 1 = error).
+func handleUpdate(cmd, binaryName string) int {
 	args := strings.Fields(cmd)
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: No update command specified\n")
 		fmt.Fprintf(os.Stderr, "Use: --update help\n")
-		os.Exit(1)
+		return 1
 	}
 
 	operation := args[0]
@@ -256,13 +258,13 @@ func handleUpdate(cmd, binaryName string) {
 	case "check":
 		if err := checkForUpdates(binaryName); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Update check failed: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 
 	case "yes":
 		if err := performUpdate(binaryName); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Update failed: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("✓ Update completed successfully")
 		fmt.Println("  Restart the service to apply the update")
@@ -271,12 +273,12 @@ func handleUpdate(cmd, binaryName string) {
 		if len(args) < 2 {
 			fmt.Fprintf(os.Stderr, "Error: Branch command requires channel name\n")
 			fmt.Fprintf(os.Stderr, "Usage: --update 'branch stable|beta|daily'\n")
-			os.Exit(1)
+			return 1
 		}
 		channel := args[1]
 		if err := switchUpdateChannel(channel, binaryName); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Channel switch failed: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("✓ Switched to %s channel\n", channel)
 
@@ -296,8 +298,9 @@ func handleUpdate(cmd, binaryName string) {
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown update command: %s\n", operation)
 		fmt.Fprintf(os.Stderr, "Use: --update help\n")
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // performBackup creates an encrypted backup (PART 22)

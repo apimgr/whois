@@ -12,7 +12,7 @@ import (
 
 // start starts the service
 func (sm *ServiceManager) start() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	switch manager {
 	case "systemd":
@@ -40,7 +40,7 @@ func (sm *ServiceManager) start() error {
 
 // stop stops the service
 func (sm *ServiceManager) stop() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	switch manager {
 	case "systemd":
@@ -61,7 +61,7 @@ func (sm *ServiceManager) stop() error {
 
 // restart restarts the service
 func (sm *ServiceManager) restart() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	switch manager {
 	case "systemd":
@@ -84,7 +84,7 @@ func (sm *ServiceManager) restart() error {
 
 // reload reloads the service configuration
 func (sm *ServiceManager) reload() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	switch manager {
 	case "systemd":
@@ -106,7 +106,7 @@ func (sm *ServiceManager) reload() error {
 
 // status shows service status
 func (sm *ServiceManager) status() error {
-	manager := DetectServiceManager()
+	manager := detectServiceManagerFn()
 
 	var cmd *exec.Cmd
 	switch manager {

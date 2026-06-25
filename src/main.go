@@ -26,10 +26,20 @@ var (
 )
 
 func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+// run parses args and executes the appropriate command.
+// It returns an exit code (0 = success, 1 = error).
+// Extracted from main() so that tests can call it directly.
+func run(args []string) int {
 	// Get actual binary name (user may have renamed it)
 	binaryName := filepath.Base(os.Args[0])
 
-	// Define CLI flags
+	// Define CLI flags using a FlagSet so tests can call run() multiple times.
+	fs := flag.NewFlagSet(binaryName, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
 	var (
 		showHelp       bool
 		showVersion    bool
@@ -55,32 +65,34 @@ func main() {
 		updateCmd      string
 	)
 
-	flag.BoolVar(&showHelp, "help", false, "Show help message")
-	flag.BoolVar(&showHelp, "h", false, "Show help message")
-	flag.BoolVar(&showVersion, "version", false, "Show version information")
-	flag.BoolVar(&showVersion, "v", false, "Show version information")
-	flag.BoolVar(&showStatus, "status", false, "Show server status and health")
-	flag.StringVar(&mode, "mode", "production", "Application mode (production|development)")
-	flag.StringVar(&configDir, "config", "", "Config directory")
-	flag.StringVar(&dataDir, "data", "", "Data directory")
-	flag.StringVar(&cacheDir, "cache", "", "Cache directory")
-	flag.StringVar(&logDir, "log", "", "Log directory")
-	flag.StringVar(&backupDir, "backup", "", "Backup directory")
-	flag.StringVar(&pidFile, "pid", "", "PID file path")
-	flag.StringVar(&address, "address", "[::]", "Listen address (default: all interfaces)")
-	flag.IntVar(&port, "port", 0, "Listen port (0 = random 64000-64999)")
-	flag.StringVar(&baseURL, "baseurl", "/", "URL path prefix")
-	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
-	flag.BoolVar(&daemon, "daemon", false, "Run as daemon (detach from terminal)")
-	flag.BoolVar(&noColor, "no-color", false, "Disable color output")
-	flag.StringVar(&colorFlag, "color", "auto", "Color output (auto|yes|no)")
-	flag.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
-	flag.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
-	flag.StringVar(&serviceCmd, "service", "", "Service management (install|uninstall|disable|start|stop|restart|reload|status|help)")
-	flag.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|mode|setup|update|help)")
-	flag.StringVar(&updateCmd, "update", "", "Update operations (check|yes|branch|help)")
+	fs.BoolVar(&showHelp, "help", false, "Show help message")
+	fs.BoolVar(&showHelp, "h", false, "Show help message")
+	fs.BoolVar(&showVersion, "version", false, "Show version information")
+	fs.BoolVar(&showVersion, "v", false, "Show version information")
+	fs.BoolVar(&showStatus, "status", false, "Show server status and health")
+	fs.StringVar(&mode, "mode", "production", "Application mode (production|development)")
+	fs.StringVar(&configDir, "config", "", "Config directory")
+	fs.StringVar(&dataDir, "data", "", "Data directory")
+	fs.StringVar(&cacheDir, "cache", "", "Cache directory")
+	fs.StringVar(&logDir, "log", "", "Log directory")
+	fs.StringVar(&backupDir, "backup", "", "Backup directory")
+	fs.StringVar(&pidFile, "pid", "", "PID file path")
+	fs.StringVar(&address, "address", "[::]", "Listen address (default: all interfaces)")
+	fs.IntVar(&port, "port", 0, "Listen port (0 = random 64000-64999)")
+	fs.StringVar(&baseURL, "baseurl", "/", "URL path prefix")
+	fs.BoolVar(&debug, "debug", false, "Enable debug mode")
+	fs.BoolVar(&daemon, "daemon", false, "Run as daemon (detach from terminal)")
+	fs.BoolVar(&noColor, "no-color", false, "Disable color output")
+	fs.StringVar(&colorFlag, "color", "auto", "Color output (auto|yes|no)")
+	fs.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
+	fs.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
+	fs.StringVar(&serviceCmd, "service", "", "Service management (install|uninstall|disable|start|stop|restart|reload|status|help)")
+	fs.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|mode|setup|update|help)")
+	fs.StringVar(&updateCmd, "update", "", "Update operations (check|yes|branch|help)")
 
-	flag.Parse()
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
 
 	// --no-color flag takes precedence; map it to the colorFlag "no" value.
 	if noColor {
@@ -94,22 +106,22 @@ func main() {
 	// Handle immediate-exit flags (AI.md PART 8)
 	if showVersion {
 		printVersion(binaryName, useColor)
-		os.Exit(0)
+		return 0
 	}
 
 	if showHelp {
 		printHelp(binaryName)
-		os.Exit(0)
+		return 0
 	}
 
 	if showStatus {
-		os.Exit(checkStatus(configDir))
+		return checkStatus(configDir)
 	}
 
 	// Handle shell integration (completions / init)
 	if shellCmd != "" {
-		handleShell(shellCmd, binaryName, flag.Args())
-		os.Exit(0)
+		handleShell(shellCmd, binaryName, fs.Args())
+		return 0
 	}
 
 	// langFlag is consumed by the language layer after config load.
@@ -122,35 +134,34 @@ func main() {
 	if serviceCmd != "" {
 		sm, err := service.NewServiceManager("caswhois", "caswhois service", "WHOIS lookup service")
 		if err != nil {
-			log.Fatalf("Failed to create service manager: %v", err)
+			log.Printf("Failed to create service manager: %v", err)
+			return 1
 		}
 
 		cmd := service.ServiceCommand(serviceCmd)
 		if err := sm.Execute(cmd); err != nil {
-			log.Fatalf("Service command failed: %v", err)
+			log.Printf("Service command failed: %v", err)
+			return 1
 		}
-		os.Exit(0)
+		return 0
 	}
 
 	// Handle maintenance operations
 	if maintenanceCmd != "" {
 		// AI.md PART 23: --maintenance update is an alias for --update yes
 		if maintenanceCmd == "update" {
-			handleUpdate("yes", binaryName)
-			os.Exit(0)
+			return handleUpdate("yes", binaryName)
 		}
-		handleMaintenance(maintenanceCmd, configDir, dataDir)
-		os.Exit(0)
+		return handleMaintenance(maintenanceCmd, configDir, dataDir)
 	}
 
-	// Handle update operations  
+	// Handle update operations
 	if updateCmd != "" {
 		// Default to "yes" if no specific command given
-		if updateCmd == "" || updateCmd == "true" {
+		if updateCmd == "true" {
 			updateCmd = "yes"
 		}
-		handleUpdate(updateCmd, binaryName)
-		os.Exit(0)
+		return handleUpdate(updateCmd, binaryName)
 	}
 
 	// Handle daemonization (Unix only)
@@ -165,7 +176,8 @@ func main() {
 			} else {
 				// Safe to daemonize
 				if err := service.Daemonize(); err != nil {
-					log.Fatalf("Failed to daemonize: %v", err)
+					log.Printf("Failed to daemonize: %v", err)
+					return 1
 				}
 				// Parent exits here, child continues
 			}
@@ -175,7 +187,8 @@ func main() {
 	// Load configuration.
 	cfg, err := loadConfig(configDir, mode, address, baseURL, port, debug)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Printf("Failed to load configuration: %v", err)
+		return 1
 	}
 
 	// Apply directory overrides from CLI flags (AI.md PART 8).
@@ -195,7 +208,8 @@ func main() {
 	// Initialize database
 	database, err := initDatabase(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Printf("Failed to initialize database: %v", err)
+		return 1
 	}
 	defer database.Close()
 
@@ -216,8 +230,10 @@ func main() {
 	// Create and start server
 	srv := server.New(cfg, database, lgr)
 	if err := srv.Start(); err != nil {
-		log.Fatalf("Server error: %v", err)
+		log.Printf("Server error: %v", err)
+		return 1
 	}
+	return 0
 }
 
 // colorEnabled returns whether color output is enabled, respecting PART 8 priority order:
