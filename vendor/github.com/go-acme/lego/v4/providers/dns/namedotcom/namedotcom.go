@@ -10,7 +10,8 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
-	"github.com/namedotcom/go/namecom"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
+	"github.com/namedotcom/go/v4/namecom"
 )
 
 // Environment variables names.
@@ -97,7 +98,12 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	}
 
 	client := namecom.New(config.Username, config.APIToken)
-	client.Client = config.HTTPClient
+
+	if config.HTTPClient != nil {
+		client.Client = config.HTTPClient
+	}
+
+	client.Client = clientdebug.Wrap(client.Client)
 
 	if config.Server != "" {
 		client.Server = config.Server
@@ -110,7 +116,10 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	// TODO(ldez) replace domain by FQDN to follow CNAME.
+	if info.EffectiveFQDN != info.FQDN {
+		domain = dns01.UnFqdn(info.EffectiveFQDN)
+	}
+
 	domainDetails, err := d.client.GetDomain(&namecom.GetDomainRequest{DomainName: domain})
 	if err != nil {
 		return fmt.Errorf("namedotcom: API call failed: %w", err)
@@ -121,7 +130,6 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		return fmt.Errorf("namedotcom: %w", err)
 	}
 
-	// TODO(ldez) replace domain by FQDN to follow CNAME.
 	request := &namecom.Record{
 		DomainName: domain,
 		Host:       subDomain,
@@ -142,7 +150,10 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	// TODO(ldez) replace domain by FQDN to follow CNAME.
+	if info.EffectiveFQDN != info.FQDN {
+		domain = dns01.UnFqdn(info.EffectiveFQDN)
+	}
+
 	records, err := d.getRecords(domain)
 	if err != nil {
 		return fmt.Errorf("namedotcom: %w", err)
@@ -150,11 +161,11 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 
 	for _, rec := range records {
 		if rec.Fqdn == info.EffectiveFQDN && rec.Type == "TXT" {
-			// TODO(ldez) replace domain by FQDN to follow CNAME.
 			request := &namecom.DeleteRecordRequest{
 				DomainName: domain,
 				ID:         rec.ID,
 			}
+
 			_, err := d.client.DeleteRecord(request)
 			if err != nil {
 				return fmt.Errorf("namedotcom: %w", err)
@@ -178,6 +189,7 @@ func (d *DNSProvider) getRecords(domain string) ([]*namecom.Record, error) {
 	}
 
 	var records []*namecom.Record
+
 	for request.Page > 0 {
 		response, err := d.client.ListRecords(request)
 		if err != nil {

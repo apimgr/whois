@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,18 +25,15 @@ func (o ESIMOperatorName) String() string {
 // SIMOperators SIMキャリア名
 var SIMOperators = struct {
 	KDDI     ESIMOperatorName
-	Docomo   ESIMOperatorName
 	SoftBank ESIMOperatorName
 }{
 	KDDI:     ESIMOperatorName("KDDI"),
-	Docomo:   ESIMOperatorName("NTT DOCOMO"),
 	SoftBank: ESIMOperatorName("SoftBank"),
 }
 
 // SIMOperatorShortNameMap 省略名をキーとするESIMOperatorNameのマップ
 var SIMOperatorShortNameMap = map[string]ESIMOperatorName{
 	"kddi":     SIMOperators.KDDI,
-	"docomo":   SIMOperators.Docomo,
 	"softbank": SIMOperators.SoftBank,
 }
 

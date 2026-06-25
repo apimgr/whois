@@ -1,13 +1,13 @@
 package resolver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/go-acme/lego/v4/acme"
 	"github.com/go-acme/lego/v4/acme/api"
 	"github.com/go-acme/lego/v4/challenge"
@@ -15,6 +15,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge/http01"
 	"github.com/go-acme/lego/v4/challenge/tlsalpn01"
 	"github.com/go-acme/lego/v4/log"
+	"github.com/go-acme/lego/v4/platform/wait"
 )
 
 type byType []acme.Challenge
@@ -42,8 +43,8 @@ func (c *SolverManager) SetHTTP01Provider(p challenge.Provider, opts ...http01.C
 }
 
 // SetTLSALPN01Provider specifies a custom provider p that can solve the given TLS-ALPN-01 challenge.
-func (c *SolverManager) SetTLSALPN01Provider(p challenge.Provider) error {
-	c.solvers[challenge.TLSALPN01] = tlsalpn01.NewChallenge(c.core, validate, p)
+func (c *SolverManager) SetTLSALPN01Provider(p challenge.Provider, opts ...tlsalpn01.ChallengeOption) error {
+	c.solvers[challenge.TLSALPN01] = tlsalpn01.NewChallenge(c.core, validate, p, opts...)
 	return nil
 }
 
@@ -69,6 +70,7 @@ func (c *SolverManager) chooseSolver(authz acme.Authorization) solver {
 			log.Infof("[%s] acme: use %s solver", domain, chlg.Type)
 			return solvr
 		}
+
 		log.Infof("[%s] acme: Could not find solver for: %s", domain, chlg.Type)
 	}
 
@@ -91,20 +93,20 @@ func validate(core *api.Core, domain string, chlg acme.Challenge) error {
 		return nil
 	}
 
-	ra, err := strconv.Atoi(chlng.RetryAfter)
-	if err != nil {
+	retryAfter, err := api.ParseRetryAfter(chlng.RetryAfter)
+	if err != nil || retryAfter == 0 {
 		// The ACME server MUST return a Retry-After.
-		// If it doesn't, we'll just poll hard.
+		// If it doesn't, or if it's invalid, we'll just poll hard.
 		// Boulder does not implement the ability to retry challenges or the Retry-After header.
 		// https://github.com/letsencrypt/boulder/blob/master/docs/acme-divergences.md#section-82
-		ra = 5
+		retryAfter = 5 * time.Second
 	}
-	initialInterval := time.Duration(ra) * time.Second
+
+	ctx := context.Background()
 
 	bo := backoff.NewExponentialBackOff()
-	bo.InitialInterval = initialInterval
-	bo.MaxInterval = 10 * initialInterval
-	bo.MaxElapsedTime = 100 * initialInterval
+	bo.InitialInterval = retryAfter
+	bo.MaxInterval = 10 * retryAfter
 
 	// After the path is sent, the ACME server will access our server.
 	// Repeatedly check the server for an updated status on our request.
@@ -127,7 +129,9 @@ func validate(core *api.Core, domain string, chlg acme.Challenge) error {
 		return fmt.Errorf("the server didn't respond to our request (status=%s)", authz.Status)
 	}
 
-	return backoff.Retry(operation, bo)
+	return wait.Retry(ctx, operation,
+		backoff.WithBackOff(bo),
+		backoff.WithMaxElapsedTime(100*retryAfter))
 }
 
 func checkChallengeStatus(chlng acme.ExtendedChallenge) (bool, error) {
@@ -157,6 +161,7 @@ func checkAuthorizationStatus(authz acme.Authorization) (bool, error) {
 				return false, fmt.Errorf("invalid authorization: %w", chlg.Err())
 			}
 		}
+
 		return false, errors.New("invalid authorization")
 	default:
 		return false, fmt.Errorf("the server returned an unexpected authorization status: %s", authz.Status)

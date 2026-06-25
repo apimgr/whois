@@ -13,6 +13,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/luadns/internal"
 )
 
@@ -100,11 +101,12 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		client.HTTPClient = config.HTTPClient
 	}
 
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
+
 	return &DNSProvider{
-		config:    config,
-		client:    client,
-		recordsMu: sync.Mutex{},
-		records:   make(map[string]*internal.DNSRecord),
+		config:  config,
+		client:  client,
+		records: make(map[string]*internal.DNSRecord),
 	}, nil
 }
 

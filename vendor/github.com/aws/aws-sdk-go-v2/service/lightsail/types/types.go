@@ -19,7 +19,7 @@ import (
 // first create an access key; you cannot get the secret access key later. If you
 // lose the secret access key, you must create a new access key.
 //
-// [Creating access keys for a bucket in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-creating-bucket-access-keys
+// [Creating access keys for a bucket in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-creating-bucket-access-keys
 // [CreateBucketAccessKey]: https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_CreateBucketAccessKey.html
 type AccessKey struct {
 
@@ -85,7 +85,7 @@ type AccessKeyLastUsed struct {
 //
 // Amazon Lightsail Developer Guide.
 //
-// [Understanding bucket permissions in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-understanding-bucket-permissions
+// [Understanding bucket permissions in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-understanding-bucket-permissions
 type AccessRules struct {
 
 	// A Boolean value that indicates whether the access control list (ACL)
@@ -137,7 +137,7 @@ type AccessRules struct {
 // Simple Storage Service account-level BPA and how it affects Lightsail buckets,
 // see [Block public access for buckets in Amazon Lightsail]in the Amazon Lightsail Developer Guide.
 //
-// [Block public access for buckets in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-block-public-access-for-buckets
+// [Block public access for buckets in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-block-public-access-for-buckets
 type AccountLevelBpaSync struct {
 
 	// A Boolean value that indicates whether account-level block public access is
@@ -178,7 +178,7 @@ type AccountLevelBpaSync struct {
 	//   - Unknown - The reason that synchronization failed is unknown. Contact Amazon
 	//   Web Services Support for more information.
 	//
-	// [Using Service-Linked Roles for Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-using-service-linked-roles
+	// [Using Service-Linked Roles for Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-using-service-linked-roles
 	Message BPAStatusMessage
 
 	// The status of the account-level BPA synchronization.
@@ -275,7 +275,7 @@ type AddOnRequest struct {
 // An alarm is a way to monitor your Lightsail resource metrics. For more
 // information, see [Alarms in Amazon Lightsail].
 //
-// [Alarms in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-alarms
+// [Alarms in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-alarms
 type Alarm struct {
 
 	// The Amazon Resource Name (ARN) of the alarm.
@@ -362,6 +362,12 @@ type Alarm struct {
 	// questions about your Lightsail alarm. This code enables our support team to look
 	// up your Lightsail information more easily.
 	SupportCode *string
+
+	// The tag keys and optional values for the resource. For more information about
+	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
+	//
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
+	Tags []Tag
 
 	// The value against which the specified statistic is compared.
 	Threshold *float64
@@ -569,6 +575,14 @@ type Bucket struct {
 	// [UpdateBucketBundle]: https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_UpdateBucketBundle.html
 	BundleId *string
 
+	// An array of cross-origin resource sharing (CORS) rules that identify origins
+	// and the HTTP methods that can be executed on your bucket. This field is only
+	// included in the response when CORS configuration is requested or when updating
+	// CORS configuration. For more information, see [Configuring cross-origin resource sharing (CORS)].
+	//
+	// [Configuring cross-origin resource sharing (CORS)]: https://docs.aws.amazon.com/lightsail/latest/userguide/configure-cors.html
+	Cors *BucketCorsConfig
+
 	// The timestamp when the distribution was created.
 	CreatedAt *time.Time
 
@@ -632,7 +646,7 @@ type Bucket struct {
 // For more information about bucket access logs, see [Logging bucket requests using access logging in Amazon Lightsail] in the Amazon Lightsail
 // Developer Guide.
 //
-// [Logging bucket requests using access logging in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-bucket-access-logs
+// [Logging bucket requests using access logging in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-bucket-access-logs
 type BucketAccessLogConfig struct {
 
 	// A Boolean value that indicates whether bucket access logging is enabled for the
@@ -687,6 +701,78 @@ type BucketBundle struct {
 
 	// The monthly network transfer quota of the bundle.
 	TransferPerMonthInGb *int32
+
+	noSmithyDocumentSerde
+}
+
+// Describes the cross-origin resource sharing (CORS) configuration for a
+// Lightsail bucket. CORS defines a way for client web applications that are loaded
+// in one domain to interact with resources in a different domain. For more
+// information, see [Configuring cross-origin resource sharing (CORS)].
+//
+// [Configuring cross-origin resource sharing (CORS)]: https://docs.aws.amazon.com/lightsail/latest/userguide/configure-cors.html
+type BucketCorsConfig struct {
+
+	// A set of origins and methods (cross-origin access that you want to allow). You
+	// can add up to 20 rules to the configuration. The total size is limited to 64 KB.
+	Rules []BucketCorsRule
+
+	noSmithyDocumentSerde
+}
+
+// Describes a cross-origin resource sharing (CORS) rule for a Lightsail bucket.
+// CORS rules specify which origins are allowed to access the bucket, which HTTP
+// methods are allowed, and other access control information. For more information,
+// see [Configuring cross-origin resource sharing (CORS)].
+//
+// [Configuring cross-origin resource sharing (CORS)]: https://docs.aws.amazon.com/lightsail/latest/userguide/configure-cors.html
+type BucketCorsRule struct {
+
+	// The HTTP methods that are allowed when accessing the bucket from the specified
+	// origin. Each CORS rule must identify at least one origin and one method.
+	//
+	// You can use the following HTTP methods:
+	//
+	//   - GET - Retrieves data from the server, such as downloading files or viewing
+	//   content.
+	//
+	//   - PUT - Uploads or replaces data on the server, such as uploading new files.
+	//
+	//   - POST - Sends data to the server for processing, such as submitting forms or
+	//   creating new resources.
+	//
+	//   - DELETE - Removes data from the server, such as deleting files or resources.
+	//
+	//   - HEAD - Retrieves only the headers from the server without the actual
+	//   content, useful for checking if a resource exists.
+	//
+	// This member is required.
+	AllowedMethods []string
+
+	// One or more origins you want customers to be able to access the bucket from.
+	// Each CORS rule must identify at least one origin and one method.
+	//
+	// This member is required.
+	AllowedOrigins []string
+
+	// Headers that are specified in the Access-Control-Request-Headers header. These
+	// headers are allowed in a preflight OPTIONS request. In response to any
+	// preflight OPTIONS request, Amazon S3 returns any requested headers that are
+	// allowed.
+	AllowedHeaders []string
+
+	// One or more headers in the response that you want customers to be able to
+	// access from their applications (for example, from a JavaScript XMLHttpRequest
+	// object).
+	ExposeHeaders []string
+
+	// A unique identifier for the CORS rule. The ID value can be up to 255 characters
+	// long. The IDs help you find a rule in the configuration.
+	Id *string
+
+	// The time in seconds that your browser is to cache the preflight response for
+	// the specified resource. A CORS rule can have only one maxAgeSeconds element.
+	MaxAgeSeconds *int32
 
 	noSmithyDocumentSerde
 }
@@ -1048,7 +1134,7 @@ type Certificate struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -1072,7 +1158,7 @@ type CertificateSummary struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -1137,7 +1223,7 @@ type CloudFormationStackRecordSourceInfo struct {
 //
 // A contact method is a way to send you notifications. For more information, see [Notifications in Amazon Lightsail].
 //
-// [Notifications in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-notifications
+// [Notifications in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-notifications
 type ContactMethod struct {
 
 	// The Amazon Resource Name (ARN) of the contact method.
@@ -1180,6 +1266,12 @@ type ContactMethod struct {
 	// questions about your Lightsail contact method. This code enables our support
 	// team to look up your Lightsail information more easily.
 	SupportCode *string
+
+	// The tag keys and optional values for the resource. For more information about
+	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
+	//
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
+	Tags []Tag
 
 	noSmithyDocumentSerde
 }
@@ -1289,7 +1381,7 @@ type ContainerService struct {
 	//
 	// For more information, see [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service] in the Amazon Lightsail Developer Guide.
 	//
-	// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-container-service-ecr-private-repo-access
+	// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-service-ecr-private-repo-access
 	PrivateRegistryAccess *PrivateRegistryAccess
 
 	// The public domain name of the container service, such as example.com and
@@ -1351,7 +1443,7 @@ type ContainerService struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	// The publicly accessible URL of the container service.
@@ -1430,7 +1522,7 @@ type ContainerServiceDeploymentRequest struct {
 // your container service to pull images from Amazon ECR private repositories. For
 // more information, see [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]in the Amazon Lightsail Developer Guide.
 //
-// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-container-service-ecr-private-repo-access
+// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-service-ecr-private-repo-access
 type ContainerServiceECRImagePullerRole struct {
 
 	// A Boolean value that indicates whether the role is activated.
@@ -1453,7 +1545,7 @@ type ContainerServiceECRImagePullerRole struct {
 // your container service to pull images from Amazon ECR private repositories. For
 // more information, see [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]in the Amazon Lightsail Developer Guide.
 //
-// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-container-service-ecr-private-repo-access
+// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-service-ecr-private-repo-access
 type ContainerServiceECRImagePullerRoleRequest struct {
 
 	// A Boolean value that indicates whether to activate the role.
@@ -1744,7 +1836,7 @@ type Disk struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -1835,7 +1927,7 @@ type DiskSnapshot struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -1885,7 +1977,7 @@ type DistributionBundle struct {
 // records to the DNS of your domain. For more information, see [Verify an SSL/TLS certificate in Amazon Lightsail]in the Amazon
 // Lightsail Developer Guide.
 //
-// [Verify an SSL/TLS certificate in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/verify-tls-ssl-certificate-using-dns-cname-https
+// [Verify an SSL/TLS certificate in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/verify-tls-ssl-certificate-using-dns-cname-https
 type DnsRecordCreationState struct {
 
 	// The status code for the automated DNS record creation.
@@ -1940,7 +2032,7 @@ type Domain struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -2320,7 +2412,7 @@ type Instance struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	// The user name for connecting to the instance ( ec2-user ).
@@ -2562,7 +2654,7 @@ type InstanceMetadataOptions struct {
 	// instance metadata service that are using version 1.0 credentials. For more
 	// information, see [Viewing instance metrics in Amazon Lightsail]in the Amazon Lightsail Developer Guide.
 	//
-	// [Viewing instance metrics in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-viewing-instance-health-metrics
+	// [Viewing instance metrics in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-viewing-instance-health-metrics
 	HttpTokens HttpTokens
 
 	// The state of the metadata option changes.
@@ -2890,7 +2982,7 @@ type InstanceSnapshot struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -2955,7 +3047,7 @@ type KeyPair struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -3041,7 +3133,7 @@ type LightsailDistribution struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	// The minimum TLS protocol version that the distribution can use to communicate
@@ -3119,7 +3211,7 @@ type LoadBalancer struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	// An array of LoadBalancerTlsCertificateSummary objects that provide additional
@@ -3287,7 +3379,7 @@ type LoadBalancerTlsCertificate struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -3426,7 +3518,7 @@ type LoadBalancerTlsCertificateSummary struct {
 // For more information about load balancer TLS security policies, see [Configuring TLS security policies on your Amazon Lightsail load balancers] in the
 // Amazon Lightsail Developer Guide.
 //
-// [Configuring TLS security policies on your Amazon Lightsail load balancers]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-configure-load-balancer-tls-security-policy
+// [Configuring TLS security policies on your Amazon Lightsail load balancers]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configure-load-balancer-tls-security-policy
 type LoadBalancerTlsPolicy struct {
 
 	// The ciphers used by the TLS security policy.
@@ -3493,7 +3585,7 @@ type MetricDatapoint struct {
 // An alarm is a way to monitor your Amazon Lightsail resource metrics. For more
 // information, see [Alarms in Amazon Lightsail].
 //
-// [Alarms in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-alarms
+// [Alarms in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-alarms
 type MonitoredResourceInfo struct {
 
 	// The Amazon Resource Name (ARN) of the resource being monitored.
@@ -3526,7 +3618,7 @@ type MonthlyTransfer struct {
 //
 // For more information, see [DNS in Amazon Lightsail] in the Amazon Lightsail Developer Guide.
 //
-// [DNS in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/understanding-dns-in-amazon-lightsail
+// [DNS in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/understanding-dns-in-amazon-lightsail
 type NameServersUpdateState struct {
 
 	// The status code for the name servers update.
@@ -3802,7 +3894,7 @@ type PortInfo struct {
 //
 // For more information, see [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service] in the Amazon Lightsail Developer Guide.
 //
-// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-container-service-ecr-private-repo-access
+// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-service-ecr-private-repo-access
 type PrivateRegistryAccess struct {
 
 	// An object that describes the activation status of the role that you can use to
@@ -3820,7 +3912,7 @@ type PrivateRegistryAccess struct {
 //
 // For more information, see [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service] in the Amazon Lightsail Developer Guide.
 //
-// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-container-service-ecr-private-repo-access
+// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-service-ecr-private-repo-access
 type PrivateRegistryAccessRequest struct {
 
 	// An object to describe a request to activate or deactivate the role that you can
@@ -3930,7 +4022,7 @@ type Region struct {
 // DNS zone name servers to your domain in order to delegate management of its DNS
 // to Lightsail. For more information, see [Creating a DNS zone to manage your domain’s records in Amazon Lightsail]in the Amazon Lightsail Developer Guide.
 //
-// [Creating a DNS zone to manage your domain’s records in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/lightsail-how-to-create-dns-entry
+// [Creating a DNS zone to manage your domain’s records in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/lightsail-how-to-create-dns-entry
 type RegisteredDomainDelegationInfo struct {
 
 	// An object that describes the state of the name server records that are
@@ -4038,7 +4130,7 @@ type RelationalDatabase struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -4233,7 +4325,7 @@ type RelationalDatabaseSnapshot struct {
 	// The tag keys and optional values for the resource. For more information about
 	// tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -4338,8 +4430,8 @@ type ResourceRecord struct {
 	noSmithyDocumentSerde
 }
 
-// Describes a web-based, remote graphical user interface (GUI), NICE DCV session.
-// The session is used to access a virtual computer’s operating system or
+// Describes a web-based, remote graphical user interface (GUI), Amazon DCV
+// session. The session is used to access a virtual computer’s operating system or
 // application.
 type Session struct {
 
@@ -4499,7 +4591,7 @@ type StopInstanceOnIdleRequest struct {
 //
 // For more information about tags in Lightsail, see the [Amazon Lightsail Developer Guide].
 //
-// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-tags
+// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags
 type Tag struct {
 
 	// The key of the tag.

@@ -37,13 +37,14 @@ func NewClient(apiKey string) *Client {
 
 // GetRecords gets all records.
 // Note: the response is not influenced by the query parameters, so the documentation seems wrong.
-func (c Client) GetRecords(ctx context.Context, zoneID string, params *GetRecordsParameters) (*GetRecordsResponse, error) {
+func (c *Client) GetRecords(ctx context.Context, zoneID string, params *GetRecordsParameters) (*GetRecordsResponse, error) {
 	endpoint := c.baseURL.JoinPath("zones", zoneID, "dnsrecords")
 
 	v, err := querystring.Values(params)
 	if err != nil {
 		return nil, err
 	}
+
 	endpoint.RawQuery = v.Encode()
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -52,6 +53,7 @@ func (c Client) GetRecords(ctx context.Context, zoneID string, params *GetRecord
 	}
 
 	response := &GetRecordsResponse{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return nil, err
@@ -61,7 +63,7 @@ func (c Client) GetRecords(ctx context.Context, zoneID string, params *GetRecord
 }
 
 // GetRecord gets a record by ID.
-func (c Client) GetRecord(ctx context.Context, zoneID string, recordID string) (*Record, error) {
+func (c *Client) GetRecord(ctx context.Context, zoneID, recordID string) (*Record, error) {
 	endpoint := c.baseURL.JoinPath("zones", zoneID, "dnsrecords", recordID)
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -70,6 +72,7 @@ func (c Client) GetRecord(ctx context.Context, zoneID string, recordID string) (
 	}
 
 	response := &Record{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return nil, err
@@ -79,7 +82,7 @@ func (c Client) GetRecord(ctx context.Context, zoneID string, recordID string) (
 }
 
 // CreateRecord creates a new record.
-func (c Client) CreateRecord(ctx context.Context, zoneID string, record Record) (*Record, error) {
+func (c *Client) CreateRecord(ctx context.Context, zoneID string, record Record) (*Record, error) {
 	endpoint := c.baseURL.JoinPath("zones", zoneID, "dnsrecords")
 
 	req, err := newJSONRequest(ctx, http.MethodPut, endpoint, record)
@@ -88,6 +91,7 @@ func (c Client) CreateRecord(ctx context.Context, zoneID string, record Record) 
 	}
 
 	response := &Record{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return nil, err
@@ -97,7 +101,7 @@ func (c Client) CreateRecord(ctx context.Context, zoneID string, record Record) 
 }
 
 // EditRecord edits an existing record.
-func (c Client) EditRecord(ctx context.Context, zoneID string, recordID string, record Record) (*Record, error) {
+func (c *Client) EditRecord(ctx context.Context, zoneID, recordID string, record Record) (*Record, error) {
 	endpoint := c.baseURL.JoinPath("zones", zoneID, "dnsrecords", recordID)
 
 	req, err := newJSONRequest(ctx, http.MethodPatch, endpoint, record)
@@ -106,6 +110,7 @@ func (c Client) EditRecord(ctx context.Context, zoneID string, recordID string, 
 	}
 
 	response := &Record{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return nil, err
@@ -115,7 +120,7 @@ func (c Client) EditRecord(ctx context.Context, zoneID string, recordID string, 
 }
 
 // DeleteRecord deletes an existing record.
-func (c Client) DeleteRecord(ctx context.Context, zoneID string, recordID string) error {
+func (c *Client) DeleteRecord(ctx context.Context, zoneID, recordID string) error {
 	endpoint := c.baseURL.JoinPath("zones", zoneID, "dnsrecords", recordID)
 
 	req, err := newJSONRequest(ctx, http.MethodDelete, endpoint, nil)
@@ -140,13 +145,14 @@ func (c Client) DeleteRecord(ctx context.Context, zoneID string, recordID string
 // GetZones gets zones.
 // Note: it's not a part of the official API, there is no documentation about this.
 // The endpoint comes from UI calls analysis.
-func (c Client) GetZones(ctx context.Context) ([]Zone, error) {
+func (c *Client) GetZones(ctx context.Context) ([]Zone, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.zoneEndpoint, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 
 	response := &APIResponse[[]Zone]{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return nil, err
@@ -159,7 +165,7 @@ func (c Client) GetZones(ctx context.Context) ([]Zone, error) {
 	return response.Result, nil
 }
 
-func (c Client) do(req *http.Request, result any) error {
+func (c *Client) do(req *http.Request, result any) error {
 	req.SetBasicAuth("api", c.apiKey)
 
 	resp, err := c.HTTPClient.Do(req)
@@ -221,6 +227,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var response APIResponse[any]
+
 	err := json.Unmarshal(raw, &response)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

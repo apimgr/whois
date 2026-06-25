@@ -56,7 +56,7 @@ type UpdateContainerServiceInput struct {
 	//
 	// For more information, see [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service] in the Amazon Lightsail Developer Guide.
 	//
-	// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-container-service-ecr-private-repo-access
+	// [Configuring access to an Amazon ECR private repository for an Amazon Lightsail container service]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-service-ecr-private-repo-access
 	PrivateRegistryAccess *types.PrivateRegistryAccessRequest
 
 	// The public domain names to use with the container service, such as example.com
@@ -134,7 +134,7 @@ func (c *Client) addOperationUpdateContainerServiceMiddlewares(stack *middleware
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -158,10 +158,10 @@ func (c *Client) addOperationUpdateContainerServiceMiddlewares(stack *middleware
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpUpdateContainerServiceValidationMiddleware(stack); err != nil {
@@ -185,16 +185,13 @@ func (c *Client) addOperationUpdateContainerServiceMiddlewares(stack *middleware
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

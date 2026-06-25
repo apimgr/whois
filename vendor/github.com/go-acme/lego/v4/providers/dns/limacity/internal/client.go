@@ -32,7 +32,7 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-func (c Client) GetDomains(ctx context.Context) ([]Domain, error) {
+func (c *Client) GetDomains(ctx context.Context) ([]Domain, error) {
 	endpoint := c.baseURL.JoinPath("domains.json")
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -41,6 +41,7 @@ func (c Client) GetDomains(ctx context.Context) ([]Domain, error) {
 	}
 
 	var results DomainsResponse
+
 	err = c.do(req, &results)
 	if err != nil {
 		return nil, err
@@ -49,7 +50,7 @@ func (c Client) GetDomains(ctx context.Context) ([]Domain, error) {
 	return results.Data, nil
 }
 
-func (c Client) GetRecords(ctx context.Context, domainID int) ([]Record, error) {
+func (c *Client) GetRecords(ctx context.Context, domainID int) ([]Record, error) {
 	endpoint := c.baseURL.JoinPath("domains", strconv.Itoa(domainID), "records.json")
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -58,6 +59,7 @@ func (c Client) GetRecords(ctx context.Context, domainID int) ([]Record, error) 
 	}
 
 	var results RecordsResponse
+
 	err = c.do(req, &results)
 	if err != nil {
 		return nil, err
@@ -66,7 +68,7 @@ func (c Client) GetRecords(ctx context.Context, domainID int) ([]Record, error) 
 	return results.Data, nil
 }
 
-func (c Client) AddRecord(ctx context.Context, domainID int, record Record) error {
+func (c *Client) AddRecord(ctx context.Context, domainID int, record Record) error {
 	endpoint := c.baseURL.JoinPath("domains", strconv.Itoa(domainID), "records.json")
 
 	req, err := newJSONRequest(ctx, http.MethodPost, endpoint, NameserverRecordPayload{Data: record})
@@ -75,6 +77,7 @@ func (c Client) AddRecord(ctx context.Context, domainID int, record Record) erro
 	}
 
 	var results APIResponse
+
 	err = c.do(req, &results)
 	if err != nil {
 		return err
@@ -83,7 +86,7 @@ func (c Client) AddRecord(ctx context.Context, domainID int, record Record) erro
 	return nil
 }
 
-func (c Client) UpdateRecord(ctx context.Context, domainID, recordID int, record Record) error {
+func (c *Client) UpdateRecord(ctx context.Context, domainID, recordID int, record Record) error {
 	endpoint := c.baseURL.JoinPath("domains", strconv.Itoa(domainID), "records", strconv.Itoa(recordID))
 
 	req, err := newJSONRequest(ctx, http.MethodPut, endpoint, NameserverRecordPayload{Data: record})
@@ -92,6 +95,7 @@ func (c Client) UpdateRecord(ctx context.Context, domainID, recordID int, record
 	}
 
 	var results APIResponse
+
 	err = c.do(req, &results)
 	if err != nil {
 		return err
@@ -100,7 +104,7 @@ func (c Client) UpdateRecord(ctx context.Context, domainID, recordID int, record
 	return nil
 }
 
-func (c Client) DeleteRecord(ctx context.Context, domainID, recordID int) error {
+func (c *Client) DeleteRecord(ctx context.Context, domainID, recordID int) error {
 	// /domains/{domainId}/records/{recordId} DELETE
 	endpoint := c.baseURL.JoinPath("domains", strconv.Itoa(domainID), "records", strconv.Itoa(recordID))
 
@@ -110,6 +114,7 @@ func (c Client) DeleteRecord(ctx context.Context, domainID, recordID int) error 
 	}
 
 	var results APIResponse
+
 	err = c.do(req, &results)
 	if err != nil {
 		return err
@@ -118,7 +123,7 @@ func (c Client) DeleteRecord(ctx context.Context, domainID, recordID int) error 
 	return nil
 }
 
-func (c Client) do(req *http.Request, result any) error {
+func (c *Client) do(req *http.Request, result any) error {
 	req.SetBasicAuth("api", c.apiKey)
 
 	resp, err := c.HTTPClient.Do(req)
@@ -177,6 +182,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var errAPI APIResponse
+
 	err := json.Unmarshal(raw, &errAPI)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

@@ -38,7 +38,7 @@ func NewClient(apiKey string) *Client {
 
 // ListDomains Retrieve all domains from an account.
 // https://mijn.host/api/doc/api-3563872
-func (c Client) ListDomains(ctx context.Context) ([]Domain, error) {
+func (c *Client) ListDomains(ctx context.Context) ([]Domain, error) {
 	endpoint := c.baseURL.JoinPath("domains")
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -47,6 +47,7 @@ func (c Client) ListDomains(ctx context.Context) ([]Domain, error) {
 	}
 
 	var results Response[DomainData]
+
 	err = c.do(req, &results)
 	if err != nil {
 		return nil, err
@@ -57,7 +58,7 @@ func (c Client) ListDomains(ctx context.Context) ([]Domain, error) {
 
 // GetRecords Retrieve DNS records of specific domain.
 // https://mijn.host/api/doc/api-3563906
-func (c Client) GetRecords(ctx context.Context, domain string) ([]Record, error) {
+func (c *Client) GetRecords(ctx context.Context, domain string) ([]Record, error) {
 	endpoint := c.baseURL.JoinPath("domains", domain, "dns")
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -66,6 +67,7 @@ func (c Client) GetRecords(ctx context.Context, domain string) ([]Record, error)
 	}
 
 	var results Response[RecordData]
+
 	err = c.do(req, &results)
 	if err != nil {
 		return nil, err
@@ -76,7 +78,7 @@ func (c Client) GetRecords(ctx context.Context, domain string) ([]Record, error)
 
 // UpdateRecords Update DNS records of specific domain.
 // https://mijn.host/api/doc/api-3563907
-func (c Client) UpdateRecords(ctx context.Context, domain string, records []Record) error {
+func (c *Client) UpdateRecords(ctx context.Context, domain string, records []Record) error {
 	endpoint := c.baseURL.JoinPath("domains", domain, "dns")
 
 	req, err := newJSONRequest(ctx, http.MethodPut, endpoint, RecordData{Records: records})
@@ -92,7 +94,7 @@ func (c Client) UpdateRecords(ctx context.Context, domain string, records []Reco
 	return nil
 }
 
-func (c Client) do(req *http.Request, result any) error {
+func (c *Client) do(req *http.Request, result any) error {
 	req.Header.Set(authorizationHeader, c.apiKey)
 
 	resp, err := c.HTTPClient.Do(req)
@@ -151,6 +153,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var errAPI APIError
+
 	err := json.Unmarshal(raw, &errAPI)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

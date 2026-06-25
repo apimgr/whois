@@ -1,4 +1,4 @@
-Name = "ConoHa"
+Name = "ConoHa v2"
 Description = ''''''
 URL = "https://www.conoha.jp/"
 Code = "conoha"
@@ -8,7 +8,7 @@ Example = '''
 CONOHA_TENANT_ID=487727e3921d44e3bfe7ebb337bf085e \
 CONOHA_API_USERNAME=xxxx \
 CONOHA_API_PASSWORD=yyyy \
-lego --email you@example.com --dns conoha -d '*.example.com' -d example.com run
+lego --dns conoha -d '*.example.com' -d example.com run
 '''
 
 [Configuration]
@@ -24,4 +24,4 @@ lego --email you@example.com --dns conoha -d '*.example.com' -d example.com run
     CONOHA_REGION = "The region (Default: tyo1)"
 
 [Links]
-  API = "https://www.conoha.jp/docs/"
+  API = "https://doc.conoha.jp/reference/api-vps2/api-dns-vps2"

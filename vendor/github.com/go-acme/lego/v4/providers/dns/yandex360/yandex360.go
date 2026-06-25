@@ -13,7 +13,9 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/yandex360/internal"
+	"github.com/miekg/dns"
 )
 
 // Environment variables names.
@@ -97,6 +99,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		client.HTTPClient = config.HTTPClient
 	}
 
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
+
 	return &DNSProvider{
 		client:    client,
 		config:    config,
@@ -108,7 +112,7 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	authZone, err := dns01.FindZoneByFqdn(dns01.ToFqdn(info.EffectiveFQDN))
+	authZone, err := dns01.FindZoneByFqdn(dns.Fqdn(info.EffectiveFQDN))
 	if err != nil {
 		return fmt.Errorf("yandex360: could not find zone for domain %q: %w", domain, err)
 	}
@@ -143,7 +147,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	authZone, err := dns01.FindZoneByFqdn(dns01.ToFqdn(info.EffectiveFQDN))
+	authZone, err := dns01.FindZoneByFqdn(dns.Fqdn(info.EffectiveFQDN))
 	if err != nil {
 		return fmt.Errorf("yandex360: could not find zone for domain %q: %w", domain, err)
 	}

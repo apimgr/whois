@@ -17,7 +17,7 @@ import (
 // service. Use buckets to store objects such as data and its descriptive metadata.
 // For more information about buckets, see [Buckets in Amazon Lightsail]in the Amazon Lightsail Developer Guide.
 //
-// [Buckets in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/buckets-in-amazon-lightsail
+// [Buckets in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/buckets-in-amazon-lightsail
 func (c *Client) CreateBucket(ctx context.Context, params *CreateBucketInput, optFns ...func(*Options)) (*CreateBucketOutput, error) {
 	if params == nil {
 		params = &CreateBucketInput{}
@@ -40,7 +40,7 @@ type CreateBucketInput struct {
 	// For more information about bucket names, see [Bucket naming rules in Amazon Lightsail] in the Amazon Lightsail Developer
 	// Guide.
 	//
-	// [Bucket naming rules in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/bucket-naming-rules-in-amazon-lightsail
+	// [Bucket naming rules in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/bucket-naming-rules-in-amazon-lightsail
 	//
 	// This member is required.
 	BucketName *string
@@ -66,7 +66,7 @@ type CreateBucketInput struct {
 	// For more information about versioning, see [Enabling and suspending object versioning in a bucket in Amazon Lightsail] in the Amazon Lightsail Developer
 	// Guide.
 	//
-	// [Enabling and suspending object versioning in a bucket in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-managing-bucket-object-versioning
+	// [Enabling and suspending object versioning in a bucket in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-managing-bucket-object-versioning
 	EnableObjectVersioning *bool
 
 	// The tag keys and optional values to add to the bucket during creation.
@@ -129,7 +129,7 @@ func (c *Client) addOperationCreateBucketMiddlewares(stack *middleware.Stack, op
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -153,10 +153,10 @@ func (c *Client) addOperationCreateBucketMiddlewares(stack *middleware.Stack, op
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpCreateBucketValidationMiddleware(stack); err != nil {
@@ -180,16 +180,13 @@ func (c *Client) addOperationCreateBucketMiddlewares(stack *middleware.Stack, op
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

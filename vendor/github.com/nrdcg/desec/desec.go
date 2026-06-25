@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 )
@@ -31,13 +32,13 @@ type ClientOptions struct {
 	RetryMax int
 
 	// Customer logger instance. Can be either Logger or LeveledLogger
-	Logger interface{}
+	Logger any
 }
 
 // NewDefaultClientOptions creates a new ClientOptions with default values.
 func NewDefaultClientOptions() ClientOptions {
 	return ClientOptions{
-		HTTPClient: http.DefaultClient,
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 		RetryMax:   5,
 		Logger:     nil,
 	}
@@ -87,7 +88,7 @@ func New(token string, opts ClientOptions) *Client {
 	return client
 }
 
-func (c *Client) newRequest(ctx context.Context, method string, endpoint fmt.Stringer, reqBody interface{}) (*http.Request, error) {
+func (c *Client) newRequest(ctx context.Context, method string, endpoint fmt.Stringer, reqBody any) (*http.Request, error) {
 	buf := new(bytes.Buffer)
 
 	if reqBody != nil {
@@ -103,6 +104,7 @@ func (c *Client) newRequest(ctx context.Context, method string, endpoint fmt.Str
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
 	if c.token != "" {
 		req.Header.Set("Authorization", fmt.Sprintf("Token %s", c.token))
 	}
@@ -122,7 +124,7 @@ func (c *Client) createEndpoint(parts ...string) (*url.URL, error) {
 	return endpoint, nil
 }
 
-func handleResponse(resp *http.Response, respData interface{}) error {
+func handleResponse(resp *http.Response, respData any) error {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &APIError{

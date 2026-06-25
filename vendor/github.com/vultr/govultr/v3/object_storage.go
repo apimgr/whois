@@ -8,17 +8,26 @@ import (
 	"github.com/google/go-querystring/query"
 )
 
+const osPath = "/v2/object-storage"
+
 // ObjectStorageService is the interface to interact with the object storage endpoints on the Vultr API.
 // Link : https://www.vultr.com/api/#tag/s3
 type ObjectStorageService interface {
-	Create(ctx context.Context, clusterID int, label string) (*ObjectStorage, *http.Response, error)
+	Create(ctx context.Context, objReq *ObjectStorageReq) (*ObjectStorage, *http.Response, error)
 	Get(ctx context.Context, id string) (*ObjectStorage, *http.Response, error)
-	Update(ctx context.Context, id, label string) error
+	Update(ctx context.Context, id string, objReq *ObjectStorageReq) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, options *ListOptions) ([]ObjectStorage, *Meta, *http.Response, error)
 
 	ListCluster(ctx context.Context, options *ListOptions) ([]ObjectStorageCluster, *Meta, *http.Response, error)
 	RegenerateKeys(ctx context.Context, id string) (*S3Keys, *http.Response, error)
+
+	ListTiers(ctx context.Context) ([]ObjectStorageTier, *http.Response, error)
+	ListClusterTiers(ctx context.Context, clusterID int) ([]ObjectStorageTier, *http.Response, error)
+
+	ListBuckets(ctx context.Context, osID string) ([]ObjectStorageBucket, *http.Response, error)
+	CreateBucket(ctx context.Context, osID string, bucketReq *ObjectStorageBucketReq) error
+	DeleteBucket(ctx context.Context, osID, bucketName string) error
 }
 
 // ObjectStorageServiceHandler handles interaction between the object storage service and the Vultr API.
@@ -28,14 +37,23 @@ type ObjectStorageServiceHandler struct {
 
 // ObjectStorage represents a Vultr Object Storage subscription.
 type ObjectStorage struct {
-	ID                   string `json:"id"`
-	DateCreated          string `json:"date_created"`
-	ObjectStoreClusterID int    `json:"cluster_id"`
-	Region               string `json:"region"`
-	Location             string `json:"location"`
-	Label                string `json:"label"`
-	Status               string `json:"status"`
+	ID                   string                 `json:"id"`
+	DateCreated          string                 `json:"date_created"`
+	ObjectStoreClusterID int                    `json:"cluster_id"`
+	Region               string                 `json:"region"`
+	Location             string                 `json:"location"`
+	Label                string                 `json:"label"`
+	Status               string                 `json:"status"`
+	Tier                 *ObjectStorageListTier `json:"tier,omitempty"`
 	S3Keys
+}
+
+// ObjectStorageReq represents the parameters for creating and updating object
+// storages
+type ObjectStorageReq struct {
+	ClusterID int    `json:"cluster_id,omitempty"`
+	TierID    int    `json:"tier_id,omitempty"`
+	Label     string `json:"label"`
 }
 
 // S3Keys define your api access to your cluster
@@ -49,8 +67,54 @@ type S3Keys struct {
 type ObjectStorageCluster struct {
 	ID       int    `json:"id"`
 	Region   string `json:"region"`
+	Name     string `json:"name,omitempty"`
 	Hostname string `json:"hostname"`
 	Deploy   string `json:"deploy"`
+}
+
+// ObjectStorageTier represents the object storage tier data
+type ObjectStorageTier struct {
+	ID                int                    `json:"id"`
+	Name              string                 `json:"sales_name"`
+	Description       string                 `json:"sales_desc"`
+	Price             float32                `json:"price"`
+	PriceBandwidthGB  float32                `json:"bw_gb_price"`
+	PriceDiskGB       float32                `json:"disk_gb_price"`
+	RateLimitBytesSec int                    `json:"ratelimit_ops_bytes"`
+	RateLimitOpsSec   int                    `json:"ratelimit_ops_secs"`
+	Default           string                 `json:"is_default"`
+	Locations         []ObjectStorageCluster `json:"locations,omitempty"`
+	Slug              string                 `json:"slug"`
+}
+
+// ObjectStorageListTier represents the object storage tier data from the list
+// object storages endpoint (different ID json field)
+type ObjectStorageListTier struct {
+	ID                int                    `json:"OBJSTORETIERID"`
+	Name              string                 `json:"sales_name"`
+	Description       string                 `json:"sales_desc"`
+	Price             float32                `json:"price"`
+	PriceBandwidthGB  float32                `json:"bw_gb_price"`
+	PriceDiskGB       float32                `json:"disk_gb_price"`
+	RateLimitBytesSec int                    `json:"ratelimit_ops_bytes"`
+	RateLimitOpsSec   int                    `json:"ratelimit_ops_secs"`
+	Default           string                 `json:"is_default"`
+	Locations         []ObjectStorageCluster `json:"locations,omitempty"`
+	Slug              string                 `json:"slug"`
+}
+
+// ObjectStorageBucket represents an object storage bucket
+type ObjectStorageBucket struct {
+	Name        string `json:"name"`
+	DateCreated string `json:"date_created"`
+}
+
+// ObjectStorageBucketReq represents a create request for an object storage
+// bucket
+type ObjectStorageBucketReq struct {
+	Name             string `json:"name"`
+	EnableVersioning bool   `json:"enable_bucket_versioning,omitempty"`
+	EnableLock       bool   `json:"enable_object_lock,omitempty"`
 }
 
 type objectStoragesBase struct {
@@ -67,16 +131,23 @@ type objectStorageClustersBase struct {
 	Meta     *Meta                  `json:"meta"`
 }
 
+type objectStorageTiersBase struct {
+	Tiers []ObjectStorageTier `json:"tiers"`
+}
+
 type s3KeysBase struct {
 	S3Credentials *S3Keys `json:"s3_credentials"`
 }
 
+type objectStorageBucketsBase struct {
+	Buckets []ObjectStorageBucket `json:"buckets"`
+}
+
 // Create an object storage subscription
-func (o *ObjectStorageServiceHandler) Create(ctx context.Context, clusterID int, label string) (*ObjectStorage, *http.Response, error) {
+func (o *ObjectStorageServiceHandler) Create(ctx context.Context, objReq *ObjectStorageReq) (*ObjectStorage, *http.Response, error) {
 	uri := "/v2/object-storage"
 
-	values := RequestBody{"cluster_id": clusterID, "label": label}
-	req, err := o.client.NewRequest(ctx, http.MethodPost, uri, values)
+	req, err := o.client.NewRequest(ctx, http.MethodPost, uri, objReq)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -109,11 +180,10 @@ func (o *ObjectStorageServiceHandler) Get(ctx context.Context, id string) (*Obje
 }
 
 // Update a Object Storage Subscription.
-func (o *ObjectStorageServiceHandler) Update(ctx context.Context, id, label string) error {
+func (o *ObjectStorageServiceHandler) Update(ctx context.Context, id string, objReq *ObjectStorageReq) error {
 	uri := fmt.Sprintf("/v2/object-storage/%s", id)
 
-	value := RequestBody{"label": label}
-	req, err := o.client.NewRequest(ctx, http.MethodPut, uri, value)
+	req, err := o.client.NewRequest(ctx, http.MethodPut, uri, objReq)
 	if err != nil {
 		return err
 	}
@@ -194,4 +264,82 @@ func (o *ObjectStorageServiceHandler) RegenerateKeys(ctx context.Context, id str
 	}
 
 	return s3Keys.S3Credentials, resp, nil
+}
+
+// ListTiers retrieves all tiers for object storage deployments
+func (o *ObjectStorageServiceHandler) ListTiers(ctx context.Context) ([]ObjectStorageTier, *http.Response, error) {
+	uri := "/v2/object-storage/tiers"
+	req, err := o.client.NewRequest(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tiers := new(objectStorageTiersBase)
+	resp, err := o.client.DoWithContext(ctx, req, tiers)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return tiers.Tiers, resp, nil
+}
+
+// ListClusterTiers retrieves all tiers for object storage deployments on a specific cluster
+func (o *ObjectStorageServiceHandler) ListClusterTiers(ctx context.Context, clusterID int) ([]ObjectStorageTier, *http.Response, error) {
+	uri := fmt.Sprintf("/v2/object-storage/clusters/%d/tiers", clusterID)
+	req, err := o.client.NewRequest(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tiers := new(objectStorageTiersBase)
+	resp, err := o.client.DoWithContext(ctx, req, tiers)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return tiers.Tiers, resp, nil
+}
+
+// ListBuckets retrieves a list of buckets in the object storage
+func (o *ObjectStorageServiceHandler) ListBuckets(ctx context.Context, osID string) ([]ObjectStorageBucket, *http.Response, error) {
+	uri := fmt.Sprintf("%s/%s/bucket", osPath, osID)
+
+	req, err := o.client.NewRequest(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	buckets := new(objectStorageBucketsBase)
+	resp, err := o.client.DoWithContext(ctx, req, buckets)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return buckets.Buckets, resp, nil
+}
+
+// CreateBucket creates an object storage bucket
+func (o *ObjectStorageServiceHandler) CreateBucket(ctx context.Context, osID string, bucketReq *ObjectStorageBucketReq) error {
+	uri := fmt.Sprintf("%s/%s/bucket", osPath, osID)
+
+	req, err := o.client.NewRequest(ctx, http.MethodPost, uri, bucketReq)
+	if err != nil {
+		return err
+	}
+
+	_, err = o.client.DoWithContext(ctx, req, nil)
+	return err
+}
+
+// DeleteBucket deletes an object storage bucket by name
+func (o *ObjectStorageServiceHandler) DeleteBucket(ctx context.Context, osID, bucketName string) error {
+	uri := fmt.Sprintf("%s/%s/bucket/%s", osPath, osID, bucketName)
+
+	req, err := o.client.NewRequest(ctx, http.MethodDelete, uri, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = o.client.DoWithContext(ctx, req, nil)
+	return err
 }

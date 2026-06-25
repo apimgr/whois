@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
+	"time"
 
 	"github.com/go-acme/lego/v4/acme"
 	"github.com/go-acme/lego/v4/acme/api"
@@ -21,18 +22,38 @@ var idPeAcmeIdentifierV1 = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 1, 31}
 
 type ValidateFunc func(core *api.Core, domain string, chlng acme.Challenge) error
 
+type ChallengeOption func(*Challenge) error
+
+// SetDelay sets a delay between the start of the TLS listener and the challenge validation.
+func SetDelay(delay time.Duration) ChallengeOption {
+	return func(chlg *Challenge) error {
+		chlg.delay = delay
+		return nil
+	}
+}
+
 type Challenge struct {
 	core     *api.Core
 	validate ValidateFunc
 	provider challenge.Provider
+	delay    time.Duration
 }
 
-func NewChallenge(core *api.Core, validate ValidateFunc, provider challenge.Provider) *Challenge {
-	return &Challenge{
+func NewChallenge(core *api.Core, validate ValidateFunc, provider challenge.Provider, opts ...ChallengeOption) *Challenge {
+	chlg := &Challenge{
 		core:     core,
 		validate: validate,
 		provider: provider,
 	}
+
+	for _, opt := range opts {
+		err := opt(chlg)
+		if err != nil {
+			log.Infof("challenge option error: %v", err)
+		}
+	}
+
+	return chlg
 }
 
 func (c *Challenge) SetProvider(provider challenge.Provider) {
@@ -59,6 +80,7 @@ func (c *Challenge) Solve(authz acme.Authorization) error {
 	if err != nil {
 		return fmt.Errorf("[%s] acme: error presenting token: %w", challenge.GetTargetedDomain(authz), err)
 	}
+
 	defer func() {
 		err := c.provider.CleanUp(domain, chlng.Token, keyAuth)
 		if err != nil {
@@ -66,7 +88,12 @@ func (c *Challenge) Solve(authz acme.Authorization) error {
 		}
 	}()
 
+	if c.delay > 0 {
+		time.Sleep(c.delay)
+	}
+
 	chlng.KeyAuthorization = keyAuth
+
 	return c.validate(c.core, domain, chlng)
 }
 

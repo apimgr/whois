@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/myaddr/internal"
 )
 
@@ -66,7 +67,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 
 	config := NewDefaultConfig()
 
-	credentials, err := parseCredentials(values[EnvPrivateKeysMapping])
+	credentials, err := env.ParsePairs(values[EnvPrivateKeysMapping])
 	if err != nil {
 		return nil, fmt.Errorf("myaddr: %w", err)
 	}
@@ -90,6 +91,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	if config.HTTPClient != nil {
 		client.HTTPClient = config.HTTPClient
 	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{
 		config: config,
@@ -141,20 +144,4 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 // Returns the interval between each iteration.
 func (d *DNSProvider) Sequential() time.Duration {
 	return d.config.SequenceInterval
-}
-
-func parseCredentials(raw string) (map[string]string, error) {
-	credentials := make(map[string]string)
-
-	credStrings := strings.Split(strings.TrimSuffix(raw, ","), ",")
-	for _, credPair := range credStrings {
-		data := strings.Split(credPair, ":")
-		if len(data) != 2 {
-			return nil, fmt.Errorf("incorrect credential pair: %s", credPair)
-		}
-
-		credentials[strings.TrimSpace(data[0])] = strings.TrimSpace(data[1])
-	}
-
-	return credentials, nil
 }

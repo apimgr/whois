@@ -1,13 +1,13 @@
 Name = "Tencent Cloud DNS"
 Description = ''''''
-URL = "https://cloud.tencent.com/product/cns"
+URL = "https://cloud.tencent.com/product/dns"
 Code = "tencentcloud"
 Since = "v4.6.0"
 
 Example = '''
 TENCENTCLOUD_SECRET_ID=abcdefghijklmnopqrstuvwx \
 TENCENTCLOUD_SECRET_KEY=your-secret-key \
-lego --email you@example.com --dns tencentcloud -d '*.example.com' -d example.com run
+lego --dns tencentcloud -d '*.example.com' -d example.com run
 '''
 
 [Configuration]

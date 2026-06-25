@@ -16,6 +16,7 @@ const (
 )
 
 // ErrorResponse A representation of an API error message.
+//
 // Deprecated: use ResponseError instead.
 type ErrorResponse = ResponseError
 
@@ -62,34 +63,22 @@ func NewClient(httpClient *http.Client, opts ...Option) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) newRequest(method, resource string, body io.Reader) (*http.Request, error) {
-	u, err := c.baseURL.Parse(resource)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(method, u.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
+func (c *Client) do(req *http.Request, v any) (*http.Response, error) {
 	req.Header.Set(contentTypeHeader, contentTypeJSON)
 
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
 
-	return req, nil
-}
-
-func (c *Client) do(req *http.Request, v interface{}) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
-	if err = checkResponse(resp); err != nil {
+	err = checkResponse(resp)
+	if err != nil {
 		return resp, err
 	}
 
@@ -102,7 +91,8 @@ func (c *Client) do(req *http.Request, v interface{}) (*http.Response, error) {
 		return resp, fmt.Errorf("failed to read body: %w", err)
 	}
 
-	if err = json.Unmarshal(raw, v); err != nil {
+	err = json.Unmarshal(raw, v)
+	if err != nil {
 		return resp, fmt.Errorf("unmarshaling %T error: %w: %s", v, err, string(raw))
 	}
 
@@ -117,6 +107,7 @@ func checkResponse(resp *http.Response) error {
 	data, err := io.ReadAll(resp.Body)
 	if err == nil && data != nil {
 		errorResponse := new(ResponseError)
+
 		err = json.Unmarshal(data, errorResponse)
 		if err != nil {
 			return fmt.Errorf("unmarshaling ErrorResponse error: %w: %s", err, string(data))

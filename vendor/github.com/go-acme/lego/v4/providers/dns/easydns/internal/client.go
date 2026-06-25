@@ -26,7 +26,7 @@ type Client struct {
 }
 
 // NewClient Creates a new Client.
-func NewClient(token string, key string) *Client {
+func NewClient(token, key string) *Client {
 	baseURL, _ := url.Parse(DefaultBaseURL)
 
 	return &Client{
@@ -46,6 +46,7 @@ func (c *Client) ListZones(ctx context.Context, domain string) ([]ZoneRecord, er
 	}
 
 	response := &apiResponse[[]ZoneRecord]{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return nil, err
@@ -67,6 +68,7 @@ func (c *Client) AddRecord(ctx context.Context, domain string, record ZoneRecord
 	}
 
 	response := &apiResponse[*ZoneRecord]{}
+
 	err = c.do(req, response)
 	if err != nil {
 		return "", err

@@ -26,7 +26,11 @@ import (
 // completely overwrites the previous configuration of the alarm. The alarm is then
 // evaluated with the updated configuration.
 //
-// [Alarms in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-alarms
+// The put alarm operation supports tag-based access control via request tags. For
+// more information, see the [Lightsail Developer Guide].
+//
+// [Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-controlling-access-using-tags
+// [Alarms in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-alarms
 func (c *Client) PutAlarm(ctx context.Context, params *PutAlarmInput, optFns ...func(*Options)) (*PutAlarmOutput, error) {
 	if params == nil {
 		params = &PutAlarmInput{}
@@ -94,7 +98,7 @@ type PutAlarmInput struct {
 	//
 	// For more information about these metrics, see [Metrics available in Lightsail].
 	//
-	// [Metrics available in Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-resource-health-metrics#available-metrics
+	// [Metrics available in Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-resource-health-metrics#available-metrics
 	//
 	// This member is required.
 	MetricName types.MetricName
@@ -161,6 +165,11 @@ type PutAlarmInput struct {
 	//
 	// The notification trigger defaults to ALARM if you don't specify this parameter.
 	NotificationTriggers []types.AlarmState
+
+	// The tag keys and optional values to add to the alarm during create.
+	//
+	// Use the TagResource action to tag a resource after it's created.
+	Tags []types.Tag
 
 	// Sets how this alarm will handle missing data points.
 	//
@@ -230,7 +239,7 @@ func (c *Client) addOperationPutAlarmMiddlewares(stack *middleware.Stack, option
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -254,10 +263,10 @@ func (c *Client) addOperationPutAlarmMiddlewares(stack *middleware.Stack, option
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpPutAlarmValidationMiddleware(stack); err != nil {
@@ -281,16 +290,13 @@ func (c *Client) addOperationPutAlarmMiddlewares(stack *middleware.Stack, option
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

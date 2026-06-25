@@ -2,17 +2,21 @@
 package sakuracloud
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/internal/useragent"
 	client "github.com/sacloud/api-client-go"
 	"github.com/sacloud/iaas-api-go"
+	"github.com/sacloud/iaas-api-go/defaults"
 	"github.com/sacloud/iaas-api-go/helper/api"
 )
 
@@ -98,13 +102,13 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		Options: &client.Options{
 			AccessToken:       config.Token,
 			AccessTokenSecret: config.Secret,
-			HttpClient:        config.HTTPClient,
+			HttpClient:        clientdebug.Wrap(config.HTTPClient),
 			UserAgent:         fmt.Sprintf("%s %s", iaas.DefaultUserAgent, useragent.Get()),
 		},
 	}
 
 	return &DNSProvider{
-		client: iaas.NewDNSOp(api.NewCallerWithOptions(api.MergeOptions(defaultOption, options))),
+		client: iaas.NewDNSOp(newCallerWithOptions(api.MergeOptions(defaultOption, options))),
 		config: config,
 	}, nil
 }
@@ -113,7 +117,7 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	err := d.addTXTRecord(info.EffectiveFQDN, info.Value, d.config.TTL)
+	err := d.addTXTRecord(context.Background(), info.EffectiveFQDN, info.Value, d.config.TTL)
 	if err != nil {
 		return fmt.Errorf("sakuracloud: %w", err)
 	}
@@ -125,7 +129,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	err := d.cleanupTXTRecord(info.EffectiveFQDN, info.Value)
+	err := d.cleanupTXTRecord(context.Background(), info.EffectiveFQDN, info.Value)
 	if err != nil {
 		return fmt.Errorf("sakuracloud: %w", err)
 	}
@@ -137,4 +141,39 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 // Adjusting here to cope with spikes in propagation times.
 func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 	return d.config.PropagationTimeout, d.config.PollingInterval
+}
+
+// Extracted from https://github.com/sacloud/iaas-api-go/blob/af06b3ccc2c38625d2dc684ad39590d0ae13eed3/helper/api/caller.go#L36-L81
+// Trace and fake are removed.
+// Related to https://github.com/sacloud/iaas-api-go/issues/376.
+func newCallerWithOptions(opts *api.CallerOptions) iaas.APICaller {
+	return newCaller(opts)
+}
+
+func newCaller(opts *api.CallerOptions) iaas.APICaller {
+	if opts.UserAgent == "" {
+		opts.UserAgent = iaas.DefaultUserAgent
+	}
+
+	caller := iaas.NewClientWithOptions(opts.Options)
+
+	defaults.DefaultStatePollingTimeout = 72 * time.Hour
+
+	if opts.DefaultZone != "" {
+		iaas.APIDefaultZone = opts.DefaultZone
+	}
+
+	if len(opts.Zones) > 0 {
+		iaas.SakuraCloudZones = opts.Zones
+	}
+
+	if opts.APIRootURL != "" {
+		if strings.HasSuffix(opts.APIRootURL, "/") {
+			opts.APIRootURL = strings.TrimRight(opts.APIRootURL, "/")
+		}
+
+		iaas.SakuraCloudAPIRoot = opts.APIRootURL
+	}
+
+	return caller
 }

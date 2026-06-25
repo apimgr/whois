@@ -2,15 +2,16 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"sync"
 
-	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/providers/dns/cloudflare/internal"
 )
 
 type metaClient struct {
-	clientEdit *cloudflare.API // needs Zone/DNS/Edit permissions
-	clientRead *cloudflare.API // needs Zone/Zone/Read permissions
+	clientEdit *internal.Client // needs Zone/DNS/Edit permissions
+	clientRead *internal.Client // needs Zone/Zone/Read permissions
 
 	zones   map[string]string // caches calls to ZoneIDByName, see lookupZoneID()
 	zonesMu *sync.RWMutex
@@ -19,7 +20,10 @@ type metaClient struct {
 func newClient(config *Config) (*metaClient, error) {
 	// with AuthKey/AuthEmail we can access all available APIs
 	if config.AuthToken == "" {
-		client, err := cloudflare.New(config.AuthKey, config.AuthEmail, cloudflare.HTTPClient(config.HTTPClient))
+		client, err := internal.NewClient(
+			internal.WithBaseURL(config.BaseURL),
+			internal.WithHTTPClient(config.HTTPClient),
+			internal.WithAuthKey(config.AuthEmail, config.AuthKey))
 		if err != nil {
 			return nil, err
 		}
@@ -32,7 +36,10 @@ func newClient(config *Config) (*metaClient, error) {
 		}, nil
 	}
 
-	dns, err := cloudflare.NewWithAPIToken(config.AuthToken, cloudflare.HTTPClient(config.HTTPClient))
+	dns, err := internal.NewClient(
+		internal.WithBaseURL(config.BaseURL),
+		internal.WithHTTPClient(config.HTTPClient),
+		internal.WithAuthToken(config.AuthToken))
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +53,10 @@ func newClient(config *Config) (*metaClient, error) {
 		}, nil
 	}
 
-	zone, err := cloudflare.NewWithAPIToken(config.ZoneToken, cloudflare.HTTPClient(config.HTTPClient))
+	zone, err := internal.NewClient(
+		internal.WithBaseURL(config.BaseURL),
+		internal.WithHTTPClient(config.HTTPClient),
+		internal.WithAuthToken(config.ZoneToken))
 	if err != nil {
 		return nil, err
 	}
@@ -59,19 +69,15 @@ func newClient(config *Config) (*metaClient, error) {
 	}, nil
 }
 
-func (m *metaClient) CreateDNSRecord(ctx context.Context, zoneID string, rr cloudflare.CreateDNSRecordParams) (cloudflare.DNSRecord, error) {
-	return m.clientEdit.CreateDNSRecord(ctx, cloudflare.ZoneIdentifier(zoneID), rr)
-}
-
-func (m *metaClient) DNSRecords(ctx context.Context, zoneID string, rr cloudflare.ListDNSRecordsParams) ([]cloudflare.DNSRecord, *cloudflare.ResultInfo, error) {
-	return m.clientEdit.ListDNSRecords(ctx, cloudflare.ZoneIdentifier(zoneID), rr)
+func (m *metaClient) CreateDNSRecord(ctx context.Context, zoneID string, rr internal.Record) (*internal.Record, error) {
+	return m.clientEdit.CreateDNSRecord(ctx, zoneID, rr)
 }
 
 func (m *metaClient) DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error {
-	return m.clientEdit.DeleteDNSRecord(ctx, cloudflare.ZoneIdentifier(zoneID), recordID)
+	return m.clientEdit.DeleteDNSRecord(ctx, zoneID, recordID)
 }
 
-func (m *metaClient) ZoneIDByName(fdqn string) (string, error) {
+func (m *metaClient) ZoneIDByName(ctx context.Context, fdqn string) (string, error) {
 	m.zonesMu.RLock()
 	id := m.zones[fdqn]
 	m.zonesMu.RUnlock()
@@ -80,7 +86,12 @@ func (m *metaClient) ZoneIDByName(fdqn string) (string, error) {
 		return id, nil
 	}
 
-	id, err := m.clientRead.ZoneIDByName(dns01.UnFqdn(fdqn))
+	zones, err := m.clientRead.ZonesByName(ctx, dns01.UnFqdn(fdqn))
+	if err != nil {
+		return "", err
+	}
+
+	id, err = extractZoneID(zones)
 	if err != nil {
 		return "", err
 	}
@@ -88,5 +99,17 @@ func (m *metaClient) ZoneIDByName(fdqn string) (string, error) {
 	m.zonesMu.Lock()
 	m.zones[fdqn] = id
 	m.zonesMu.Unlock()
+
 	return id, nil
+}
+
+func extractZoneID(res []internal.Zone) (string, error) {
+	switch len(res) {
+	case 0:
+		return "", errors.New("zone could not be found")
+	case 1:
+		return res[0].ID, nil
+	default:
+		return "", errors.New("ambiguous zone name; an account ID might help")
+	}
 }

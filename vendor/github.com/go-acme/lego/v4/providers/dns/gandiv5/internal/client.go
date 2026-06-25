@@ -15,10 +15,7 @@ import (
 )
 
 // defaultBaseURL endpoint is the Gandi API endpoint used by Present and CleanUp.
-const defaultBaseURL = "https://dns.api.gandi.net/api/v5"
-
-// APIKeyHeader API key header.
-const APIKeyHeader = "X-Api-Key"
+const defaultBaseURL = "https://api.gandi.net/v5/livedns"
 
 // Related to Personal Access Token.
 const authorizationHeader = "Authorization"
@@ -78,6 +75,7 @@ func (c *Client) getTXTRecord(ctx context.Context, domain, name string) (*Record
 	}
 
 	txtRecord := &Record{}
+
 	err = c.do(req, txtRecord)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get TXT records for domain %s and name %s: %w", domain, name, err)
@@ -95,6 +93,7 @@ func (c *Client) addTXTRecord(ctx context.Context, domain, name string, newRecor
 	}
 
 	message := apiResponse{}
+
 	err = c.do(req, &message)
 	if err != nil {
 		return fmt.Errorf("unable to create TXT record for domain %s and name %s: %w", domain, name, err)
@@ -116,6 +115,7 @@ func (c *Client) DeleteTXTRecord(ctx context.Context, domain, name string) error
 	}
 
 	message := apiResponse{}
+
 	err = c.do(req, &message)
 	if err != nil {
 		return fmt.Errorf("unable to delete TXT record for domain %s and name %s: %w", domain, name, err)
@@ -130,7 +130,7 @@ func (c *Client) DeleteTXTRecord(ctx context.Context, domain, name string) error
 
 func (c *Client) do(req *http.Request, result any) error {
 	if c.apiKey != "" {
-		req.Header.Set(APIKeyHeader, c.apiKey)
+		req.Header.Set(authorizationHeader, "Apikey "+c.apiKey)
 	}
 
 	if c.pat != "" {
@@ -208,6 +208,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	response := apiResponse{}
+
 	err := json.Unmarshal(raw, &response)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

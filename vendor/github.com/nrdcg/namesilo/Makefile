@@ -1,8 +1,6 @@
-.PHONY: clean check test build dependencies fmt
+.PHONY: clean check test build
 
 export GO111MODULE=on
-
-SRCS = $(shell git ls-files '*.go' | grep -v '^vendor/')
 
 default: clean check test build
 
@@ -18,15 +16,17 @@ test: clean
 check:
 	golangci-lint run
 
-fmt:
-	gofmt -s -l -w $(SRCS)
-
 ## Useful to initiate structures
-gen-struct:
-	echo 'package namesilo' > "gen_struct.go";
-	echo '' >> "gen_struct.go";
-	echo 'import "encoding/xml"' >> "gen_struct.go";
-	echo '' >> "gen_struct.go";
-	for i in $$(ls samples/ -1); do \
-		zek -c -n $${i%.xml} "./samples/$$i" >> "gen_struct.go"; \
-	done
+# TODO: must be updated to support the subfolders.
+#gen-struct:
+#	# go install github.com/miku/zek/cmd/zek@latest
+#	echo 'package namesilo' > "gen_struct.go";
+#	echo '' >> "gen_struct.go";
+#	echo 'import "encoding/xml"' >> "gen_struct.go";
+#	echo '' >> "gen_struct.go";
+#	for i in $$(ls samples/ -1); do \
+#		zek -c -n $${i%.xml} "./samples/$$i" >> "gen_struct.go"; \
+#	done
+
+generate:
+	go run ./internal/

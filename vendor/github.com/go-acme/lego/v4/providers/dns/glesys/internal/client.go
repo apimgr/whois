@@ -24,7 +24,7 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-func NewClient(apiUser string, apiKey string) *Client {
+func NewClient(apiUser, apiKey string) *Client {
 	baseURL, _ := url.Parse(defaultBaseURL)
 
 	return &Client{
@@ -102,6 +102,7 @@ func (c *Client) do(req *http.Request) (*apiResponse, error) {
 	}
 
 	var response apiResponse
+
 	err = json.Unmarshal(raw, &response)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)

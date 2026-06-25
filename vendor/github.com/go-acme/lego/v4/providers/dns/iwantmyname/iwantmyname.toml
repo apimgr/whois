@@ -1,5 +1,9 @@
-Name = "iwantmyname"
-Description = ''''''
+Name = "iwantmyname (Deprecated)"
+Description = '''
+The iwantmyname API has shut down.
+
+https://github.com/go-acme/lego/issues/2563
+'''
 URL = "https://iwantmyname.com"
 Code = "iwantmyname"
 Since = "v4.7.0"
@@ -7,7 +11,7 @@ Since = "v4.7.0"
 Example = '''
 IWANTMYNAME_USERNAME=xxxxxxxx \
 IWANTMYNAME_PASSWORD=xxxxxxxx \
-lego --email you@example.com --dns iwantmyname -d '*.example.com' -d example.com run
+lego --dns iwantmyname -d '*.example.com' -d example.com run
 '''
 
 [Configuration]

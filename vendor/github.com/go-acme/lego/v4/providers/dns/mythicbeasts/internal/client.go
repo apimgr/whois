@@ -35,7 +35,7 @@ type Client struct {
 }
 
 // NewClient Creates a new Client.
-func NewClient(username string, password string) *Client {
+func NewClient(username, password string) *Client {
 	apiEndpoint, _ := url.Parse(APIBaseURL)
 	authEndpoint, _ := url.Parse(AuthBaseURL)
 
@@ -99,6 +99,7 @@ func (c *Client) createTXTRecord(ctx context.Context, zone, leaf, recordType, va
 	}
 
 	resp := &createTXTResponse{}
+
 	err = c.do(req, resp)
 	if err != nil {
 		return nil, err

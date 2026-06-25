@@ -9,7 +9,7 @@ import (
 // ShowPublicZoneNameServerRequest Request Object
 type ShowPublicZoneNameServerRequest struct {
 
-	// 待查询zone的ID。  可以通过查询公网Zone列表获取。
+	// **参数解释：** 域名ID。 **约束限制：** 不涉及。 **取值范围：** 不涉及。 **默认取值：** 不涉及。
 	ZoneId string `json:"zone_id"`
 }
 

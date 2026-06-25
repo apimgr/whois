@@ -21,8 +21,6 @@ package provider
 
 import (
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth"
-	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
-	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/global"
 	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/sdkerr"
 	"os"
 	"strings"
@@ -42,18 +40,18 @@ type EnvCredentialProvider struct {
 	credentialType string
 }
 
-// NewEnvCredentialProvider return a env credential provider
+// NewEnvCredentialProvider return an env credential provider
 // Supported credential types: basic, global
 func NewEnvCredentialProvider(credentialType string) *EnvCredentialProvider {
 	return &EnvCredentialProvider{credentialType: strings.ToLower(credentialType)}
 }
 
-// BasicCredentialEnvProvider return a env provider for basic.Credentials
+// BasicCredentialEnvProvider return an env provider for basic.Credentials
 func BasicCredentialEnvProvider() *EnvCredentialProvider {
 	return NewEnvCredentialProvider(basicCredentialType)
 }
 
-// GlobalCredentialEnvProvider return a env provider for global.Credentials
+// GlobalCredentialEnvProvider return an env provider for global.Credentials
 func GlobalCredentialEnvProvider() *EnvCredentialProvider {
 	return NewEnvCredentialProvider(globalCredentialType)
 }
@@ -65,19 +63,19 @@ func (p *EnvCredentialProvider) GetCredentials() (auth.ICredential, error) {
 	}
 
 	if strings.HasPrefix(p.credentialType, basicCredentialType) {
-		builder := basic.NewCredentialsBuilder().WithProjectId(os.Getenv(projectIdEnvName))
+		builder := auth.NewBasicCredentialsBuilder().WithProjectId(os.Getenv(projectIdEnvName))
 		err := fillCommonAttrs(builder, getCommonAttrsFromEnv())
 		if err != nil {
 			return nil, err
 		}
-		return builder.Build(), nil
+		return builder.SafeBuild()
 	} else if strings.HasPrefix(p.credentialType, globalCredentialType) {
-		builder := global.NewCredentialsBuilder().WithDomainId(os.Getenv(domainIdEnvName))
+		builder := auth.NewGlobalCredentialsBuilder().WithDomainId(os.Getenv(domainIdEnvName))
 		err := fillCommonAttrs(builder, getCommonAttrsFromEnv())
 		if err != nil {
 			return nil, err
 		}
-		return builder.Build(), nil
+		return builder.SafeBuild()
 	}
 
 	return nil, sdkerr.NewCredentialsTypeError("unsupported credential type: " + p.credentialType)

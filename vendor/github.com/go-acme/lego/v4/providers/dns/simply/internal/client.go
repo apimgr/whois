@@ -16,7 +16,7 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/internal/errutils"
 )
 
-const defaultBaseURL = "https://api.simply.com/1/"
+const defaultBaseURL = "https://api.simply.com/2/"
 
 // Client is a Simply.com API client.
 type Client struct {
@@ -28,7 +28,7 @@ type Client struct {
 }
 
 // NewClient creates a new Client.
-func NewClient(accountName string, apiKey string) (*Client, error) {
+func NewClient(accountName, apiKey string) (*Client, error) {
 	if accountName == "" {
 		return nil, errors.New("credentials missing: accountName")
 	}
@@ -60,6 +60,7 @@ func (c *Client) GetRecords(ctx context.Context, zoneName string) ([]Record, err
 	}
 
 	result := &apiResponse[[]Record, json.RawMessage]{}
+
 	err = c.do(req, result)
 	if err != nil {
 		return nil, err
@@ -78,6 +79,7 @@ func (c *Client) AddRecord(ctx context.Context, zoneName string, record Record) 
 	}
 
 	result := &apiResponse[json.RawMessage, recordHeader]{}
+
 	err = c.do(req, result)
 	if err != nil {
 		return 0, err
@@ -110,11 +112,13 @@ func (c *Client) DeleteRecord(ctx context.Context, zoneName string, id int64) er
 	return c.do(req, &apiResponse[json.RawMessage, json.RawMessage]{})
 }
 
-func (c *Client) createEndpoint(zoneName string, uri string) *url.URL {
-	return c.baseURL.JoinPath(c.accountName, c.apiKey, "my", "products", zoneName, "dns", "records", strings.TrimSuffix(uri, "/"))
+func (c *Client) createEndpoint(zoneName, uri string) *url.URL {
+	return c.baseURL.JoinPath("my", "products", zoneName, "dns", "records", strings.TrimSuffix(uri, "/"))
 }
 
 func (c *Client) do(req *http.Request, result Response) error {
+	req.SetBasicAuth(c.accountName, c.apiKey)
+
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return errutils.NewHTTPDoError(req, err)

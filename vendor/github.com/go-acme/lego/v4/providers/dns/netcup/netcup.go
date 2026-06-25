@@ -13,6 +13,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/log"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/netcup/internal"
 )
 
@@ -92,7 +93,11 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		return nil, fmt.Errorf("netcup: %w", err)
 	}
 
-	client.HTTPClient = config.HTTPClient
+	if config.HTTPClient != nil {
+		client.HTTPClient = config.HTTPClient
+	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{client: client, config: config}, nil
 }
@@ -114,7 +119,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	defer func() {
 		err = d.client.Logout(ctx)
 		if err != nil {
-			log.Print("netcup: %v", err)
+			log.Printf("netcup: %v", err)
 		}
 	}()
 
@@ -160,7 +165,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	defer func() {
 		err = d.client.Logout(ctx)
 		if err != nil {
-			log.Print("netcup: %v", err)
+			log.Printf("netcup: %v", err)
 		}
 	}()
 

@@ -12,9 +12,9 @@ import (
 )
 
 // Creates two URLs that are used to access a virtual computer’s graphical user
-// interface (GUI) session. The primary URL initiates a web-based NICE DCV session
-// to the virtual computer's application. The secondary URL initiates a web-based
-// NICE DCV session to the virtual computer's operating session.
+// interface (GUI) session. The primary URL initiates a web-based Amazon DCV
+// session to the virtual computer's application. The secondary URL initiates a
+// web-based Amazon DCV session to the virtual computer's operating session.
 //
 // Use StartGUISession to open the session.
 func (c *Client) CreateGUISessionAccessDetails(ctx context.Context, params *CreateGUISessionAccessDetailsInput, optFns ...func(*Options)) (*CreateGUISessionAccessDetailsOutput, error) {
@@ -53,7 +53,7 @@ type CreateGUISessionAccessDetailsOutput struct {
 	// The resource name.
 	ResourceName *string
 
-	// Returns information about the specified NICE DCV GUI session.
+	// Returns information about the specified Amazon DCV GUI session.
 	Sessions []types.Session
 
 	// The status of the operation.
@@ -99,7 +99,7 @@ func (c *Client) addOperationCreateGUISessionAccessDetailsMiddlewares(stack *mid
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -123,10 +123,10 @@ func (c *Client) addOperationCreateGUISessionAccessDetailsMiddlewares(stack *mid
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpCreateGUISessionAccessDetailsValidationMiddleware(stack); err != nil {
@@ -150,16 +150,13 @@ func (c *Client) addOperationCreateGUISessionAccessDetailsMiddlewares(stack *mid
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

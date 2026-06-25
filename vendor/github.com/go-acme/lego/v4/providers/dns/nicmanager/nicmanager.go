@@ -12,6 +12,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/nicmanager/internal"
 )
 
@@ -24,7 +25,7 @@ const (
 	EnvEmail    = envNamespace + "API_EMAIL"
 	EnvPassword = envNamespace + "API_PASSWORD"
 	EnvOTP      = envNamespace + "API_OTP"
-	EnvMode     = envNamespace + "MODE"
+	EnvMode     = envNamespace + "API_MODE"
 
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
@@ -85,7 +86,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 	config := NewDefaultConfig()
 	config.Password = values[EnvPassword]
 
-	config.Mode = env.GetOrDefaultString(EnvMode, internal.ModeAnycast)
+	config.Mode = env.GetOneWithFallback(EnvMode, internal.ModeAnycast, env.ParseString, envNamespace+"MODE")
 	config.Username = env.GetOrFile(EnvUsername)
 	config.Login = env.GetOrFile(EnvLogin)
 	config.Email = env.GetOrFile(EnvEmail)
@@ -127,6 +128,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	if config.HTTPClient != nil {
 		client.HTTPClient = config.HTTPClient
 	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{client: client, config: config}, nil
 }
@@ -188,8 +191,11 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 
 	name := dns01.UnFqdn(info.EffectiveFQDN)
 
-	var existingRecord internal.Record
-	var existingRecordFound bool
+	var (
+		existingRecord      internal.Record
+		existingRecordFound bool
+	)
+
 	for _, record := range zone.Records {
 		if strings.EqualFold(record.Type, "TXT") && strings.EqualFold(record.Name, name) && record.Content == info.Value {
 			existingRecord = record

@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 )
 
 type apiResponse[T any] struct {
@@ -15,11 +16,15 @@ type APIError struct {
 }
 
 func (a APIError) Error() string {
-	msg := fmt.Sprintf("%d: %s", a.StatusCode, a.Message)
+	msg := new(strings.Builder)
+
+	_, _ = fmt.Fprintf(msg, "%d: %s", a.StatusCode, a.Message)
+
 	for k, v := range a.Errors {
-		msg += fmt.Sprintf(" %s: %v", k, v)
+		_, _ = fmt.Fprintf(msg, " %s: %v", k, v)
 	}
-	return msg
+
+	return msg.String()
 }
 
 type Zone struct {

@@ -18,6 +18,42 @@ func (m *AccessBinding) SetSubject(v *Subject) {
 	m.Subject = v
 }
 
+func (m *AccessPolicy) SetId(v string) {
+	m.Id = v
+}
+
+func (m *AccessPolicy) SetName(v string) {
+	m.Name = v
+}
+
+func (m *AccessPolicy) SetDescription(v string) {
+	m.Description = v
+}
+
+func (m *AccessPolicyBinding) SetAccessPolicyTemplateId(v string) {
+	m.AccessPolicyTemplateId = v
+}
+
+func (m *AccessPolicyBinding) SetParameters(v map[string]string) {
+	m.Parameters = v
+}
+
+func (m *BindAccessPolicyRequest) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *BindAccessPolicyRequest) SetAccessPolicyBinding(v *AccessPolicyBinding) {
+	m.AccessPolicyBinding = v
+}
+
+func (m *BindAccessPolicyMetadata) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *BindAccessPolicyMetadata) SetAccessPolicyBinding(v *AccessPolicyBinding) {
+	m.AccessPolicyBinding = v
+}
+
 func (m *ListAccessBindingsRequest) SetResourceId(v string) {
 	m.ResourceId = v
 }
@@ -36,6 +72,58 @@ func (m *ListAccessBindingsResponse) SetAccessBindings(v []*AccessBinding) {
 
 func (m *ListAccessBindingsResponse) SetNextPageToken(v string) {
 	m.NextPageToken = v
+}
+
+func (m *ListAccessPolicyBindingsRequest) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *ListAccessPolicyBindingsRequest) SetPageSize(v int64) {
+	m.PageSize = v
+}
+
+func (m *ListAccessPolicyBindingsRequest) SetPageToken(v string) {
+	m.PageToken = v
+}
+
+func (m *ListAccessPolicyBindingsResponse) SetAccessPolicyBindings(v []*AccessPolicyBinding) {
+	m.AccessPolicyBindings = v
+}
+
+func (m *ListAccessPolicyBindingsResponse) SetNextPageToken(v string) {
+	m.NextPageToken = v
+}
+
+func (m *UnbindAccessPolicyRequest) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *UnbindAccessPolicyRequest) SetAccessPolicyTemplateId(v string) {
+	m.AccessPolicyTemplateId = v
+}
+
+func (m *UnbindAccessPolicyMetadata) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *UnbindAccessPolicyMetadata) SetAccessPolicyTemplateId(v string) {
+	m.AccessPolicyTemplateId = v
+}
+
+func (m *UpdateAccessPolicyBindingParametersRequest) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *UpdateAccessPolicyBindingParametersRequest) SetAccessPolicyBinding(v *AccessPolicyBinding) {
+	m.AccessPolicyBinding = v
+}
+
+func (m *UpdateAccessPolicyBindingParametersMetadata) SetResourceId(v string) {
+	m.ResourceId = v
+}
+
+func (m *UpdateAccessPolicyBindingParametersMetadata) SetAccessPolicyBinding(v *AccessPolicyBinding) {
+	m.AccessPolicyBinding = v
 }
 
 func (m *SetAccessBindingsRequest) SetResourceId(v string) {

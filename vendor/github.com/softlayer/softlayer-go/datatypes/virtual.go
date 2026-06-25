@@ -573,12 +573,14 @@ type Virtual_Guest struct {
 	ModifyDate *Time `json:"modifyDate,omitempty" xmlrpc:"modifyDate,omitempty"`
 
 	// no documentation yet
+	// Deprecated: This function has been marked as deprecated.
 	MonitoringRobot *Monitoring_Robot `json:"monitoringRobot,omitempty" xmlrpc:"monitoringRobot,omitempty"`
 
 	// A virtual guest's network monitoring services.
 	MonitoringServiceComponent *Network_Monitor_Version1_Query_Host_Stratum `json:"monitoringServiceComponent,omitempty" xmlrpc:"monitoringServiceComponent,omitempty"`
 
 	// no documentation yet
+	// Deprecated: This function has been marked as deprecated.
 	MonitoringServiceEligibilityFlag *bool `json:"monitoringServiceEligibilityFlag,omitempty" xmlrpc:"monitoringServiceEligibilityFlag,omitempty"`
 
 	// The monitoring notification objects for this guest. Each object links this guest instance to a user account that will be notified if monitoring on this guest object fails
@@ -709,6 +711,7 @@ type Virtual_Guest struct {
 	SecurityScanRequestCount *uint `json:"securityScanRequestCount,omitempty" xmlrpc:"securityScanRequestCount,omitempty"`
 
 	// A guest's vulnerability scan requests.
+	// Deprecated: This function has been marked as deprecated.
 	SecurityScanRequests []Network_Security_Scanner_Request `json:"securityScanRequests,omitempty" xmlrpc:"securityScanRequests,omitempty"`
 
 	// The server room that a guest is located at. There may be more than one server room for every data center.
@@ -1361,9 +1364,6 @@ type Virtual_Host struct {
 	// Unique ID for a virtual host.
 	Id *int `json:"id,omitempty" xmlrpc:"id,omitempty"`
 
-	// The metric tracking object for this virtual host.
-	MetricTrackingObject *Metric_Tracking_Object `json:"metricTrackingObject,omitempty" xmlrpc:"metricTrackingObject,omitempty"`
-
 	// The date a virtual host was last modified.
 	ModifyDate *Time `json:"modifyDate,omitempty" xmlrpc:"modifyDate,omitempty"`
 
@@ -1595,7 +1595,8 @@ type Virtual_Storage_Repository struct {
 	Id *int `json:"id,omitempty" xmlrpc:"id,omitempty"`
 
 	// no documentation yet
-	MetricTrackingObject *Metric_Tracking_Object_Virtual_Storage_Repository `json:"metricTrackingObject,omitempty" xmlrpc:"metricTrackingObject,omitempty"`
+	// Deprecated: This function has been marked as deprecated.
+	MetricTrackingObject *Metric_Tracking_Object `json:"metricTrackingObject,omitempty" xmlrpc:"metricTrackingObject,omitempty"`
 
 	// A storage repositories name that describes its purpose or contents
 	Name *string `json:"name,omitempty" xmlrpc:"name,omitempty"`

@@ -20,7 +20,7 @@ import (
 // supported in some Amazon Web Services Regions, and SMS text messages cannot be
 // sent to some countries/regions. For more information, see [Notifications in Amazon Lightsail].
 //
-// [Notifications in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-notifications
+// [Notifications in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-notifications
 func (c *Client) GetContactMethods(ctx context.Context, params *GetContactMethodsInput, optFns ...func(*Options)) (*GetContactMethodsOutput, error) {
 	if params == nil {
 		params = &GetContactMethodsInput{}
@@ -93,7 +93,7 @@ func (c *Client) addOperationGetContactMethodsMiddlewares(stack *middleware.Stac
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -117,10 +117,10 @@ func (c *Client) addOperationGetContactMethodsMiddlewares(stack *middleware.Stac
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opGetContactMethods(options.Region), middleware.Before); err != nil {
@@ -141,16 +141,13 @@ func (c *Client) addOperationGetContactMethodsMiddlewares(stack *middleware.Stac
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

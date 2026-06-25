@@ -38,7 +38,7 @@ func NewClient(token string) *Client {
 
 // ListDomains List Domains.
 // https://api.mittwald.de/v2/docs/#/Domain/domain-list-domains
-func (c Client) ListDomains(ctx context.Context) ([]Domain, error) {
+func (c *Client) ListDomains(ctx context.Context) ([]Domain, error) {
 	endpoint := c.baseURL.JoinPath("domains")
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -47,6 +47,7 @@ func (c Client) ListDomains(ctx context.Context) ([]Domain, error) {
 	}
 
 	var result []Domain
+
 	err = c.do(req, &result)
 	if err != nil {
 		return nil, err
@@ -57,7 +58,7 @@ func (c Client) ListDomains(ctx context.Context) ([]Domain, error) {
 
 // GetDNSZone Get a DNSZone.
 // https://api.mittwald.de/v2/docs/#/Domain/dns-get-dns-zone
-func (c Client) GetDNSZone(ctx context.Context, zoneID string) (*DNSZone, error) {
+func (c *Client) GetDNSZone(ctx context.Context, zoneID string) (*DNSZone, error) {
 	endpoint := c.baseURL.JoinPath("dns-zones", zoneID)
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -66,6 +67,7 @@ func (c Client) GetDNSZone(ctx context.Context, zoneID string) (*DNSZone, error)
 	}
 
 	result := &DNSZone{}
+
 	err = c.do(req, result)
 	if err != nil {
 		return nil, err
@@ -76,7 +78,7 @@ func (c Client) GetDNSZone(ctx context.Context, zoneID string) (*DNSZone, error)
 
 // ListDNSZones List DNSZones belonging to a Project.
 // https://api.mittwald.de/v2/docs/#/Domain/dns-list-dns-zones
-func (c Client) ListDNSZones(ctx context.Context, projectID string) ([]DNSZone, error) {
+func (c *Client) ListDNSZones(ctx context.Context, projectID string) ([]DNSZone, error) {
 	endpoint := c.baseURL.JoinPath("projects", projectID, "dns-zones")
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -85,6 +87,7 @@ func (c Client) ListDNSZones(ctx context.Context, projectID string) ([]DNSZone, 
 	}
 
 	var result []DNSZone
+
 	err = c.do(req, &result)
 	if err != nil {
 		return nil, err
@@ -95,7 +98,7 @@ func (c Client) ListDNSZones(ctx context.Context, projectID string) ([]DNSZone, 
 
 // CreateDNSZone Create a DNSZone.
 // https://api.mittwald.de/v2/docs/#/Domain/dns-create-dns-zone
-func (c Client) CreateDNSZone(ctx context.Context, zone CreateDNSZoneRequest) (*DNSZone, error) {
+func (c *Client) CreateDNSZone(ctx context.Context, zone CreateDNSZoneRequest) (*DNSZone, error) {
 	endpoint := c.baseURL.JoinPath("dns-zones")
 
 	req, err := newJSONRequest(ctx, http.MethodPost, endpoint, zone)
@@ -104,6 +107,7 @@ func (c Client) CreateDNSZone(ctx context.Context, zone CreateDNSZoneRequest) (*
 	}
 
 	result := &DNSZone{}
+
 	err = c.do(req, result)
 	if err != nil {
 		return nil, err
@@ -114,7 +118,7 @@ func (c Client) CreateDNSZone(ctx context.Context, zone CreateDNSZoneRequest) (*
 
 // UpdateTXTRecord Update a record set on a DNSZone.
 // https://api.mittwald.de/v2/docs/#/Domain/dns-update-record-set
-func (c Client) UpdateTXTRecord(ctx context.Context, zoneID string, record TXTRecord) error {
+func (c *Client) UpdateTXTRecord(ctx context.Context, zoneID string, record TXTRecord) error {
 	endpoint := c.baseURL.JoinPath("dns-zones", zoneID, "record-sets", "txt")
 
 	req, err := newJSONRequest(ctx, http.MethodPut, endpoint, record)
@@ -127,7 +131,7 @@ func (c Client) UpdateTXTRecord(ctx context.Context, zoneID string, record TXTRe
 
 // DeleteDNSZone Delete a DNSZone.
 // https://api.mittwald.de/v2/docs/#/Domain/dns-delete-dns-zone
-func (c Client) DeleteDNSZone(ctx context.Context, zoneID string) error {
+func (c *Client) DeleteDNSZone(ctx context.Context, zoneID string) error {
 	endpoint := c.baseURL.JoinPath("dns-zones", zoneID)
 
 	req, err := newJSONRequest(ctx, http.MethodDelete, endpoint, nil)
@@ -138,7 +142,7 @@ func (c Client) DeleteDNSZone(ctx context.Context, zoneID string) error {
 	return c.do(req, nil)
 }
 
-func (c Client) do(req *http.Request, result any) error {
+func (c *Client) do(req *http.Request, result any) error {
 	req.Header.Set(authorizationHeader, "Bearer "+c.token)
 
 	resp, err := c.HTTPClient.Do(req)
@@ -197,6 +201,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var response APIError
+
 	err := json.Unmarshal(raw, &response)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

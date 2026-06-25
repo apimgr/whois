@@ -31,7 +31,7 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-func NewClient(username string, password string, domainName string, projectName string) *Client {
+func NewClient(username, password, domainName, projectName string) *Client {
 	return &Client{
 		username:         username,
 		password:         password,
@@ -42,8 +42,8 @@ func NewClient(username string, password string, domainName string, projectName 
 	}
 }
 
-func (c *Client) GetZoneID(ctx context.Context, zone string) (string, error) {
-	zonesResp, err := c.getZones(ctx, zone)
+func (c *Client) GetZoneID(ctx context.Context, zone string, privateZone bool) (string, error) {
+	zonesResp, err := c.getZones(ctx, zone, privateZone)
 	if err != nil {
 		return "", err
 	}
@@ -62,13 +62,18 @@ func (c *Client) GetZoneID(ctx context.Context, zone string) (string, error) {
 }
 
 // https://docs.otc.t-systems.com/domain-name-service/api-ref/apis/public_zone_management/querying_public_zones.html
-func (c *Client) getZones(ctx context.Context, zone string) (*ZonesResponse, error) {
+func (c *Client) getZones(ctx context.Context, zone string, privateZone bool) (*ZonesResponse, error) {
 	c.muBaseURL.Lock()
 	endpoint := c.baseURL.JoinPath("zones")
 	c.muBaseURL.Unlock()
 
 	query := endpoint.Query()
 	query.Set("name", zone)
+
+	if privateZone {
+		query.Set("type", "private")
+	}
+
 	endpoint.RawQuery = query.Encode()
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -77,6 +82,7 @@ func (c *Client) getZones(ctx context.Context, zone string) (*ZonesResponse, err
 	}
 
 	var zones ZonesResponse
+
 	err = c.do(req, &zones)
 	if err != nil {
 		return nil, err
@@ -123,6 +129,7 @@ func (c *Client) getRecordSet(ctx context.Context, zoneID, fqdn string) (*Record
 	}
 
 	var recordSetsRes RecordSetsResponse
+
 	err = c.do(req, &recordSetsRes)
 	if err != nil {
 		return nil, err
@@ -163,9 +170,11 @@ func (c *Client) DeleteRecordSet(ctx context.Context, zoneID, recordID string) e
 
 func (c *Client) do(req *http.Request, result any) error {
 	c.muToken.Lock()
+
 	if c.token != "" {
 		req.Header.Set("X-Auth-Token", c.token)
 	}
+
 	c.muToken.Unlock()
 
 	resp, err := c.HTTPClient.Do(req)
@@ -196,7 +205,7 @@ func (c *Client) do(req *http.Request, result any) error {
 	return nil
 }
 
-func newJSONRequest[T string | *url.URL](ctx context.Context, method string, endpoint T, payload interface{}) (*http.Request, error) {
+func newJSONRequest[T string | *url.URL](ctx context.Context, method string, endpoint T, payload any) (*http.Request, error) {
 	buf := new(bytes.Buffer)
 
 	if payload != nil {

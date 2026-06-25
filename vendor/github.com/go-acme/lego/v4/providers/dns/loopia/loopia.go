@@ -12,6 +12,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/loopia/internal"
 )
 
@@ -34,9 +35,9 @@ const minTTL = 300
 var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
 type dnsClient interface {
-	AddTXTRecord(ctx context.Context, domain string, subdomain string, ttl int, value string) error
-	RemoveTXTRecord(ctx context.Context, domain string, subdomain string, recordID int) error
-	GetTXTRecords(ctx context.Context, domain string, subdomain string) ([]internal.RecordObj, error)
+	AddTXTRecord(ctx context.Context, domain, subdomain string, ttl int, value string) error
+	RemoveTXTRecord(ctx context.Context, domain, subdomain string, recordID int) error
+	GetTXTRecords(ctx context.Context, domain, subdomain string) ([]internal.RecordObj, error)
 	RemoveSubdomain(ctx context.Context, domain, subdomain string) error
 }
 
@@ -112,6 +113,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	if config.HTTPClient != nil {
 		client.HTTPClient = config.HTTPClient
 	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	if config.BaseURL != "" {
 		client.BaseURL = config.BaseURL

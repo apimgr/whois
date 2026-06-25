@@ -19,7 +19,7 @@ import (
 // For more information about buckets, see [Buckets in Amazon Lightsail] in the Amazon Lightsail Developer
 // Guide.
 //
-// [Buckets in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/buckets-in-amazon-lightsail
+// [Buckets in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/buckets-in-amazon-lightsail
 func (c *Client) GetBuckets(ctx context.Context, params *GetBucketsInput, optFns ...func(*Options)) (*GetBucketsOutput, error) {
 	if params == nil {
 		params = &GetBucketsInput{}
@@ -49,6 +49,15 @@ type GetBucketsInput struct {
 	// [SetResourceAccessForBucket]: https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_SetResourceAccessForBucket.html
 	IncludeConnectedResources *bool
 
+	// A Boolean value that indicates whether to include Lightsail bucket CORS
+	// configuration in the response. For more information, see [Configuring cross-origin resource sharing (CORS)].
+	//
+	// This parameter is only supported when getting a single bucket with bucketName
+	// specified. The default value for this parameter is False .
+	//
+	// [Configuring cross-origin resource sharing (CORS)]: https://docs.aws.amazon.com/lightsail/latest/userguide/configure-cors.html
+	IncludeCors *bool
+
 	// The token to advance to the next page of results from your request.
 	//
 	// To get a page token, perform an initial GetBuckets request. If your results are
@@ -67,7 +76,7 @@ type GetBucketsOutput struct {
 	// For more information about this feature and how it affects Lightsail buckets,
 	// see [Block public access for buckets in Amazon Lightsail].
 	//
-	// [Block public access for buckets in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-block-public-access-for-buckets
+	// [Block public access for buckets in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-block-public-access-for-buckets
 	AccountLevelBpaSync *types.AccountLevelBpaSync
 
 	// An array of objects that describe buckets.
@@ -121,7 +130,7 @@ func (c *Client) addOperationGetBucketsMiddlewares(stack *middleware.Stack, opti
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -145,10 +154,10 @@ func (c *Client) addOperationGetBucketsMiddlewares(stack *middleware.Stack, opti
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opGetBuckets(options.Region), middleware.Before); err != nil {
@@ -169,16 +178,13 @@ func (c *Client) addOperationGetBucketsMiddlewares(stack *middleware.Stack, opti
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

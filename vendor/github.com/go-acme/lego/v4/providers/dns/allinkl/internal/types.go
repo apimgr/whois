@@ -17,6 +17,7 @@ func (tr Trimmer) Token() (xml.Token, error) {
 	if cd, ok := t.(xml.CharData); ok {
 		t = xml.CharData(bytes.TrimSpace(cd))
 	}
+
 	return t, err
 }
 
@@ -25,10 +26,11 @@ type Fault struct {
 	Code    string `xml:"faultcode"`
 	Message string `xml:"faultstring"`
 	Actor   string `xml:"faultactor"`
+	Detail  string `xml:"detail"`
 }
 
-func (f Fault) Error() string {
-	return fmt.Sprintf("%s: %s: %s", f.Actor, f.Code, f.Message)
+func (f *Fault) Error() string {
+	return fmt.Sprintf("%s: %s: %s: %s", f.Actor, f.Code, f.Message, f.Detail)
 }
 
 // KasResponse a KAS SOAP response.
@@ -53,6 +55,7 @@ func decodeXML[T any](reader io.Reader) (*T, error) {
 	}
 
 	var result T
+
 	err = xml.NewTokenDecoder(Trimmer{decoder: xml.NewDecoder(bytes.NewReader(raw))}).Decode(&result)
 	if err != nil {
 		return nil, fmt.Errorf("decode XML response: %w", err)

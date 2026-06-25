@@ -13,11 +13,16 @@ import (
 
 // Stops a specific database that is currently running in Amazon Lightsail.
 //
+// If you don't manually start your database instance after it has been stopped
+// for seven consecutive days, Amazon Lightsail automatically starts it for you.
+// This action helps ensure that your database instance doesn't fall behind on any
+// required maintenance updates.
+//
 // The stop relational database operation supports tag-based access control via
 // resource tags applied to the resource identified by relationalDatabaseName. For
 // more information, see the [Amazon Lightsail Developer Guide].
 //
-// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-controlling-access-using-tags
+// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-controlling-access-using-tags
 func (c *Client) StopRelationalDatabase(ctx context.Context, params *StopRelationalDatabaseInput, optFns ...func(*Options)) (*StopRelationalDatabaseOutput, error) {
 	if params == nil {
 		params = &StopRelationalDatabaseInput{}
@@ -94,7 +99,7 @@ func (c *Client) addOperationStopRelationalDatabaseMiddlewares(stack *middleware
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -118,10 +123,10 @@ func (c *Client) addOperationStopRelationalDatabaseMiddlewares(stack *middleware
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpStopRelationalDatabaseValidationMiddleware(stack); err != nil {
@@ -145,16 +150,13 @@ func (c *Client) addOperationStopRelationalDatabaseMiddlewares(stack *middleware
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

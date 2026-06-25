@@ -20,25 +20,31 @@ const defaultBaseURL = "https://dns-service.iran.liara.ir"
 type Client struct {
 	baseURL    *url.URL
 	httpClient *http.Client
+
+	teamID string
 }
 
 // NewClient creates a new Client.
-func NewClient(hc *http.Client) *Client {
+func NewClient(hc *http.Client, teamID string) *Client {
 	baseURL, _ := url.Parse(defaultBaseURL)
 
 	if hc == nil {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	return &Client{httpClient: hc, baseURL: baseURL}
+	return &Client{
+		httpClient: hc,
+		baseURL:    baseURL,
+		teamID:     teamID,
+	}
 }
 
 // GetRecords gets the records of a domain.
 // https://openapi.liara.ir/?urls.primaryName=DNS
-func (c Client) GetRecords(ctx context.Context, domainName string) ([]Record, error) {
+func (c *Client) GetRecords(ctx context.Context, domainName string) ([]Record, error) {
 	endpoint := c.baseURL.JoinPath("api", "v1", "zones", domainName, "dns-records")
 
-	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
+	req, err := c.newJSONRequest(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -60,6 +66,7 @@ func (c Client) GetRecords(ctx context.Context, domainName string) ([]Record, er
 	}
 
 	var response Response[[]Record]
+
 	err = json.Unmarshal(raw, &response)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)
@@ -69,10 +76,10 @@ func (c Client) GetRecords(ctx context.Context, domainName string) ([]Record, er
 }
 
 // CreateRecord creates a record.
-func (c Client) CreateRecord(ctx context.Context, domainName string, record Record) (*Record, error) {
+func (c *Client) CreateRecord(ctx context.Context, domainName string, record Record) (*Record, error) {
 	endpoint := c.baseURL.JoinPath("api", "v1", "zones", domainName, "dns-records")
 
-	req, err := newJSONRequest(ctx, http.MethodPost, endpoint, record)
+	req, err := c.newJSONRequest(ctx, http.MethodPost, endpoint, record)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -94,6 +101,7 @@ func (c Client) CreateRecord(ctx context.Context, domainName string, record Reco
 	}
 
 	var response Response[*Record]
+
 	err = json.Unmarshal(raw, &response)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)
@@ -103,10 +111,10 @@ func (c Client) CreateRecord(ctx context.Context, domainName string, record Reco
 }
 
 // GetRecord gets a specific record.
-func (c Client) GetRecord(ctx context.Context, domainName, recordID string) (*Record, error) {
+func (c *Client) GetRecord(ctx context.Context, domainName, recordID string) (*Record, error) {
 	endpoint := c.baseURL.JoinPath("api", "v1", "zones", domainName, "dns-records", recordID)
 
-	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
+	req, err := c.newJSONRequest(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -128,6 +136,7 @@ func (c Client) GetRecord(ctx context.Context, domainName, recordID string) (*Re
 	}
 
 	var response Response[*Record]
+
 	err = json.Unmarshal(raw, &response)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)
@@ -137,10 +146,10 @@ func (c Client) GetRecord(ctx context.Context, domainName, recordID string) (*Re
 }
 
 // DeleteRecord deletes a record.
-func (c Client) DeleteRecord(ctx context.Context, domainName, recordID string) error {
+func (c *Client) DeleteRecord(ctx context.Context, domainName, recordID string) error {
 	endpoint := c.baseURL.JoinPath("api", "v1", "zones", domainName, "dns-records", recordID)
 
-	req, err := newJSONRequest(ctx, http.MethodDelete, endpoint, nil)
+	req, err := c.newJSONRequest(ctx, http.MethodDelete, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -159,7 +168,14 @@ func (c Client) DeleteRecord(ctx context.Context, domainName, recordID string) e
 	return nil
 }
 
-func newJSONRequest(ctx context.Context, method string, endpoint *url.URL, payload any) (*http.Request, error) {
+func (c *Client) newJSONRequest(ctx context.Context, method string, endpoint *url.URL, payload any) (*http.Request, error) {
+	if c.teamID != "" {
+		query := endpoint.Query()
+		query.Set("teamID", c.teamID)
+
+		endpoint.RawQuery = query.Encode()
+	}
+
 	buf := new(bytes.Buffer)
 
 	if payload != nil {
@@ -187,6 +203,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var errAPI APIError
+
 	err := json.Unmarshal(raw, &errAPI)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

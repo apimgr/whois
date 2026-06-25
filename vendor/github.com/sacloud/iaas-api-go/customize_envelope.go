@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -216,6 +216,26 @@ func (s simpleMonitorFindRequestEnvelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(tmp)
 }
 
+func (s simpleNotificationDestinationFindRequestEnvelope) MarshalJSON() ([]byte, error) {
+	type alias simpleNotificationDestinationFindRequestEnvelope
+	tmp := alias(s)
+	if tmp.Filter == nil {
+		tmp.Filter = search.Filter{}
+	}
+	tmp.Filter[search.Key("Provider.Class")] = "saknoticedestination"
+	return json.Marshal(tmp)
+}
+
+func (s simpleNotificationGroupFindRequestEnvelope) MarshalJSON() ([]byte, error) {
+	type alias simpleNotificationGroupFindRequestEnvelope
+	tmp := alias(s)
+	if tmp.Filter == nil {
+		tmp.Filter = search.Filter{}
+	}
+	tmp.Filter[search.Key("Provider.Class")] = "saknoticegroup"
+	return json.Marshal(tmp)
+}
+
 func (s gSLBFindRequestEnvelope) MarshalJSON() ([]byte, error) {
 	type alias gSLBFindRequestEnvelope
 	tmp := alias(s)
@@ -381,5 +401,16 @@ func (a *vPCRouterPingResponseEnvelope) UnmarshalJSON(data []byte) error {
 	tmp.VPCRouter = &nakedResult
 
 	*a = vPCRouterPingResponseEnvelope(tmp)
+	return nil
+}
+
+// UnmarshalJSON APIからの戻り値でレスポンスボディ直下にデータを持つことへの対応
+func (a *simpleNotificationGroupHistoryResponseEnvelope) UnmarshalJSON(data []byte) error {
+	var nakedResult naked.SimpleNotificationHistories
+	if err := json.Unmarshal(data, &nakedResult); err != nil {
+		return err
+	}
+
+	a.NotificationHistories = &nakedResult
 	return nil
 }

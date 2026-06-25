@@ -13,6 +13,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/go-acme/lego/v4/providers/dns/autodns/internal"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 )
 
 // Environment variables names.
@@ -105,6 +106,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		client.HTTPClient = config.HTTPClient
 	}
 
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
+
 	return &DNSProvider{config: config, client: client}, nil
 }
 
@@ -125,9 +128,9 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		Value: info.Value,
 	}}
 
-	_, err := d.client.AddTxtRecords(context.Background(), info.EffectiveFQDN, records)
+	_, err := d.client.AddRecords(context.Background(), info.EffectiveFQDN, records)
 	if err != nil {
-		return fmt.Errorf("autodns: %w", err)
+		return fmt.Errorf("autodns: add record: %w", err)
 	}
 
 	return nil
@@ -144,8 +147,9 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		Value: info.Value,
 	}}
 
-	if err := d.client.RemoveTXTRecords(context.Background(), info.EffectiveFQDN, records); err != nil {
-		return fmt.Errorf("autodns: %w", err)
+	_, err := d.client.RemoveRecords(context.Background(), info.EffectiveFQDN, records)
+	if err != nil {
+		return fmt.Errorf("autodns: remove record: %w", err)
 	}
 
 	return nil

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	version     = "3.9.1"
+	version     = "3.31.0"
 	defaultBase = "https://api.vultr.com"
 	userAgent   = "govultr/" + version
 	rateLimit   = 500 * time.Millisecond
@@ -41,38 +41,42 @@ type Client struct {
 	UserAgent string
 
 	// Services used to interact with the API
-	Account           AccountService
-	Application       ApplicationService
-	Backup            BackupService
-	BareMetalServer   BareMetalServerService
-	Billing           BillingService
-	BlockStorage      BlockStorageService
-	CDN               CDNService
-	ContainerRegistry ContainerRegistryService
-	Database          DatabaseService
-	Domain            DomainService
-	DomainRecord      DomainRecordService
-	FirewallGroup     FirewallGroupService
-	FirewallRule      FireWallRuleService
-	Instance          InstanceService
-	ISO               ISOService
-	Kubernetes        KubernetesService
-	LoadBalancer      LoadBalancerService
-	Marketplace       MarketplaceService
-	// Deprecated: Network should no longer be used. Instead, use VPC.
-	Network       NetworkService
-	ObjectStorage ObjectStorageService
-	OS            OSService
-	Plan          PlanService
-	Region        RegionService
-	ReservedIP    ReservedIPService
-	Inference     InferenceService
-	Snapshot      SnapshotService
-	SSHKey        SSHKeyService
-	StartupScript StartupScriptService
-	User          UserService
-	VPC           VPCService
-	VPC2          VPC2Service
+	Account                  AccountService
+	Application              ApplicationService
+	Backup                   BackupService
+	BareMetalServer          BareMetalServerService
+	Billing                  BillingService
+	BlockStorage             BlockStorageService
+	CDN                      CDNService
+	ContainerRegistry        ContainerRegistryService
+	Database                 DatabaseService
+	Domain                   DomainService
+	DomainRecord             DomainRecordService
+	FirewallGroup            FirewallGroupService
+	FirewallRule             FireWallRuleService
+	Instance                 InstanceService
+	ISO                      ISOService
+	Kubernetes               KubernetesService
+	LoadBalancer             LoadBalancerService
+	Logs                     LogsService
+	Marketplace              MarketplaceService
+	ObjectStorage            ObjectStorageService
+	OIDC                     OIDCService
+	Organization             OrganizationService
+	OS                       OSService
+	Plan                     PlanService
+	Region                   RegionService
+	ReservedIP               ReservedIPService
+	Inference                InferenceService
+	Snapshot                 SnapshotService
+	SSHKey                   SSHKeyService
+	StartupScript            StartupScriptService
+	SubAccount               SubAccountService
+	User                     UserService
+	VirtualFileSystemStorage VirtualFileSystemStorageService
+	VPC                      VPCService
+	// Deprecated: VPC2 is no longer supported
+	VPC2 VPC2Service
 
 	// Optional function called after every successful request made to the Vultr API
 	onRequestCompleted RequestCompletionCallback
@@ -87,18 +91,18 @@ func NewClient(httpClient *http.Client) *Client {
 		httpClient = &http.Client{
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
+					Timeout:   90 * time.Second,
+					KeepAlive: 90 * time.Second,
 					DualStack: true,
 				}).DialContext,
 				MaxIdleConns:          100,
 				IdleConnTimeout:       90 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
+				TLSHandshakeTimeout:   30 * time.Second,
 				ExpectContinueTimeout: 1 * time.Second,
 				MaxIdleConnsPerHost:   -1,
 				DisableKeepAlives:     true,
 			},
-			Timeout: 5 * time.Second,
+			Timeout: 60 * time.Second,
 		}
 	}
 
@@ -133,9 +137,11 @@ func NewClient(httpClient *http.Client) *Client {
 	client.ISO = &ISOServiceHandler{client}
 	client.Kubernetes = &KubernetesHandler{client}
 	client.LoadBalancer = &LoadBalancerHandler{client}
+	client.Logs = &LogsServiceHandler{client}
 	client.Marketplace = &MarketplaceServiceHandler{client}
-	client.Network = &NetworkServiceHandler{client}
 	client.ObjectStorage = &ObjectStorageServiceHandler{client}
+	client.OIDC = &OIDCServiceHandler{client}
+	client.Organization = &OrganizationServiceHandler{client}
 	client.OS = &OSServiceHandler{client}
 	client.Plan = &PlanServiceHandler{client}
 	client.Region = &RegionServiceHandler{client}
@@ -144,7 +150,9 @@ func NewClient(httpClient *http.Client) *Client {
 	client.Snapshot = &SnapshotServiceHandler{client}
 	client.SSHKey = &SSHKeyServiceHandler{client}
 	client.StartupScript = &StartupScriptServiceHandler{client}
+	client.SubAccount = &SubAccountServiceHandler{client}
 	client.User = &UserServiceHandler{client}
+	client.VirtualFileSystemStorage = &VirtualFileSystemStorageServiceHandler{client}
 	client.VPC = &VPCServiceHandler{client}
 	client.VPC2 = &VPC2ServiceHandler{client}
 

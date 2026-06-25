@@ -2,18 +2,15 @@
 package ionos
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
-	"github.com/go-acme/lego/v4/providers/dns/ionos/internal"
+	"github.com/go-acme/lego/v4/providers/dns/internal/ionos"
 )
 
 // Environment variables names.
@@ -33,19 +30,13 @@ const minTTL = 300
 var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
 // Config is used to configure the creation of the DNSProvider.
-type Config struct {
-	APIKey             string
-	PropagationTimeout time.Duration
-	PollingInterval    time.Duration
-	TTL                int
-	HTTPClient         *http.Client
-}
+type Config = ionos.Config
 
 // NewDefaultConfig returns a default configuration for the DNSProvider.
 func NewDefaultConfig() *Config {
 	return &Config{
-		TTL:                env.GetOrDefaultInt(EnvTTL, minTTL),
-		PropagationTimeout: env.GetOrDefaultSecond(EnvPropagationTimeout, dns01.DefaultPropagationTimeout),
+		TTL:                env.GetOrDefaultInt(EnvTTL, ionos.MinTTL),
+		PropagationTimeout: env.GetOrDefaultSecond(EnvPropagationTimeout, 15*time.Minute),
 		PollingInterval:    env.GetOrDefaultSecond(EnvPollingInterval, dns01.DefaultPollingInterval),
 		HTTPClient: &http.Client{
 			Timeout: env.GetOrDefaultSecond(EnvHTTPTimeout, 30*time.Second),
@@ -55,8 +46,7 @@ func NewDefaultConfig() *Config {
 
 // DNSProvider implements the challenge.Provider interface.
 type DNSProvider struct {
-	config *Config
-	client *internal.Client
+	prv challenge.ProviderTimeout
 }
 
 // NewDNSProvider returns a DNSProvider instance configured for Ionos.
@@ -79,126 +69,36 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		return nil, errors.New("ionos: the configuration of the DNS provider is nil")
 	}
 
-	if config.APIKey == "" {
-		return nil, errors.New("ionos: credentials missing")
-	}
-
-	if config.TTL < minTTL {
-		return nil, fmt.Errorf("ionos: invalid TTL, TTL (%d) must be greater than %d", config.TTL, minTTL)
-	}
-
-	client, err := internal.NewClient(config.APIKey)
+	provider, err := ionos.NewDNSProviderConfig(config, "")
 	if err != nil {
 		return nil, fmt.Errorf("ionos: %w", err)
 	}
 
-	if config.HTTPClient != nil {
-		client.HTTPClient = config.HTTPClient
-	}
-
-	return &DNSProvider{config: config, client: client}, nil
+	return &DNSProvider{prv: provider}, nil
 }
 
 // Timeout returns the timeout and interval to use when checking for DNS propagation.
 // Adjusting here to cope with spikes in propagation times.
 func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
-	return d.config.PropagationTimeout, d.config.PollingInterval
+	return d.prv.Timeout()
 }
 
 // Present creates a TXT record using the specified parameters.
-func (d *DNSProvider) Present(domain, _, keyAuth string) error {
-	info := dns01.GetChallengeInfo(domain, keyAuth)
-
-	ctx := context.Background()
-
-	zones, err := d.client.ListZones(ctx)
+func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+	err := d.prv.Present(domain, token, keyAuth)
 	if err != nil {
-		return fmt.Errorf("ionos: failed to get zones: %w", err)
-	}
-
-	name := dns01.UnFqdn(info.EffectiveFQDN)
-
-	zone := findZone(zones, name)
-	if zone == nil {
-		return errors.New("ionos: no matching zone found for domain")
-	}
-
-	filter := &internal.RecordsFilter{
-		Suffix:     name,
-		RecordType: "TXT",
-	}
-
-	records, err := d.client.GetRecords(ctx, zone.ID, filter)
-	if err != nil {
-		return fmt.Errorf("ionos: failed to get records (zone=%s): %w", zone.ID, err)
-	}
-
-	records = append(records, internal.Record{
-		Name:    name,
-		Content: info.Value,
-		TTL:     d.config.TTL,
-		Type:    "TXT",
-	})
-
-	err = d.client.ReplaceRecords(ctx, zone.ID, records)
-	if err != nil {
-		return fmt.Errorf("ionos: failed to create/update records (zone=%s): %w", zone.ID, err)
+		return fmt.Errorf("ionos: %w", err)
 	}
 
 	return nil
 }
 
 // CleanUp removes the TXT record matching the specified parameters.
-func (d *DNSProvider) CleanUp(domain, _, keyAuth string) error {
-	info := dns01.GetChallengeInfo(domain, keyAuth)
-
-	ctx := context.Background()
-
-	zones, err := d.client.ListZones(ctx)
+func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+	err := d.prv.CleanUp(domain, token, keyAuth)
 	if err != nil {
-		return fmt.Errorf("ionos: failed to get zones: %w", err)
+		return fmt.Errorf("ionos: %w", err)
 	}
 
-	name := dns01.UnFqdn(info.EffectiveFQDN)
-
-	zone := findZone(zones, name)
-	if zone == nil {
-		return errors.New("ionos: no matching zone found for domain")
-	}
-
-	filter := &internal.RecordsFilter{
-		Suffix:     name,
-		RecordType: "TXT",
-	}
-
-	records, err := d.client.GetRecords(ctx, zone.ID, filter)
-	if err != nil {
-		return fmt.Errorf("ionos: failed to get records (zone=%s): %w", zone.ID, err)
-	}
-
-	for _, record := range records {
-		if record.Name == name && record.Content == strconv.Quote(info.Value) {
-			err = d.client.RemoveRecord(ctx, zone.ID, record.ID)
-			if err != nil {
-				return fmt.Errorf("ionos: failed to remove record (zone=%s, record=%s): %w", zone.ID, record.ID, err)
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("ionos: failed to remove record, record not found (zone=%s, domain=%s, fqdn=%s, value=%s)", zone.ID, domain, info.EffectiveFQDN, info.Value)
-}
-
-func findZone(zones []internal.Zone, domain string) *internal.Zone {
-	var result *internal.Zone
-
-	for _, zone := range zones {
-		if zone.Name != "" && strings.HasSuffix(domain, zone.Name) {
-			if result == nil || len(zone.Name) > len(result.Name) {
-				result = &zone
-			}
-		}
-	}
-
-	return result
+	return nil
 }

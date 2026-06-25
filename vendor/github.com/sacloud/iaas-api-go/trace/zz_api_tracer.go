@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -158,6 +158,12 @@ func addClientFactoryHooks() {
 	})
 	iaas.AddClientFacotyHookFunc("SimpleMonitor", func(in interface{}) interface{} {
 		return NewSimpleMonitorTracer(in.(iaas.SimpleMonitorAPI))
+	})
+	iaas.AddClientFacotyHookFunc("SimpleNotificationDestination", func(in interface{}) interface{} {
+		return NewSimpleNotificationDestinationTracer(in.(iaas.SimpleNotificationDestinationAPI))
+	})
+	iaas.AddClientFacotyHookFunc("SimpleNotificationGroup", func(in interface{}) interface{} {
+		return NewSimpleNotificationGroupTracer(in.(iaas.SimpleNotificationGroupAPI))
 	})
 	iaas.AddClientFacotyHookFunc("SSHKey", func(in interface{}) interface{} {
 		return NewSSHKeyTracer(in.(iaas.SSHKeyAPI))
@@ -3381,16 +3387,18 @@ func (t *DiskTracer) Find(ctx context.Context, zone string, conditions *iaas.Fin
 }
 
 // Create is API call with trace log
-func (t *DiskTracer) Create(ctx context.Context, zone string, createParam *iaas.DiskCreateRequest, distantFrom []types.ID) (*iaas.Disk, error) {
+func (t *DiskTracer) Create(ctx context.Context, zone string, createParam *iaas.DiskCreateRequest, distantFrom []types.ID, kmeKeyID types.ID) (*iaas.Disk, error) {
 	log.Println("[TRACE] DiskAPI.Create start")
 	targetArguments := struct {
 		Argzone        string
 		ArgcreateParam *iaas.DiskCreateRequest `json:"createParam"`
 		ArgdistantFrom []types.ID              `json:"distantFrom"`
+		ArgkmeKeyID    types.ID                `json:"kmeKeyID"`
 	}{
 		Argzone:        zone,
 		ArgcreateParam: createParam,
 		ArgdistantFrom: distantFrom,
+		ArgkmeKeyID:    kmeKeyID,
 	}
 	if d, err := json.Marshal(targetArguments); err == nil {
 		log.Printf("[TRACE] \targs: %s\n", string(d))
@@ -3400,7 +3408,7 @@ func (t *DiskTracer) Create(ctx context.Context, zone string, createParam *iaas.
 		log.Println("[TRACE] DiskAPI.Create end")
 	}()
 
-	resultDisk, err := t.Internal.Create(ctx, zone, createParam, distantFrom)
+	resultDisk, err := t.Internal.Create(ctx, zone, createParam, distantFrom, kmeKeyID)
 	targetResults := struct {
 		Disk  *iaas.Disk
 		Error error
@@ -3449,7 +3457,7 @@ func (t *DiskTracer) Config(ctx context.Context, zone string, id types.ID, edit 
 }
 
 // CreateWithConfig is API call with trace log
-func (t *DiskTracer) CreateWithConfig(ctx context.Context, zone string, createParam *iaas.DiskCreateRequest, editParam *iaas.DiskEditRequest, bootAtAvailable bool, distantFrom []types.ID) (*iaas.Disk, error) {
+func (t *DiskTracer) CreateWithConfig(ctx context.Context, zone string, createParam *iaas.DiskCreateRequest, editParam *iaas.DiskEditRequest, bootAtAvailable bool, distantFrom []types.ID, kmeKeyID types.ID) (*iaas.Disk, error) {
 	log.Println("[TRACE] DiskAPI.CreateWithConfig start")
 	targetArguments := struct {
 		Argzone            string
@@ -3457,12 +3465,14 @@ func (t *DiskTracer) CreateWithConfig(ctx context.Context, zone string, createPa
 		ArgeditParam       *iaas.DiskEditRequest   `json:"editParam"`
 		ArgbootAtAvailable bool                    `json:"bootAtAvailable"`
 		ArgdistantFrom     []types.ID              `json:"distantFrom"`
+		ArgkmeKeyID        types.ID                `json:"kmeKeyID"`
 	}{
 		Argzone:            zone,
 		ArgcreateParam:     createParam,
 		ArgeditParam:       editParam,
 		ArgbootAtAvailable: bootAtAvailable,
 		ArgdistantFrom:     distantFrom,
+		ArgkmeKeyID:        kmeKeyID,
 	}
 	if d, err := json.Marshal(targetArguments); err == nil {
 		log.Printf("[TRACE] \targs: %s\n", string(d))
@@ -3472,7 +3482,7 @@ func (t *DiskTracer) CreateWithConfig(ctx context.Context, zone string, createPa
 		log.Println("[TRACE] DiskAPI.CreateWithConfig end")
 	}()
 
-	resultDisk, err := t.Internal.CreateWithConfig(ctx, zone, createParam, editParam, bootAtAvailable, distantFrom)
+	resultDisk, err := t.Internal.CreateWithConfig(ctx, zone, createParam, editParam, bootAtAvailable, distantFrom, kmeKeyID)
 	targetResults := struct {
 		Disk  *iaas.Disk
 		Error error
@@ -11083,6 +11093,504 @@ func (t *SimpleMonitorTracer) HealthStatus(ctx context.Context, id types.ID) (*i
 }
 
 /*************************************************
+* SimpleNotificationDestinationTracer
+*************************************************/
+
+// SimpleNotificationDestinationTracer is for trace SimpleNotificationDestinationOp operations
+type SimpleNotificationDestinationTracer struct {
+	Internal iaas.SimpleNotificationDestinationAPI
+}
+
+// NewSimpleNotificationDestinationTracer creates new SimpleNotificationDestinationTracer instance
+func NewSimpleNotificationDestinationTracer(in iaas.SimpleNotificationDestinationAPI) iaas.SimpleNotificationDestinationAPI {
+	return &SimpleNotificationDestinationTracer{
+		Internal: in,
+	}
+}
+
+// Find is API call with trace log
+func (t *SimpleNotificationDestinationTracer) Find(ctx context.Context, conditions *iaas.FindCondition) (*iaas.SimpleNotificationDestinationFindResult, error) {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.Find start")
+	targetArguments := struct {
+		Argconditions *iaas.FindCondition `json:"conditions"`
+	}{
+		Argconditions: conditions,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.Find end")
+	}()
+
+	result, err := t.Internal.Find(ctx, conditions)
+	targetResults := struct {
+		Result *iaas.SimpleNotificationDestinationFindResult
+		Error  error
+	}{
+		Result: result,
+		Error:  err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return result, err
+}
+
+// Create is API call with trace log
+func (t *SimpleNotificationDestinationTracer) Create(ctx context.Context, param *iaas.SimpleNotificationDestinationCreateRequest) (*iaas.SimpleNotificationDestination, error) {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.Create start")
+	targetArguments := struct {
+		Argparam *iaas.SimpleNotificationDestinationCreateRequest `json:"param"`
+	}{
+		Argparam: param,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.Create end")
+	}()
+
+	resultSimpleNotificationDestination, err := t.Internal.Create(ctx, param)
+	targetResults := struct {
+		SimpleNotificationDestination *iaas.SimpleNotificationDestination
+		Error                         error
+	}{
+		SimpleNotificationDestination: resultSimpleNotificationDestination,
+		Error:                         err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationDestination, err
+}
+
+// Read is API call with trace log
+func (t *SimpleNotificationDestinationTracer) Read(ctx context.Context, id types.ID) (*iaas.SimpleNotificationDestination, error) {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.Read start")
+	targetArguments := struct {
+		Argid types.ID `json:"id"`
+	}{
+		Argid: id,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.Read end")
+	}()
+
+	resultSimpleNotificationDestination, err := t.Internal.Read(ctx, id)
+	targetResults := struct {
+		SimpleNotificationDestination *iaas.SimpleNotificationDestination
+		Error                         error
+	}{
+		SimpleNotificationDestination: resultSimpleNotificationDestination,
+		Error:                         err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationDestination, err
+}
+
+// Update is API call with trace log
+func (t *SimpleNotificationDestinationTracer) Update(ctx context.Context, id types.ID, param *iaas.SimpleNotificationDestinationUpdateRequest) (*iaas.SimpleNotificationDestination, error) {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.Update start")
+	targetArguments := struct {
+		Argid    types.ID                                         `json:"id"`
+		Argparam *iaas.SimpleNotificationDestinationUpdateRequest `json:"param"`
+	}{
+		Argid:    id,
+		Argparam: param,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.Update end")
+	}()
+
+	resultSimpleNotificationDestination, err := t.Internal.Update(ctx, id, param)
+	targetResults := struct {
+		SimpleNotificationDestination *iaas.SimpleNotificationDestination
+		Error                         error
+	}{
+		SimpleNotificationDestination: resultSimpleNotificationDestination,
+		Error:                         err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationDestination, err
+}
+
+// UpdateSettings is API call with trace log
+func (t *SimpleNotificationDestinationTracer) UpdateSettings(ctx context.Context, id types.ID, param *iaas.SimpleNotificationDestinationUpdateSettingsRequest) (*iaas.SimpleNotificationDestination, error) {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.UpdateSettings start")
+	targetArguments := struct {
+		Argid    types.ID                                                 `json:"id"`
+		Argparam *iaas.SimpleNotificationDestinationUpdateSettingsRequest `json:"param"`
+	}{
+		Argid:    id,
+		Argparam: param,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.UpdateSettings end")
+	}()
+
+	resultSimpleNotificationDestination, err := t.Internal.UpdateSettings(ctx, id, param)
+	targetResults := struct {
+		SimpleNotificationDestination *iaas.SimpleNotificationDestination
+		Error                         error
+	}{
+		SimpleNotificationDestination: resultSimpleNotificationDestination,
+		Error:                         err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationDestination, err
+}
+
+// Delete is API call with trace log
+func (t *SimpleNotificationDestinationTracer) Delete(ctx context.Context, id types.ID) error {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.Delete start")
+	targetArguments := struct {
+		Argid types.ID `json:"id"`
+	}{
+		Argid: id,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.Delete end")
+	}()
+
+	err := t.Internal.Delete(ctx, id)
+	targetResults := struct {
+		Error error
+	}{
+		Error: err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return err
+}
+
+// Status is API call with trace log
+func (t *SimpleNotificationDestinationTracer) Status(ctx context.Context, id types.ID) (*iaas.SimpleNotificationDestinationStatus, error) {
+	log.Println("[TRACE] SimpleNotificationDestinationAPI.Status start")
+	targetArguments := struct {
+		Argid types.ID `json:"id"`
+	}{
+		Argid: id,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationDestinationAPI.Status end")
+	}()
+
+	resultSimpleNotificationDestinationStatus, err := t.Internal.Status(ctx, id)
+	targetResults := struct {
+		SimpleNotificationDestinationStatus *iaas.SimpleNotificationDestinationStatus
+		Error                               error
+	}{
+		SimpleNotificationDestinationStatus: resultSimpleNotificationDestinationStatus,
+		Error:                               err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationDestinationStatus, err
+}
+
+/*************************************************
+* SimpleNotificationGroupTracer
+*************************************************/
+
+// SimpleNotificationGroupTracer is for trace SimpleNotificationGroupOp operations
+type SimpleNotificationGroupTracer struct {
+	Internal iaas.SimpleNotificationGroupAPI
+}
+
+// NewSimpleNotificationGroupTracer creates new SimpleNotificationGroupTracer instance
+func NewSimpleNotificationGroupTracer(in iaas.SimpleNotificationGroupAPI) iaas.SimpleNotificationGroupAPI {
+	return &SimpleNotificationGroupTracer{
+		Internal: in,
+	}
+}
+
+// Find is API call with trace log
+func (t *SimpleNotificationGroupTracer) Find(ctx context.Context, conditions *iaas.FindCondition) (*iaas.SimpleNotificationGroupFindResult, error) {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.Find start")
+	targetArguments := struct {
+		Argconditions *iaas.FindCondition `json:"conditions"`
+	}{
+		Argconditions: conditions,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.Find end")
+	}()
+
+	result, err := t.Internal.Find(ctx, conditions)
+	targetResults := struct {
+		Result *iaas.SimpleNotificationGroupFindResult
+		Error  error
+	}{
+		Result: result,
+		Error:  err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return result, err
+}
+
+// Create is API call with trace log
+func (t *SimpleNotificationGroupTracer) Create(ctx context.Context, param *iaas.SimpleNotificationGroupCreateRequest) (*iaas.SimpleNotificationGroup, error) {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.Create start")
+	targetArguments := struct {
+		Argparam *iaas.SimpleNotificationGroupCreateRequest `json:"param"`
+	}{
+		Argparam: param,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.Create end")
+	}()
+
+	resultSimpleNotificationGroup, err := t.Internal.Create(ctx, param)
+	targetResults := struct {
+		SimpleNotificationGroup *iaas.SimpleNotificationGroup
+		Error                   error
+	}{
+		SimpleNotificationGroup: resultSimpleNotificationGroup,
+		Error:                   err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationGroup, err
+}
+
+// Read is API call with trace log
+func (t *SimpleNotificationGroupTracer) Read(ctx context.Context, id types.ID) (*iaas.SimpleNotificationGroup, error) {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.Read start")
+	targetArguments := struct {
+		Argid types.ID `json:"id"`
+	}{
+		Argid: id,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.Read end")
+	}()
+
+	resultSimpleNotificationGroup, err := t.Internal.Read(ctx, id)
+	targetResults := struct {
+		SimpleNotificationGroup *iaas.SimpleNotificationGroup
+		Error                   error
+	}{
+		SimpleNotificationGroup: resultSimpleNotificationGroup,
+		Error:                   err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationGroup, err
+}
+
+// Update is API call with trace log
+func (t *SimpleNotificationGroupTracer) Update(ctx context.Context, id types.ID, param *iaas.SimpleNotificationGroupUpdateRequest) (*iaas.SimpleNotificationGroup, error) {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.Update start")
+	targetArguments := struct {
+		Argid    types.ID                                   `json:"id"`
+		Argparam *iaas.SimpleNotificationGroupUpdateRequest `json:"param"`
+	}{
+		Argid:    id,
+		Argparam: param,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.Update end")
+	}()
+
+	resultSimpleNotificationGroup, err := t.Internal.Update(ctx, id, param)
+	targetResults := struct {
+		SimpleNotificationGroup *iaas.SimpleNotificationGroup
+		Error                   error
+	}{
+		SimpleNotificationGroup: resultSimpleNotificationGroup,
+		Error:                   err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationGroup, err
+}
+
+// UpdateSettings is API call with trace log
+func (t *SimpleNotificationGroupTracer) UpdateSettings(ctx context.Context, id types.ID, param *iaas.SimpleNotificationGroupUpdateSettingsRequest) (*iaas.SimpleNotificationGroup, error) {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.UpdateSettings start")
+	targetArguments := struct {
+		Argid    types.ID                                           `json:"id"`
+		Argparam *iaas.SimpleNotificationGroupUpdateSettingsRequest `json:"param"`
+	}{
+		Argid:    id,
+		Argparam: param,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.UpdateSettings end")
+	}()
+
+	resultSimpleNotificationGroup, err := t.Internal.UpdateSettings(ctx, id, param)
+	targetResults := struct {
+		SimpleNotificationGroup *iaas.SimpleNotificationGroup
+		Error                   error
+	}{
+		SimpleNotificationGroup: resultSimpleNotificationGroup,
+		Error:                   err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationGroup, err
+}
+
+// Delete is API call with trace log
+func (t *SimpleNotificationGroupTracer) Delete(ctx context.Context, id types.ID) error {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.Delete start")
+	targetArguments := struct {
+		Argid types.ID `json:"id"`
+	}{
+		Argid: id,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.Delete end")
+	}()
+
+	err := t.Internal.Delete(ctx, id)
+	targetResults := struct {
+		Error error
+	}{
+		Error: err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return err
+}
+
+// PostMessage is API call with trace log
+func (t *SimpleNotificationGroupTracer) PostMessage(ctx context.Context, id types.ID, message string) error {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.PostMessage start")
+	targetArguments := struct {
+		Argid      types.ID `json:"id"`
+		Argmessage string   `json:"message"`
+	}{
+		Argid:      id,
+		Argmessage: message,
+	}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.PostMessage end")
+	}()
+
+	err := t.Internal.PostMessage(ctx, id, message)
+	targetResults := struct {
+		Error error
+	}{
+		Error: err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return err
+}
+
+// History is API call with trace log
+func (t *SimpleNotificationGroupTracer) History(ctx context.Context) (*iaas.SimpleNotificationHistories, error) {
+	log.Println("[TRACE] SimpleNotificationGroupAPI.History start")
+	targetArguments := struct {
+	}{}
+	if d, err := json.Marshal(targetArguments); err == nil {
+		log.Printf("[TRACE] \targs: %s\n", string(d))
+	}
+
+	defer func() {
+		log.Println("[TRACE] SimpleNotificationGroupAPI.History end")
+	}()
+
+	resultSimpleNotificationHistories, err := t.Internal.History(ctx)
+	targetResults := struct {
+		SimpleNotificationHistories *iaas.SimpleNotificationHistories
+		Error                       error
+	}{
+		SimpleNotificationHistories: resultSimpleNotificationHistories,
+		Error:                       err,
+	}
+	if d, err := json.Marshal(targetResults); err == nil {
+		log.Printf("[TRACE] \tresults: %s\n", string(d))
+	}
+
+	return resultSimpleNotificationHistories, err
+}
+
+/*************************************************
 * SSHKeyTracer
 *************************************************/
 
@@ -11158,37 +11666,6 @@ func (t *SSHKeyTracer) Create(ctx context.Context, param *iaas.SSHKeyCreateReque
 	}
 
 	return resultSSHKey, err
-}
-
-// Generate is API call with trace log
-func (t *SSHKeyTracer) Generate(ctx context.Context, param *iaas.SSHKeyGenerateRequest) (*iaas.SSHKeyGenerated, error) {
-	log.Println("[TRACE] SSHKeyAPI.Generate start")
-	targetArguments := struct {
-		Argparam *iaas.SSHKeyGenerateRequest `json:"param"`
-	}{
-		Argparam: param,
-	}
-	if d, err := json.Marshal(targetArguments); err == nil {
-		log.Printf("[TRACE] \targs: %s\n", string(d))
-	}
-
-	defer func() {
-		log.Println("[TRACE] SSHKeyAPI.Generate end")
-	}()
-
-	resultSSHKeyGenerated, err := t.Internal.Generate(ctx, param)
-	targetResults := struct {
-		SSHKeyGenerated *iaas.SSHKeyGenerated
-		Error           error
-	}{
-		SSHKeyGenerated: resultSSHKeyGenerated,
-		Error:           err,
-	}
-	if d, err := json.Marshal(targetResults); err == nil {
-		log.Printf("[TRACE] \tresults: %s\n", string(d))
-	}
-
-	return resultSSHKeyGenerated, err
 }
 
 // Read is API call with trace log

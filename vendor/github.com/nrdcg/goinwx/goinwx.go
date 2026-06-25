@@ -28,9 +28,10 @@ type Client struct {
 
 	// Services used for communicating with the API
 	Account     *AccountService
+	Contacts    *ContactService
+	Dnssec      *DNSSecService
 	Domains     *DomainService
 	Nameservers *NameserverService
-	Contacts    *ContactService
 }
 
 type service struct {
@@ -51,7 +52,7 @@ type ClientOptions struct {
 // Request The representation of an API request.
 type Request struct {
 	ServiceMethod string
-	Args          map[string]interface{}
+	Args          map[string]any
 }
 
 // NewClient returns a new INWX API client.
@@ -73,15 +74,16 @@ func NewClient(username, password string, opts *ClientOptions) *Client {
 
 	client.common.client = client
 	client.Account = (*AccountService)(&client.common)
+	client.Contacts = (*ContactService)(&client.common)
+	client.Dnssec = (*DNSSecService)(&client.common)
 	client.Domains = (*DomainService)(&client.common)
 	client.Nameservers = (*NameserverService)(&client.common)
-	client.Contacts = (*ContactService)(&client.common)
 
 	return client
 }
 
 // NewRequest creates an API request.
-func (c *Client) NewRequest(serviceMethod string, args map[string]interface{}) *Request {
+func (c *Client) NewRequest(serviceMethod string, args map[string]any) *Request {
 	if args != nil {
 		args["lang"] = APILanguage
 	}
@@ -90,8 +92,9 @@ func (c *Client) NewRequest(serviceMethod string, args map[string]interface{}) *
 }
 
 // Do sends an API request and returns the API response.
-func (c *Client) Do(req *Request) (map[string]interface{}, error) {
+func (c *Client) Do(req *Request) (map[string]any, error) {
 	var resp Response
+
 	err := c.RPCClient.Call(req.ServiceMethod, req.Args, &resp)
 	if err != nil {
 		return nil, err

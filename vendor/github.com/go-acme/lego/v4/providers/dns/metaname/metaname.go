@@ -79,6 +79,7 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	if config.AccountReference == "" {
 		return nil, errors.New("metaname: missing account reference")
 	}
+
 	if config.APIKey == "" {
 		return nil, errors.New("metaname: missing api key")
 	}
@@ -151,6 +152,10 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	if err != nil {
 		return fmt.Errorf("metaname: delete record: %w", err)
 	}
+
+	d.recordsMu.Lock()
+	delete(d.records, token)
+	d.recordsMu.Unlock()
 
 	return nil
 }

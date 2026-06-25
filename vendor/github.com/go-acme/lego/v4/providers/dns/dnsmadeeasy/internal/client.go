@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/providers/dns/internal/errutils"
 )
 
@@ -57,10 +58,8 @@ func NewClient(apiKey, apiSecret string) (*Client, error) {
 func (c *Client) GetDomain(ctx context.Context, authZone string) (*Domain, error) {
 	endpoint := c.BaseURL.JoinPath("dns", "managed", "name")
 
-	domainName := authZone[0 : len(authZone)-1]
-
 	query := endpoint.Query()
-	query.Set("domainname", domainName)
+	query.Set("domainname", dns01.UnFqdn(authZone))
 	endpoint.RawQuery = query.Encode()
 
 	req, err := newJSONRequest(ctx, http.MethodGet, endpoint, nil)
@@ -69,6 +68,7 @@ func (c *Client) GetDomain(ctx context.Context, authZone string) (*Domain, error
 	}
 
 	domain := &Domain{}
+
 	err = c.do(req, domain)
 	if err != nil {
 		return nil, err
@@ -92,6 +92,7 @@ func (c *Client) GetRecords(ctx context.Context, domain *Domain, recordName, rec
 	}
 
 	records := &recordsResponse{}
+
 	err = c.do(req, records)
 	if err != nil {
 		return nil, err
@@ -173,10 +174,12 @@ func (c *Client) sign(req *http.Request, timestamp string) error {
 func computeHMAC(message, secret string) (string, error) {
 	key := []byte(secret)
 	h := hmac.New(sha1.New, key)
+
 	_, err := h.Write([]byte(message))
 	if err != nil {
 		return "", err
 	}
+
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 

@@ -1,4 +1,4 @@
-// Package safedns implements a DNS provider for solving the DNS-01 challenge using UKFast SafeDNS.
+// Package safedns implements a DNS provider for solving the DNS-01 challenge using ANS SafeDNS.
 package safedns
 
 import (
@@ -12,7 +12,9 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/safedns/internal"
+	"github.com/miekg/dns"
 )
 
 // Environment variables.
@@ -73,7 +75,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 	return NewDNSProviderConfig(config)
 }
 
-// NewDNSProviderConfig return a DNSProvider instance configured for UKFast SafeDNS.
+// NewDNSProviderConfig return a DNSProvider instance configured for ANS SafeDNS.
 func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	if config == nil {
 		return nil, errors.New("safedns: supplied configuration was nil")
@@ -88,6 +90,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	if config.HTTPClient != nil {
 		client.HTTPClient = config.HTTPClient
 	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{
 		config:    config,
@@ -106,7 +110,7 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	zone, err := dns01.FindZoneByFqdn(dns01.ToFqdn(info.EffectiveFQDN))
+	zone, err := dns01.FindZoneByFqdn(dns.Fqdn(info.EffectiveFQDN))
 	if err != nil {
 		return fmt.Errorf("safedns: could not find zone for domain %q: %w", domain, err)
 	}
@@ -142,6 +146,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.recordIDsMu.Lock()
 	recordID, ok := d.recordIDs[token]
 	d.recordIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("safedns: unknown record ID for '%s'", info.EffectiveFQDN)
 	}

@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/log"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/pdns/internal"
 )
 
@@ -102,6 +104,12 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 
 	client := internal.NewClient(config.Host, config.ServerName, config.APIVersion, config.APIKey)
 
+	if config.HTTPClient != nil {
+		client.HTTPClient = config.HTTPClient
+	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
+
 	if config.APIVersion <= 0 {
 		err := client.SetAPIVersion(context.Background())
 		if err != nil {
@@ -120,6 +128,8 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 
 // Present creates a TXT record to fulfill the dns-01 challenge.
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
 	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
@@ -127,11 +137,9 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		return fmt.Errorf("pdns: could not find zone for domain %q: %w", domain, err)
 	}
 
-	ctx := context.Background()
-
 	zone, err := d.client.GetHostedZone(ctx, authZone)
 	if err != nil {
-		return fmt.Errorf("pdns: %w", err)
+		return fmt.Errorf("pdns: get hosted zone for %s: %w", authZone, err)
 	}
 
 	name := info.EffectiveFQDN
@@ -143,45 +151,49 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	// Look for existing records.
 	existingRRSet := findTxtRecord(zone, info.EffectiveFQDN)
 
-	// merge the existing and new records
 	var records []internal.Record
 	if existingRRSet != nil {
 		records = existingRRSet.Records
 	}
 
-	rec := internal.Record{
-		Content:  "\"" + info.Value + "\"",
+	records = append(records, internal.Record{
+		Content:  strconv.Quote(info.Value),
 		Disabled: false,
 
 		// pre-v1 API
 		Type: "TXT",
 		Name: name,
 		TTL:  d.config.TTL,
-	}
+	})
 
 	rrSets := internal.RRSets{
-		RRSets: []internal.RRSet{
-			{
-				Name:       name,
-				ChangeType: "REPLACE",
-				Type:       "TXT",
-				Kind:       "Master",
-				TTL:        d.config.TTL,
-				Records:    append(records, rec),
-			},
-		},
+		RRSets: []internal.RRSet{{
+			Name:       name,
+			ChangeType: "REPLACE",
+			Type:       "TXT",
+			Kind:       "Master",
+			TTL:        d.config.TTL,
+			Records:    records,
+		}},
 	}
 
 	err = d.client.UpdateRecords(ctx, zone, rrSets)
 	if err != nil {
-		return fmt.Errorf("pdns: %w", err)
+		return fmt.Errorf("pdns: update records: %w", err)
 	}
 
-	return d.client.Notify(ctx, zone)
+	err = d.client.Notify(ctx, zone)
+	if err != nil {
+		return fmt.Errorf("pdns: notify: %w", err)
+	}
+
+	return nil
 }
 
 // CleanUp removes the TXT record matching the specified parameters.
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
 	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
@@ -189,35 +201,49 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		return fmt.Errorf("pdns: could not find zone for domain %q: %w", domain, err)
 	}
 
-	ctx := context.Background()
-
 	zone, err := d.client.GetHostedZone(ctx, authZone)
 	if err != nil {
-		return fmt.Errorf("pdns: %w", err)
+		return fmt.Errorf("pdns: get hosted zone for %s: %w", authZone, err)
 	}
 
+	// Look for existing records.
 	set := findTxtRecord(zone, info.EffectiveFQDN)
-
 	if set == nil {
 		return fmt.Errorf("pdns: no existing record found for %s", info.EffectiveFQDN)
 	}
 
-	rrSets := internal.RRSets{
-		RRSets: []internal.RRSet{
-			{
-				Name:       set.Name,
-				Type:       set.Type,
-				ChangeType: "DELETE",
-			},
-		},
+	var records []internal.Record
+
+	for _, r := range set.Records {
+		if r.Content != strconv.Quote(info.Value) {
+			records = append(records, r)
+		}
 	}
 
-	err = d.client.UpdateRecords(ctx, zone, rrSets)
+	rrSet := internal.RRSet{
+		Name: set.Name,
+		Type: set.Type,
+	}
+
+	if len(records) > 0 {
+		rrSet.ChangeType = "REPLACE"
+		rrSet.TTL = d.config.TTL
+		rrSet.Records = records
+	} else {
+		rrSet.ChangeType = "DELETE"
+	}
+
+	err = d.client.UpdateRecords(ctx, zone, internal.RRSets{RRSets: []internal.RRSet{rrSet}})
 	if err != nil {
-		return fmt.Errorf("pdns: %w", err)
+		return fmt.Errorf("pdns: update records: %w", err)
 	}
 
-	return d.client.Notify(ctx, zone)
+	err = d.client.Notify(ctx, zone)
+	if err != nil {
+		return fmt.Errorf("pdns: notify: %w", err)
+	}
+
+	return nil
 }
 
 func findTxtRecord(zone *internal.HostedZone, fqdn string) *internal.RRSet {

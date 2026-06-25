@@ -62,8 +62,9 @@ func NewDefaultConfig() *Config {
 
 // DNSProvider implements the challenge.Provider interface.
 type DNSProvider struct {
-	config      *Config
-	client      *lw.API
+	config *Config
+	client *lw.API
+
 	recordIDs   map[string]int
 	recordIDsMu sync.Mutex
 }
@@ -159,6 +160,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	}
 
 	params := &network.DNSRecordParams{ID: recordID}
+
 	_, err := d.client.NetworkDNS.Delete(params)
 	if err != nil {
 		return fmt.Errorf("liquidweb: could not remove TXT record: %w", err)
@@ -179,6 +181,7 @@ func (d *DNSProvider) findZone(domain string) (string, error) {
 
 	// filter the zones on the account to only ones that match
 	var zs []network.DNSZone
+
 	for _, item := range zones.Items {
 		if strings.HasSuffix(domain, item.Name) {
 			zs = append(zs, item)

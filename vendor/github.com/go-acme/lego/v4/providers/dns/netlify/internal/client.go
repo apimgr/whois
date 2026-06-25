@@ -59,6 +59,7 @@ func (c *Client) GetRecords(ctx context.Context, zoneID string) ([]DNSRecord, er
 	}
 
 	var records []DNSRecord
+
 	err = json.Unmarshal(raw, &records)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)
@@ -93,6 +94,7 @@ func (c *Client) CreateRecord(ctx context.Context, zoneID string, record DNSReco
 	}
 
 	var recordResp DNSRecord
+
 	err = json.Unmarshal(raw, &recordResp)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)
@@ -124,7 +126,7 @@ func (c *Client) RemoveRecord(ctx context.Context, zoneID, recordID string) erro
 	return nil
 }
 
-func newJSONRequest(ctx context.Context, method string, endpoint *url.URL, payload interface{}) (*http.Request, error) {
+func newJSONRequest(ctx context.Context, method string, endpoint *url.URL, payload any) (*http.Request, error) {
 	buf := new(bytes.Buffer)
 
 	if payload != nil {

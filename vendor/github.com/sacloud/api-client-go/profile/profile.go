@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/api-client-go Authors
+// Copyright 2022-2025 The sacloud/api-client-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,13 +20,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sacloud/packages-go/envvar"
 )
 
 const (
 	// DirectoryNameEnv プロファイルの格納先を指定する環境変数
-	DirectoryNameEnv = "SAKURACLOUD_PROFILE_DIR"
+	DirectoryNameEnv = "SAKURA_PROFILE_DIR"
 	// DirectoryNameEnvOld プロファイルの格納先を指定する環境変数(後方互換)
-	DirectoryNameEnvOld = "USACLOUD_PROFILE_DIR"
+	DirectoryNameEnvOld1 = "SAKURACLOUD_PROFILE_DIR"
+	DirectoryNameEnvOld2 = "USACLOUD_PROFILE_DIR"
 	// DefaultProfileName デフォルトのプロファイル名
 	DefaultProfileName = "default"
 
@@ -60,28 +63,22 @@ func ValidateName(profileName string, invalidRunes ...rune) error {
 }
 
 func loadProfileDirFromEnvs() (string, error) {
-	dir, err := loadProfileDirFromEnv(DirectoryNameEnv)
+	profileDir := envvar.StringFromEnvMulti([]string{DirectoryNameEnv, DirectoryNameEnvOld1, DirectoryNameEnvOld2}, "")
+	if profileDir == "" {
+		return "", nil
+	}
+	dir, err := loadProfileDirFromEnv(profileDir)
 	if err != nil {
 		return "", err
-	}
-	if dir == "" {
-		// fallback
-		dir, err = loadProfileDirFromEnv(DirectoryNameEnvOld)
-		if err != nil {
-			return "", err
-		}
 	}
 	return dir, nil
 }
 
-func loadProfileDirFromEnv(key string) (string, error) {
-	if path, ok := os.LookupEnv(key); ok {
-		if err := ValidateName(path, filepath.ListSeparator); err != nil {
-			return "", fmt.Errorf("loading ProfileDir from environment variables[%s] is failed: %s", key, err)
-		}
-		return filepath.Clean(path), nil
+func loadProfileDirFromEnv(path string) (string, error) {
+	if err := ValidateName(path, filepath.ListSeparator); err != nil {
+		return "", fmt.Errorf("loading ProfileDir from path[%s] is failed: %s", path, err)
 	}
-	return "", nil
+	return filepath.Clean(path), nil
 }
 
 func baseDir() (string, error) {
@@ -239,7 +236,7 @@ func Save(profileName string, val interface{}) error {
 
 	// merge new value if current config exists
 	if _, err := os.Stat(path); err == nil {
-		currentData, err := os.ReadFile(path)
+		currentData, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
 			return fmt.Errorf("reading current config %q failed: %s", path, err)
 		}
@@ -287,7 +284,7 @@ func Load(profileName string, configValue interface{}) error {
 	// file exists?
 	if _, err := os.Stat(filePath); err == nil {
 		// read file
-		buf, err := os.ReadFile(filePath)
+		buf, err := os.ReadFile(filepath.Clean(filePath))
 		if err != nil {
 			return fmt.Errorf("loading config from %q is failed: %s", filePath, err)
 		}
@@ -359,7 +356,7 @@ func CurrentName() (string, error) {
 
 	profNameFile := filepath.Join(baseDir, configDirName, currentFileName)
 	if _, err := os.Stat(profNameFile); err == nil {
-		data, err := os.ReadFile(profNameFile)
+		data, err := os.ReadFile(filepath.Clean(profNameFile))
 		if err != nil {
 			return "", fmt.Errorf("reading current profile is failed: %s", err)
 		}

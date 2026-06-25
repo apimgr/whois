@@ -2,13 +2,17 @@
 package vinyldns
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/internal/useragent"
 	"github.com/vinyldns/go-vinyldns/vinyldns"
 )
@@ -17,25 +21,30 @@ import (
 const (
 	envNamespace = "VINYLDNS_"
 
-	EnvAccessKey = envNamespace + "ACCESS_KEY"
-	EnvSecretKey = envNamespace + "SECRET_KEY"
-	EnvHost      = envNamespace + "HOST"
+	EnvAccessKey  = envNamespace + "ACCESS_KEY"
+	EnvSecretKey  = envNamespace + "SECRET_KEY"
+	EnvHost       = envNamespace + "HOST"
+	EnvQuoteValue = envNamespace + "QUOTE_VALUE"
 
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
 	EnvPollingInterval    = envNamespace + "POLLING_INTERVAL"
+	EnvHTTPTimeout        = envNamespace + "HTTP_TIMEOUT"
 )
 
 var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
 // Config is used to configure the creation of the DNSProvider.
 type Config struct {
-	AccessKey          string
-	SecretKey          string
-	Host               string
+	AccessKey  string
+	SecretKey  string
+	Host       string
+	QuoteValue bool
+
 	TTL                int
 	PropagationTimeout time.Duration
 	PollingInterval    time.Duration
+	HTTPClient         *http.Client
 }
 
 // NewDefaultConfig returns a default configuration for the DNSProvider.
@@ -44,6 +53,9 @@ func NewDefaultConfig() *Config {
 		TTL:                env.GetOrDefaultInt(EnvTTL, 30),
 		PropagationTimeout: env.GetOrDefaultSecond(EnvPropagationTimeout, 2*time.Minute),
 		PollingInterval:    env.GetOrDefaultSecond(EnvPollingInterval, 4*time.Second),
+		HTTPClient: &http.Client{
+			Timeout: env.GetOrDefaultSecond(EnvHTTPTimeout, 30*time.Second),
+		},
 	}
 }
 
@@ -66,6 +78,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 	config.AccessKey = values[EnvAccessKey]
 	config.SecretKey = values[EnvSecretKey]
 	config.Host = values[EnvHost]
+	config.QuoteValue = env.GetOrDefaultBool(EnvQuoteValue, false)
 
 	return NewDNSProviderConfig(config)
 }
@@ -91,13 +104,22 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		UserAgent: useragent.Get(),
 	})
 
-	client.HTTPClient.Timeout = 30 * time.Second
+	if config.HTTPClient != nil {
+		client.HTTPClient = config.HTTPClient
+	} else {
+		// For compatibility, it should be removed in v5.
+		client.HTTPClient.Timeout = 30 * time.Second
+	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{client: client, config: config}, nil
 }
 
 // Present creates a TXT record to fulfill the dns-01 challenge.
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
 	existingRecord, err := d.getRecordSet(info.EffectiveFQDN)
@@ -105,10 +127,12 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		return fmt.Errorf("vinyldns: %w", err)
 	}
 
-	record := vinyldns.Record{Text: info.Value}
+	value := d.formatValue(info.Value)
+
+	record := vinyldns.Record{Text: value}
 
 	if existingRecord == nil || existingRecord.ID == "" {
-		err = d.createRecordSet(info.EffectiveFQDN, []vinyldns.Record{record})
+		err = d.createRecordSet(ctx, info.EffectiveFQDN, []vinyldns.Record{record})
 		if err != nil {
 			return fmt.Errorf("vinyldns: %w", err)
 		}
@@ -117,7 +141,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	}
 
 	for _, i := range existingRecord.Records {
-		if i.Text == info.Value {
+		if i.Text == value {
 			return nil
 		}
 	}
@@ -125,7 +149,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	records := existingRecord.Records
 	records = append(records, record)
 
-	err = d.updateRecordSet(existingRecord, records)
+	err = d.updateRecordSet(ctx, existingRecord, records)
 	if err != nil {
 		return fmt.Errorf("vinyldns: %w", err)
 	}
@@ -135,6 +159,8 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 
 // CleanUp removes the TXT record matching the specified parameters.
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
 	existingRecord, err := d.getRecordSet(info.EffectiveFQDN)
@@ -146,15 +172,18 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		return nil
 	}
 
+	value := d.formatValue(info.Value)
+
 	var records []vinyldns.Record
+
 	for _, i := range existingRecord.Records {
-		if i.Text != info.Value {
+		if i.Text != value {
 			records = append(records, i)
 		}
 	}
 
 	if len(records) == 0 {
-		err = d.deleteRecordSet(existingRecord)
+		err = d.deleteRecordSet(ctx, existingRecord)
 		if err != nil {
 			return fmt.Errorf("vinyldns: %w", err)
 		}
@@ -162,7 +191,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		return nil
 	}
 
-	err = d.updateRecordSet(existingRecord, records)
+	err = d.updateRecordSet(ctx, existingRecord, records)
 	if err != nil {
 		return fmt.Errorf("vinyldns: %w", err)
 	}
@@ -174,4 +203,12 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 // Adjusting here to cope with spikes in propagation times.
 func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 	return d.config.PropagationTimeout, d.config.PollingInterval
+}
+
+func (d *DNSProvider) formatValue(v string) string {
+	if d.config.QuoteValue {
+		return strconv.Quote(v)
+	}
+
+	return v
 }

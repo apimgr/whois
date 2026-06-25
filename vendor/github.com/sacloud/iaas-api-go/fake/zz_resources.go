@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -99,6 +99,10 @@ const (
 	ResourceSIM = "SIM"
 	// ResourceSimpleMonitor is resource key of fake store
 	ResourceSimpleMonitor = "SimpleMonitor"
+	// ResourceSimpleNotificationDestination is resource key of fake store
+	ResourceSimpleNotificationDestination = "SimpleNotificationDestination"
+	// ResourceSimpleNotificationGroup is resource key of fake store
+	ResourceSimpleNotificationGroup = "SimpleNotificationGroup"
 	// ResourceSSHKey is resource key of fake store
 	ResourceSSHKey = "SSHKey"
 	// ResourceSubnet is resource key of fake store

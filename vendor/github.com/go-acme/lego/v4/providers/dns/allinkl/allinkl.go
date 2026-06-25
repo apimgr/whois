@@ -11,8 +11,10 @@ import (
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/log"
 	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/go-acme/lego/v4/providers/dns/allinkl/internal"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 )
 
 // Environment variables names.
@@ -92,11 +94,15 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		identifier.HTTPClient = config.HTTPClient
 	}
 
+	identifier.HTTPClient = clientdebug.Wrap(identifier.HTTPClient)
+
 	client := internal.NewClient(config.Login)
 
 	if config.HTTPClient != nil {
 		client.HTTPClient = config.HTTPClient
 	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{
 		config:     config,
@@ -116,19 +122,19 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
-	if err != nil {
-		return fmt.Errorf("allinkl: could not find zone for domain %q: %w", domain, err)
-	}
-
 	ctx := context.Background()
 
 	credential, err := d.identifier.Authentication(ctx, 60, true)
 	if err != nil {
-		return fmt.Errorf("allinkl: %w", err)
+		return fmt.Errorf("allinkl: authentication: %w", err)
 	}
 
 	ctx = internal.WithContext(ctx, credential)
+
+	authZone, err := d.findZone(ctx, info.EffectiveFQDN)
+	if err != nil {
+		return fmt.Errorf("allinkl: %w", err)
+	}
 
 	subDomain, err := dns01.ExtractSubDomain(info.EffectiveFQDN, authZone)
 	if err != nil {
@@ -144,7 +150,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 
 	recordID, err := d.client.AddDNSSettings(ctx, record)
 	if err != nil {
-		return fmt.Errorf("allinkl: %w", err)
+		return fmt.Errorf("allinkl: add DNS settings: %w", err)
 	}
 
 	d.recordIDsMu.Lock()
@@ -162,7 +168,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 
 	credential, err := d.identifier.Authentication(ctx, 60, true)
 	if err != nil {
-		return fmt.Errorf("allinkl: %w", err)
+		return fmt.Errorf("allinkl: authentication: %w", err)
 	}
 
 	ctx = internal.WithContext(ctx, credential)
@@ -171,14 +177,33 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.recordIDsMu.Lock()
 	recordID, ok := d.recordIDs[token]
 	d.recordIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("allinkl: unknown record ID for '%s' '%s'", info.EffectiveFQDN, token)
 	}
 
 	_, err = d.client.DeleteDNSSettings(ctx, recordID)
 	if err != nil {
-		return fmt.Errorf("allinkl: %w", err)
+		return fmt.Errorf("allinkl: delete DNS settings: %w", err)
 	}
 
+	d.recordIDsMu.Lock()
+	delete(d.recordIDs, token)
+	d.recordIDsMu.Unlock()
+
 	return nil
+}
+
+func (d *DNSProvider) findZone(ctx context.Context, fqdn string) (string, error) {
+	for z := range dns01.DomainsSeq(fqdn) {
+		_, errG := d.client.GetDNSSettings(ctx, z, "")
+		if errG != nil {
+			log.Infof("get DNS settings zone[%q] %v", z, errG)
+			continue
+		}
+
+		return z, nil
+	}
+
+	return "", fmt.Errorf("unable to find auth zone for '%s'", fqdn)
 }

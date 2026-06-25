@@ -20,7 +20,7 @@ import (
 // and a banner displayed on the Amazon Lightsail console. For more information,
 // see [Alarms in Amazon Lightsail].
 //
-// [Alarms in Amazon Lightsail]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-alarms
+// [Alarms in Amazon Lightsail]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-alarms
 func (c *Client) GetAlarms(ctx context.Context, params *GetAlarmsInput, optFns ...func(*Options)) (*GetAlarmsOutput, error) {
 	if params == nil {
 		params = &GetAlarmsInput{}
@@ -112,7 +112,7 @@ func (c *Client) addOperationGetAlarmsMiddlewares(stack *middleware.Stack, optio
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -136,10 +136,10 @@ func (c *Client) addOperationGetAlarmsMiddlewares(stack *middleware.Stack, optio
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opGetAlarms(options.Region), middleware.Before); err != nil {
@@ -160,16 +160,13 @@ func (c *Client) addOperationGetAlarmsMiddlewares(stack *middleware.Stack, optio
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

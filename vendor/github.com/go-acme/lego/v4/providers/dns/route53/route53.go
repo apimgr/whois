@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	awstypes "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
@@ -35,6 +36,7 @@ const (
 	EnvMaxRetries      = envNamespace + "MAX_RETRIES"
 	EnvAssumeRoleArn   = envNamespace + "ASSUME_ROLE_ARN"
 	EnvExternalID      = envNamespace + "EXTERNAL_ID"
+	EnvPrivateZone     = envNamespace + "PRIVATE_ZONE"
 
 	EnvWaitForRecordSetsChanged = envNamespace + "WAIT_FOR_RECORD_SETS_CHANGED"
 
@@ -58,6 +60,7 @@ type Config struct {
 	MaxRetries    int
 	AssumeRoleArn string
 	ExternalID    string
+	PrivateZone   bool
 
 	WaitForRecordSetsChanged bool
 
@@ -75,6 +78,7 @@ func NewDefaultConfig() *Config {
 		MaxRetries:    env.GetOrDefaultInt(EnvMaxRetries, 5),
 		AssumeRoleArn: env.GetOrDefaultString(EnvAssumeRoleArn, ""),
 		ExternalID:    env.GetOrDefaultString(EnvExternalID, ""),
+		PrivateZone:   env.GetOrDefaultBool(EnvPrivateZone, false),
 
 		WaitForRecordSetsChanged: env.GetOrDefaultBool(EnvWaitForRecordSetsChanged, true),
 
@@ -151,6 +155,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	realValue := `"` + info.Value + `"`
 
 	var found bool
+
 	for _, record := range records {
 		if ptr.Deref(record.Value) == realValue {
 			found = true
@@ -196,6 +201,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	}
 
 	var nonLegoRecords []awstypes.ResourceRecord
+
 	for _, record := range existingRecords {
 		if ptr.Deref(record.Value) != `"`+info.Value+`"` {
 			nonLegoRecords = append(nonLegoRecords, record)
@@ -246,18 +252,22 @@ func (d *DNSProvider) changeRecord(ctx context.Context, action awstypes.ChangeAc
 	changeID := resp.ChangeInfo.Id
 
 	if d.config.WaitForRecordSetsChanged {
-		return wait.For("route53", d.config.PropagationTimeout, d.config.PollingInterval, func() (bool, error) {
-			resp, err := d.client.GetChange(ctx, &route53.GetChangeInput{Id: changeID})
-			if err != nil {
-				return false, fmt.Errorf("failed to query change status: %w", err)
-			}
+		return wait.Retry(ctx,
+			func() error {
+				resp, err := d.client.GetChange(ctx, &route53.GetChangeInput{Id: changeID})
+				if err != nil {
+					return fmt.Errorf("failed to query change status: %w", err)
+				}
 
-			if resp.ChangeInfo.Status == awstypes.ChangeStatusInsync {
-				return true, nil
-			}
+				if resp.ChangeInfo.Status != awstypes.ChangeStatusInsync {
+					return fmt.Errorf("unable to retrieve change: ID=%s, status=%s", ptr.Deref(changeID), resp.ChangeInfo.Status)
+				}
 
-			return false, fmt.Errorf("unable to retrieve change: ID=%s", ptr.Deref(changeID))
-		})
+				return nil
+			},
+			backoff.WithBackOff(backoff.NewConstantBackOff(d.config.PollingInterval)),
+			backoff.WithMaxElapsedTime(d.config.PropagationTimeout),
+		)
 	}
 
 	return nil
@@ -304,15 +314,17 @@ func (d *DNSProvider) getHostedZoneID(ctx context.Context, fqdn string) (string,
 	reqParams := &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(dns01.UnFqdn(authZone)),
 	}
+
 	resp, err := d.client.ListHostedZonesByName(ctx, reqParams)
 	if err != nil {
 		return "", err
 	}
 
 	var hostedZoneID string
+
 	for _, hostedZone := range resp.HostedZones {
 		// .Name has a trailing dot
-		if !hostedZone.Config.PrivateZone && ptr.Deref(hostedZone.Name) == authZone {
+		if ptr.Deref(hostedZone.Name) == authZone && d.config.PrivateZone == hostedZone.Config.PrivateZone {
 			hostedZoneID = ptr.Deref(hostedZone.Id)
 			break
 		}
@@ -342,12 +354,10 @@ func createAWSConfig(ctx context.Context, config *Config) (aws.Config, error) {
 				// causing a high number of consecutive throttling errors.
 				// For reference: Route 53 enforces an account-wide(!) 5req/s query limit.
 				options.Backoff = retry.BackoffDelayerFunc(func(attempt int, err error) (time.Duration, error) {
-					retryCount := attempt
-					if retryCount > 7 {
-						retryCount = 7
-					}
+					retryCount := min(attempt, 7)
 
 					delay := (1 << uint(retryCount)) * (rand.Intn(50) + 200)
+
 					return time.Duration(delay) * time.Millisecond, nil
 				})
 			})

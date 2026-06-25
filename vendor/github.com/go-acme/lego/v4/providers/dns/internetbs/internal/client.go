@@ -34,7 +34,7 @@ type Client struct {
 }
 
 // NewClient creates a new Client.
-func NewClient(apiKey string, password string) *Client {
+func NewClient(apiKey, password string) *Client {
 	baseURL, _ := url.Parse(baseURL)
 
 	return &Client{
@@ -46,8 +46,9 @@ func NewClient(apiKey string, password string) *Client {
 }
 
 // AddRecord The command is intended to add a new DNS record to a specific zone (domain).
-func (c Client) AddRecord(ctx context.Context, query RecordQuery) error {
+func (c *Client) AddRecord(ctx context.Context, query RecordQuery) error {
 	var r APIResponse
+
 	err := c.doRequest(ctx, "Add", query, &r)
 	if err != nil {
 		return err
@@ -61,8 +62,9 @@ func (c Client) AddRecord(ctx context.Context, query RecordQuery) error {
 }
 
 // RemoveRecord The command is intended to remove a DNS record from a specific zone.
-func (c Client) RemoveRecord(ctx context.Context, query RecordQuery) error {
+func (c *Client) RemoveRecord(ctx context.Context, query RecordQuery) error {
 	var r APIResponse
+
 	err := c.doRequest(ctx, "Remove", query, &r)
 	if err != nil {
 		return err
@@ -76,8 +78,9 @@ func (c Client) RemoveRecord(ctx context.Context, query RecordQuery) error {
 }
 
 // ListRecords The command is intended to retrieve the list of DNS records for a specific domain.
-func (c Client) ListRecords(ctx context.Context, query ListRecordQuery) ([]Record, error) {
+func (c *Client) ListRecords(ctx context.Context, query ListRecordQuery) ([]Record, error) {
 	var l ListResponse
+
 	err := c.doRequest(ctx, "List", query, &l)
 	if err != nil {
 		return nil, err
@@ -90,7 +93,7 @@ func (c Client) ListRecords(ctx context.Context, query ListRecordQuery) ([]Recor
 	return l.Records, nil
 }
 
-func (c Client) doRequest(ctx context.Context, action string, params any, result any) error {
+func (c *Client) doRequest(ctx context.Context, action string, params, result any) error {
 	endpoint := c.baseURL.JoinPath("Domain", "DnsRecord", action)
 
 	values, err := querystring.Values(params)

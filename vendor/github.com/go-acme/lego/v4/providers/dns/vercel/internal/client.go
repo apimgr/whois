@@ -51,6 +51,7 @@ func (c *Client) CreateRecord(ctx context.Context, zone string, record Record) (
 	}
 
 	respData := &CreateRecordResponse{}
+
 	err = c.do(req, respData)
 	if err != nil {
 		return nil, err
@@ -61,7 +62,7 @@ func (c *Client) CreateRecord(ctx context.Context, zone string, record Record) (
 
 // DeleteRecord deletes a DNS record.
 // https://vercel.com/docs/rest-api#endpoints/dns/delete-a-dns-record
-func (c *Client) DeleteRecord(ctx context.Context, zone string, recordID string) error {
+func (c *Client) DeleteRecord(ctx context.Context, zone, recordID string) error {
 	endpoint := c.baseURL.JoinPath("v2", "domains", dns01.UnFqdn(zone), "records", recordID)
 
 	req, err := newJSONRequest(ctx, http.MethodDelete, endpoint, nil)
@@ -135,6 +136,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var response APIErrorResponse
+
 	err := json.Unmarshal(raw, &response)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

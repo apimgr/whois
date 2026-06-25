@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,6 +45,15 @@ type Disk struct {
 	BundleInfo          *BundleInfo                    `json:",omitempty" yaml:"bundle_info,omitempty" structs:",omitempty"`
 	Storage             *Storage                       `json:",omitempty" yaml:"storage,omitempty" structs:",omitempty"`
 	Server              *Server                        `json:",omitempty" yaml:"server,omitempty" structs:",omitempty"`
+	EncryptionKey       *EncryptionKey                 `json:",omitempty" yaml:"kms_key,omitempty" structs:",omitempty"`
+}
+
+type EncryptionKey struct {
+	KMSKeyID types.ID `json:",omitempty" yaml:"kms_key_id,omitempty" structs:",omitempty"`
+}
+
+type KMSKey struct {
+	ID types.ID `json:",omitempty" yaml:"id,omitempty" structs:",omitempty"`
 }
 
 // MigrationJobStatus マイグレーションジョブステータス

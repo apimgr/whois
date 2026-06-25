@@ -1,6 +1,6 @@
 package goinwx
 
-import "github.com/mitchellh/mapstructure"
+import "github.com/go-viper/mapstructure/v2"
 
 const (
 	methodAccountLogin  = "account.login"
@@ -14,7 +14,7 @@ type AccountService service
 
 // Login Account login.
 func (s *AccountService) Login() (*LoginResponse, error) {
-	req := s.client.NewRequest(methodAccountLogin, map[string]interface{}{
+	req := s.client.NewRequest(methodAccountLogin, map[string]any{
 		"user": s.client.username,
 		"pass": s.client.password,
 	})
@@ -25,6 +25,7 @@ func (s *AccountService) Login() (*LoginResponse, error) {
 	}
 
 	var result LoginResponse
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
 		return nil, err
@@ -38,6 +39,7 @@ func (s *AccountService) Logout() error {
 	req := s.client.NewRequest(methodAccountLogout, nil)
 
 	_, err := s.client.Do(req)
+
 	return err
 }
 
@@ -46,16 +48,18 @@ func (s *AccountService) Lock() error {
 	req := s.client.NewRequest(methodAccountLock, nil)
 
 	_, err := s.client.Do(req)
+
 	return err
 }
 
 // Unlock Account unlock.
 func (s *AccountService) Unlock(tan string) error {
-	req := s.client.NewRequest(methodAccountUnlock, map[string]interface{}{
+	req := s.client.NewRequest(methodAccountUnlock, map[string]any{
 		"tan": tan,
 	})
 
 	_, err := s.client.Do(req)
+
 	return err
 }
 

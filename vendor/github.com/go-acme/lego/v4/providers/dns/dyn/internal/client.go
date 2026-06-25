@@ -28,7 +28,7 @@ type Client struct {
 }
 
 // NewClient Creates a new Client.
-func NewClient(customerName string, username string, password string) *Client {
+func NewClient(customerName, username, password string) *Client {
 	baseURL, _ := url.Parse(defaultBaseURL)
 
 	return &Client{
@@ -127,6 +127,7 @@ func (c *Client) do(req *http.Request) (*APIResponse, error) {
 	}
 
 	var response APIResponse
+
 	err = json.Unmarshal(raw, &response)
 	if err != nil {
 		return nil, errutils.NewUnmarshalError(req, resp.StatusCode, raw, err)

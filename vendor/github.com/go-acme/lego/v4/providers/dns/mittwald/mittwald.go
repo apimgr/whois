@@ -12,8 +12,8 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/mittwald/internal"
-	"github.com/miekg/dns"
 )
 
 // Environment variables names.
@@ -93,9 +93,17 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		return nil, fmt.Errorf("mittwald: invalid TTL, TTL (%d) must be greater than %d", config.TTL, minTTL)
 	}
 
+	client := internal.NewClient(config.Token)
+
+	if config.HTTPClient != nil {
+		client.HTTPClient = config.HTTPClient
+	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
+
 	return &DNSProvider{
 		config:  config,
-		client:  internal.NewClient(config.Token),
+		client:  client,
 		zoneIDs: map[string]string{},
 	}, nil
 }
@@ -150,6 +158,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.zoneIDsMu.Lock()
 	zoneID, ok := d.zoneIDs[token]
 	d.zoneIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("mittwald: unknown zone ID for '%s'", info.EffectiveFQDN)
 	}
@@ -160,6 +169,10 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	if err != nil {
 		return fmt.Errorf("mittwald: update/delete TXT record: %w", err)
 	}
+
+	d.zoneIDsMu.Lock()
+	delete(d.zoneIDs, token)
+	d.zoneIDsMu.Unlock()
 
 	return nil
 }
@@ -212,11 +225,7 @@ func (d *DNSProvider) getOrCreateZone(ctx context.Context, fqdn string) (*intern
 }
 
 func findDomain(domains []internal.Domain, fqdn string) (internal.Domain, error) {
-	labelIndexes := dns.Split(fqdn)
-
-	for _, index := range labelIndexes {
-		domain := dns01.UnFqdn(fqdn[index:])
-
+	for domain := range dns01.UnFqdnDomainsSeq(fqdn) {
 		for _, dom := range domains {
 			if dom.Domain == domain {
 				return dom, nil
@@ -228,11 +237,7 @@ func findDomain(domains []internal.Domain, fqdn string) (internal.Domain, error)
 }
 
 func findZone(zones []internal.DNSZone, fqdn string) (internal.DNSZone, error) {
-	labelIndexes := dns.Split(fqdn)
-
-	for _, index := range labelIndexes {
-		domain := dns01.UnFqdn(fqdn[index:])
-
+	for domain := range dns01.UnFqdnDomainsSeq(fqdn) {
 		for _, zon := range zones {
 			if zon.Domain == domain {
 				return zon, nil

@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -6294,8 +6294,10 @@ type Database struct {
 	ModifiedAt              time.Time
 	CommonSetting           *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 	BackupSetting           *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+	Backupv2Setting         *DatabaseSettingBackupv2View `mapconv:"Settings.DBConf.Backupv2,recursive"`
 	ReplicationSetting      *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 	InterfaceSettings       []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+	MonitoringSuite         *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
 	SettingsHash            string                       `json:",omitempty" mapconv:",omitempty"`
 	InstanceHostName        string                       `mapconv:"Instance.Host.Name"`
 	InstanceHostInfoURL     string                       `mapconv:"Instance.Host.InfoURL"`
@@ -6309,6 +6311,7 @@ type Database struct {
 	IPAddresses             []string                     `mapconv:"Remark.[]Servers.IPAddress"`
 	ZoneID                  types.ID                     `mapconv:"Remark.Zone.ID"`
 	Interfaces              []*InterfaceView             `json:",omitempty" mapconv:"[]Interfaces,recursive,omitempty"`
+	Disk                    *DatabaseDisk                `mapconv:"Disk,recursive"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
@@ -6325,8 +6328,10 @@ func (o *Database) setDefaults() interface{} {
 		ModifiedAt              time.Time
 		CommonSetting           *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 		BackupSetting           *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+		Backupv2Setting         *DatabaseSettingBackupv2View `mapconv:"Settings.DBConf.Backupv2,recursive"`
 		ReplicationSetting      *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 		InterfaceSettings       []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+		MonitoringSuite         *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
 		SettingsHash            string                       `json:",omitempty" mapconv:",omitempty"`
 		InstanceHostName        string                       `mapconv:"Instance.Host.Name"`
 		InstanceHostInfoURL     string                       `mapconv:"Instance.Host.InfoURL"`
@@ -6340,6 +6345,7 @@ func (o *Database) setDefaults() interface{} {
 		IPAddresses             []string                     `mapconv:"Remark.[]Servers.IPAddress"`
 		ZoneID                  types.ID                     `mapconv:"Remark.Zone.ID"`
 		Interfaces              []*InterfaceView             `json:",omitempty" mapconv:"[]Interfaces,recursive,omitempty"`
+		Disk                    *DatabaseDisk                `mapconv:"Disk,recursive"`
 	}{
 		ID:                      o.GetID(),
 		Class:                   o.GetClass(),
@@ -6352,8 +6358,10 @@ func (o *Database) setDefaults() interface{} {
 		ModifiedAt:              o.GetModifiedAt(),
 		CommonSetting:           o.GetCommonSetting(),
 		BackupSetting:           o.GetBackupSetting(),
+		Backupv2Setting:         o.GetBackupv2Setting(),
 		ReplicationSetting:      o.GetReplicationSetting(),
 		InterfaceSettings:       o.GetInterfaceSettings(),
+		MonitoringSuite:         o.GetMonitoringSuite(),
 		SettingsHash:            o.GetSettingsHash(),
 		InstanceHostName:        o.GetInstanceHostName(),
 		InstanceHostInfoURL:     o.GetInstanceHostInfoURL(),
@@ -6367,6 +6375,7 @@ func (o *Database) setDefaults() interface{} {
 		IPAddresses:             o.GetIPAddresses(),
 		ZoneID:                  o.GetZoneID(),
 		Interfaces:              o.GetInterfaces(),
+		Disk:                    o.GetDisk(),
 	}
 }
 
@@ -6520,6 +6529,16 @@ func (o *Database) SetBackupSetting(v *DatabaseSettingBackup) {
 	o.BackupSetting = v
 }
 
+// GetBackupv2Setting returns value of Backupv2Setting
+func (o *Database) GetBackupv2Setting() *DatabaseSettingBackupv2View {
+	return o.Backupv2Setting
+}
+
+// SetBackupv2Setting sets value to Backupv2Setting
+func (o *Database) SetBackupv2Setting(v *DatabaseSettingBackupv2View) {
+	o.Backupv2Setting = v
+}
+
 // GetReplicationSetting returns value of ReplicationSetting
 func (o *Database) GetReplicationSetting() *DatabaseReplicationSetting {
 	return o.ReplicationSetting
@@ -6538,6 +6557,16 @@ func (o *Database) GetInterfaceSettings() []*DatabaseSettingsInterface {
 // SetInterfaceSettings sets value to InterfaceSettings
 func (o *Database) SetInterfaceSettings(v []*DatabaseSettingsInterface) {
 	o.InterfaceSettings = v
+}
+
+// GetMonitoringSuite returns value of MonitoringSuite
+func (o *Database) GetMonitoringSuite() *MonitoringSuite {
+	return o.MonitoringSuite
+}
+
+// SetMonitoringSuite sets value to MonitoringSuite
+func (o *Database) SetMonitoringSuite(v *MonitoringSuite) {
+	o.MonitoringSuite = v
 }
 
 // GetSettingsHash returns value of SettingsHash
@@ -6668,6 +6697,16 @@ func (o *Database) GetInterfaces() []*InterfaceView {
 // SetInterfaces sets value to Interfaces
 func (o *Database) SetInterfaces(v []*InterfaceView) {
 	o.Interfaces = v
+}
+
+// GetDisk returns value of Disk
+func (o *Database) GetDisk() *DatabaseDisk {
+	return o.Disk
+}
+
+// SetDisk sets value to Disk
+func (o *Database) SetDisk(v *DatabaseDisk) {
+	o.Disk = v
 }
 
 /*************************************************
@@ -6844,6 +6883,86 @@ func (o *DatabaseSettingBackup) SetConnect(v string) {
 }
 
 /*************************************************
+* DatabaseSettingBackupv2View
+*************************************************/
+
+// DatabaseSettingBackupv2View represents API parameter/response structure
+type DatabaseSettingBackupv2View struct {
+	Rotate         int
+	Time           string
+	DayOfWeek      []types.EDayOfTheWeek
+	Connect        string
+	FirstEnabledAt time.Time
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *DatabaseSettingBackupv2View) setDefaults() interface{} {
+	return &struct {
+		Rotate         int
+		Time           string
+		DayOfWeek      []types.EDayOfTheWeek
+		Connect        string
+		FirstEnabledAt time.Time
+	}{
+		Rotate:         o.GetRotate(),
+		Time:           o.GetTime(),
+		DayOfWeek:      o.GetDayOfWeek(),
+		Connect:        o.GetConnect(),
+		FirstEnabledAt: o.GetFirstEnabledAt(),
+	}
+}
+
+// GetRotate returns value of Rotate
+func (o *DatabaseSettingBackupv2View) GetRotate() int {
+	return o.Rotate
+}
+
+// SetRotate sets value to Rotate
+func (o *DatabaseSettingBackupv2View) SetRotate(v int) {
+	o.Rotate = v
+}
+
+// GetTime returns value of Time
+func (o *DatabaseSettingBackupv2View) GetTime() string {
+	return o.Time
+}
+
+// SetTime sets value to Time
+func (o *DatabaseSettingBackupv2View) SetTime(v string) {
+	o.Time = v
+}
+
+// GetDayOfWeek returns value of DayOfWeek
+func (o *DatabaseSettingBackupv2View) GetDayOfWeek() []types.EDayOfTheWeek {
+	return o.DayOfWeek
+}
+
+// SetDayOfWeek sets value to DayOfWeek
+func (o *DatabaseSettingBackupv2View) SetDayOfWeek(v []types.EDayOfTheWeek) {
+	o.DayOfWeek = v
+}
+
+// GetConnect returns value of Connect
+func (o *DatabaseSettingBackupv2View) GetConnect() string {
+	return o.Connect
+}
+
+// SetConnect sets value to Connect
+func (o *DatabaseSettingBackupv2View) SetConnect(v string) {
+	o.Connect = v
+}
+
+// GetFirstEnabledAt returns value of FirstEnabledAt
+func (o *DatabaseSettingBackupv2View) GetFirstEnabledAt() time.Time {
+	return o.FirstEnabledAt
+}
+
+// SetFirstEnabledAt sets value to FirstEnabledAt
+func (o *DatabaseSettingBackupv2View) SetFirstEnabledAt(v time.Time) {
+	o.FirstEnabledAt = v
+}
+
+/*************************************************
 * DatabaseReplicationSetting
 *************************************************/
 
@@ -6975,6 +7094,34 @@ func (o *DatabaseSettingsInterface) GetIndex() int {
 // SetIndex sets value to Index
 func (o *DatabaseSettingsInterface) SetIndex(v int) {
 	o.Index = v
+}
+
+/*************************************************
+* MonitoringSuite
+*************************************************/
+
+// MonitoringSuite represents API parameter/response structure
+type MonitoringSuite struct {
+	Enabled bool
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *MonitoringSuite) setDefaults() interface{} {
+	return &struct {
+		Enabled bool
+	}{
+		Enabled: o.GetEnabled(),
+	}
+}
+
+// GetEnabled returns value of Enabled
+func (o *MonitoringSuite) GetEnabled() bool {
+	return o.Enabled
+}
+
+// SetEnabled sets value to Enabled
+func (o *MonitoringSuite) SetEnabled(v bool) {
+	o.Enabled = v
 }
 
 /*************************************************
@@ -7327,6 +7474,47 @@ func (o *InterfaceView) SetUpstreamType(v types.EUpstreamNetworkType) {
 }
 
 /*************************************************
+* DatabaseDisk
+*************************************************/
+
+// DatabaseDisk represents API parameter/response structure
+type DatabaseDisk struct {
+	EncryptionAlgorithm types.EDiskEncryptionAlgorithm
+	EncryptionKeyID     types.ID `mapconv:"EncryptionKey.KMSKeyID"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *DatabaseDisk) setDefaults() interface{} {
+	return &struct {
+		EncryptionAlgorithm types.EDiskEncryptionAlgorithm
+		EncryptionKeyID     types.ID `mapconv:"EncryptionKey.KMSKeyID"`
+	}{
+		EncryptionAlgorithm: o.GetEncryptionAlgorithm(),
+		EncryptionKeyID:     o.GetEncryptionKeyID(),
+	}
+}
+
+// GetEncryptionAlgorithm returns value of EncryptionAlgorithm
+func (o *DatabaseDisk) GetEncryptionAlgorithm() types.EDiskEncryptionAlgorithm {
+	return o.EncryptionAlgorithm
+}
+
+// SetEncryptionAlgorithm sets value to EncryptionAlgorithm
+func (o *DatabaseDisk) SetEncryptionAlgorithm(v types.EDiskEncryptionAlgorithm) {
+	o.EncryptionAlgorithm = v
+}
+
+// GetEncryptionKeyID returns value of EncryptionKeyID
+func (o *DatabaseDisk) GetEncryptionKeyID() types.ID {
+	return o.EncryptionKeyID
+}
+
+// SetEncryptionKeyID sets value to EncryptionKeyID
+func (o *DatabaseDisk) SetEncryptionKeyID(v types.ID) {
+	o.EncryptionKeyID = v
+}
+
+/*************************************************
 * DatabaseCreateRequest
 *************************************************/
 
@@ -7341,8 +7529,11 @@ type DatabaseCreateRequest struct {
 	SourceID           types.ID                     `mapconv:"Remark.SourceAppliance.ID"`
 	CommonSetting      *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 	BackupSetting      *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+	Backupv2Setting    *DatabaseSettingBackupv2     `mapconv:"Settings.DBConf.Backupv2,recursive"`
 	ReplicationSetting *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 	InterfaceSettings  []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+	MonitoringSuite    *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
+	Disk               *DatabaseDisk                `mapconv:"Disk,recursive"`
 	Name               string
 	Description        string
 	Tags               types.Tags
@@ -7361,8 +7552,11 @@ func (o *DatabaseCreateRequest) setDefaults() interface{} {
 		SourceID           types.ID                     `mapconv:"Remark.SourceAppliance.ID"`
 		CommonSetting      *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 		BackupSetting      *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+		Backupv2Setting    *DatabaseSettingBackupv2     `mapconv:"Settings.DBConf.Backupv2,recursive"`
 		ReplicationSetting *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 		InterfaceSettings  []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+		MonitoringSuite    *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
+		Disk               *DatabaseDisk                `mapconv:"Disk,recursive"`
 		Name               string
 		Description        string
 		Tags               types.Tags
@@ -7378,8 +7572,11 @@ func (o *DatabaseCreateRequest) setDefaults() interface{} {
 		SourceID:           o.GetSourceID(),
 		CommonSetting:      o.GetCommonSetting(),
 		BackupSetting:      o.GetBackupSetting(),
+		Backupv2Setting:    o.GetBackupv2Setting(),
 		ReplicationSetting: o.GetReplicationSetting(),
 		InterfaceSettings:  o.GetInterfaceSettings(),
+		MonitoringSuite:    o.GetMonitoringSuite(),
+		Disk:               o.GetDisk(),
 		Name:               o.GetName(),
 		Description:        o.GetDescription(),
 		Tags:               o.GetTags(),
@@ -7478,6 +7675,16 @@ func (o *DatabaseCreateRequest) SetBackupSetting(v *DatabaseSettingBackup) {
 	o.BackupSetting = v
 }
 
+// GetBackupv2Setting returns value of Backupv2Setting
+func (o *DatabaseCreateRequest) GetBackupv2Setting() *DatabaseSettingBackupv2 {
+	return o.Backupv2Setting
+}
+
+// SetBackupv2Setting sets value to Backupv2Setting
+func (o *DatabaseCreateRequest) SetBackupv2Setting(v *DatabaseSettingBackupv2) {
+	o.Backupv2Setting = v
+}
+
 // GetReplicationSetting returns value of ReplicationSetting
 func (o *DatabaseCreateRequest) GetReplicationSetting() *DatabaseReplicationSetting {
 	return o.ReplicationSetting
@@ -7496,6 +7703,26 @@ func (o *DatabaseCreateRequest) GetInterfaceSettings() []*DatabaseSettingsInterf
 // SetInterfaceSettings sets value to InterfaceSettings
 func (o *DatabaseCreateRequest) SetInterfaceSettings(v []*DatabaseSettingsInterface) {
 	o.InterfaceSettings = v
+}
+
+// GetMonitoringSuite returns value of MonitoringSuite
+func (o *DatabaseCreateRequest) GetMonitoringSuite() *MonitoringSuite {
+	return o.MonitoringSuite
+}
+
+// SetMonitoringSuite sets value to MonitoringSuite
+func (o *DatabaseCreateRequest) SetMonitoringSuite(v *MonitoringSuite) {
+	o.MonitoringSuite = v
+}
+
+// GetDisk returns value of Disk
+func (o *DatabaseCreateRequest) GetDisk() *DatabaseDisk {
+	return o.Disk
+}
+
+// SetDisk sets value to Disk
+func (o *DatabaseCreateRequest) SetDisk(v *DatabaseDisk) {
+	o.Disk = v
 }
 
 // GetName returns value of Name
@@ -7559,6 +7786,73 @@ func (o *DatabaseCreateRequest) SetIconID(v types.ID) {
 }
 
 /*************************************************
+* DatabaseSettingBackupv2
+*************************************************/
+
+// DatabaseSettingBackupv2 represents API parameter/response structure
+type DatabaseSettingBackupv2 struct {
+	Rotate    int
+	Time      string
+	DayOfWeek []types.EDayOfTheWeek
+	Connect   string
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *DatabaseSettingBackupv2) setDefaults() interface{} {
+	return &struct {
+		Rotate    int
+		Time      string
+		DayOfWeek []types.EDayOfTheWeek
+		Connect   string
+	}{
+		Rotate:    o.GetRotate(),
+		Time:      o.GetTime(),
+		DayOfWeek: o.GetDayOfWeek(),
+		Connect:   o.GetConnect(),
+	}
+}
+
+// GetRotate returns value of Rotate
+func (o *DatabaseSettingBackupv2) GetRotate() int {
+	return o.Rotate
+}
+
+// SetRotate sets value to Rotate
+func (o *DatabaseSettingBackupv2) SetRotate(v int) {
+	o.Rotate = v
+}
+
+// GetTime returns value of Time
+func (o *DatabaseSettingBackupv2) GetTime() string {
+	return o.Time
+}
+
+// SetTime sets value to Time
+func (o *DatabaseSettingBackupv2) SetTime(v string) {
+	o.Time = v
+}
+
+// GetDayOfWeek returns value of DayOfWeek
+func (o *DatabaseSettingBackupv2) GetDayOfWeek() []types.EDayOfTheWeek {
+	return o.DayOfWeek
+}
+
+// SetDayOfWeek sets value to DayOfWeek
+func (o *DatabaseSettingBackupv2) SetDayOfWeek(v []types.EDayOfTheWeek) {
+	o.DayOfWeek = v
+}
+
+// GetConnect returns value of Connect
+func (o *DatabaseSettingBackupv2) GetConnect() string {
+	return o.Connect
+}
+
+// SetConnect sets value to Connect
+func (o *DatabaseSettingBackupv2) SetConnect(v string) {
+	o.Connect = v
+}
+
+/*************************************************
 * DatabaseUpdateRequest
 *************************************************/
 
@@ -7570,8 +7864,10 @@ type DatabaseUpdateRequest struct {
 	IconID             types.ID                     `mapconv:"Icon.ID"`
 	CommonSetting      *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 	BackupSetting      *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+	Backupv2Setting    *DatabaseSettingBackupv2     `mapconv:"Settings.DBConf.Backupv2,recursive"`
 	ReplicationSetting *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 	InterfaceSettings  []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+	MonitoringSuite    *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
 	SettingsHash       string                       `json:",omitempty" mapconv:",omitempty"`
 }
 
@@ -7584,8 +7880,10 @@ func (o *DatabaseUpdateRequest) setDefaults() interface{} {
 		IconID             types.ID                     `mapconv:"Icon.ID"`
 		CommonSetting      *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 		BackupSetting      *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+		Backupv2Setting    *DatabaseSettingBackupv2     `mapconv:"Settings.DBConf.Backupv2,recursive"`
 		ReplicationSetting *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 		InterfaceSettings  []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+		MonitoringSuite    *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
 		SettingsHash       string                       `json:",omitempty" mapconv:",omitempty"`
 	}{
 		Name:               o.GetName(),
@@ -7594,8 +7892,10 @@ func (o *DatabaseUpdateRequest) setDefaults() interface{} {
 		IconID:             o.GetIconID(),
 		CommonSetting:      o.GetCommonSetting(),
 		BackupSetting:      o.GetBackupSetting(),
+		Backupv2Setting:    o.GetBackupv2Setting(),
 		ReplicationSetting: o.GetReplicationSetting(),
 		InterfaceSettings:  o.GetInterfaceSettings(),
+		MonitoringSuite:    o.GetMonitoringSuite(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
 }
@@ -7680,6 +7980,16 @@ func (o *DatabaseUpdateRequest) SetBackupSetting(v *DatabaseSettingBackup) {
 	o.BackupSetting = v
 }
 
+// GetBackupv2Setting returns value of Backupv2Setting
+func (o *DatabaseUpdateRequest) GetBackupv2Setting() *DatabaseSettingBackupv2 {
+	return o.Backupv2Setting
+}
+
+// SetBackupv2Setting sets value to Backupv2Setting
+func (o *DatabaseUpdateRequest) SetBackupv2Setting(v *DatabaseSettingBackupv2) {
+	o.Backupv2Setting = v
+}
+
 // GetReplicationSetting returns value of ReplicationSetting
 func (o *DatabaseUpdateRequest) GetReplicationSetting() *DatabaseReplicationSetting {
 	return o.ReplicationSetting
@@ -7700,6 +8010,16 @@ func (o *DatabaseUpdateRequest) SetInterfaceSettings(v []*DatabaseSettingsInterf
 	o.InterfaceSettings = v
 }
 
+// GetMonitoringSuite returns value of MonitoringSuite
+func (o *DatabaseUpdateRequest) GetMonitoringSuite() *MonitoringSuite {
+	return o.MonitoringSuite
+}
+
+// SetMonitoringSuite sets value to MonitoringSuite
+func (o *DatabaseUpdateRequest) SetMonitoringSuite(v *MonitoringSuite) {
+	o.MonitoringSuite = v
+}
+
 // GetSettingsHash returns value of SettingsHash
 func (o *DatabaseUpdateRequest) GetSettingsHash() string {
 	return o.SettingsHash
@@ -7718,8 +8038,10 @@ func (o *DatabaseUpdateRequest) SetSettingsHash(v string) {
 type DatabaseUpdateSettingsRequest struct {
 	CommonSetting      *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 	BackupSetting      *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+	Backupv2Setting    *DatabaseSettingBackupv2     `mapconv:"Settings.DBConf.Backupv2,recursive"`
 	ReplicationSetting *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 	InterfaceSettings  []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+	MonitoringSuite    *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
 	SettingsHash       string                       `json:",omitempty" mapconv:",omitempty"`
 }
 
@@ -7728,14 +8050,18 @@ func (o *DatabaseUpdateSettingsRequest) setDefaults() interface{} {
 	return &struct {
 		CommonSetting      *DatabaseSettingCommon       `mapconv:"Settings.DBConf.Common,recursive"`
 		BackupSetting      *DatabaseSettingBackup       `mapconv:"Settings.DBConf.Backup,recursive"`
+		Backupv2Setting    *DatabaseSettingBackupv2     `mapconv:"Settings.DBConf.Backupv2,recursive"`
 		ReplicationSetting *DatabaseReplicationSetting  `mapconv:"Settings.DBConf.Replication,recursive"`
 		InterfaceSettings  []*DatabaseSettingsInterface `mapconv:"Settings.DBConf.[]Interfaces,omitempty,recursive"`
+		MonitoringSuite    *MonitoringSuite             `mapconv:"Settings.MonitoringSuite,omitempty,recursive"`
 		SettingsHash       string                       `json:",omitempty" mapconv:",omitempty"`
 	}{
 		CommonSetting:      o.GetCommonSetting(),
 		BackupSetting:      o.GetBackupSetting(),
+		Backupv2Setting:    o.GetBackupv2Setting(),
 		ReplicationSetting: o.GetReplicationSetting(),
 		InterfaceSettings:  o.GetInterfaceSettings(),
+		MonitoringSuite:    o.GetMonitoringSuite(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
 }
@@ -7760,6 +8086,16 @@ func (o *DatabaseUpdateSettingsRequest) SetBackupSetting(v *DatabaseSettingBacku
 	o.BackupSetting = v
 }
 
+// GetBackupv2Setting returns value of Backupv2Setting
+func (o *DatabaseUpdateSettingsRequest) GetBackupv2Setting() *DatabaseSettingBackupv2 {
+	return o.Backupv2Setting
+}
+
+// SetBackupv2Setting sets value to Backupv2Setting
+func (o *DatabaseUpdateSettingsRequest) SetBackupv2Setting(v *DatabaseSettingBackupv2) {
+	o.Backupv2Setting = v
+}
+
 // GetReplicationSetting returns value of ReplicationSetting
 func (o *DatabaseUpdateSettingsRequest) GetReplicationSetting() *DatabaseReplicationSetting {
 	return o.ReplicationSetting
@@ -7778,6 +8114,16 @@ func (o *DatabaseUpdateSettingsRequest) GetInterfaceSettings() []*DatabaseSettin
 // SetInterfaceSettings sets value to InterfaceSettings
 func (o *DatabaseUpdateSettingsRequest) SetInterfaceSettings(v []*DatabaseSettingsInterface) {
 	o.InterfaceSettings = v
+}
+
+// GetMonitoringSuite returns value of MonitoringSuite
+func (o *DatabaseUpdateSettingsRequest) GetMonitoringSuite() *MonitoringSuite {
+	return o.MonitoringSuite
+}
+
+// SetMonitoringSuite sets value to MonitoringSuite
+func (o *DatabaseUpdateSettingsRequest) SetMonitoringSuite(v *MonitoringSuite) {
+	o.MonitoringSuite = v
 }
 
 // GetSettingsHash returns value of SettingsHash
@@ -8752,6 +9098,7 @@ type Disk struct {
 	Connection                types.EDiskConnection `json:",omitempty" mapconv:",omitempty"`
 	ConnectionOrder           int
 	EncryptionAlgorithm       types.EDiskEncryptionAlgorithm `json:",omitempty" mapconv:",omitempty"`
+	KMSKeyID                  types.ID                       `mapconv:"EncryptionKey.KMSKeyID"`
 	ReinstallCount            int
 	JobStatus                 *JobStatus
 	SizeMB                    int
@@ -8783,6 +9130,7 @@ func (o *Disk) setDefaults() interface{} {
 		Connection                types.EDiskConnection `json:",omitempty" mapconv:",omitempty"`
 		ConnectionOrder           int
 		EncryptionAlgorithm       types.EDiskEncryptionAlgorithm `json:",omitempty" mapconv:",omitempty"`
+		KMSKeyID                  types.ID                       `mapconv:"EncryptionKey.KMSKeyID"`
 		ReinstallCount            int
 		JobStatus                 *JobStatus
 		SizeMB                    int
@@ -8810,6 +9158,7 @@ func (o *Disk) setDefaults() interface{} {
 		Connection:                o.GetConnection(),
 		ConnectionOrder:           o.GetConnectionOrder(),
 		EncryptionAlgorithm:       o.GetEncryptionAlgorithm(),
+		KMSKeyID:                  o.GetKMSKeyID(),
 		ReinstallCount:            o.GetReinstallCount(),
 		JobStatus:                 o.GetJobStatus(),
 		SizeMB:                    o.GetSizeMB(),
@@ -8949,6 +9298,16 @@ func (o *Disk) GetEncryptionAlgorithm() types.EDiskEncryptionAlgorithm {
 // SetEncryptionAlgorithm sets value to EncryptionAlgorithm
 func (o *Disk) SetEncryptionAlgorithm(v types.EDiskEncryptionAlgorithm) {
 	o.EncryptionAlgorithm = v
+}
+
+// GetKMSKeyID returns value of KMSKeyID
+func (o *Disk) GetKMSKeyID() types.ID {
+	return o.KMSKeyID
+}
+
+// SetKMSKeyID sets value to KMSKeyID
+func (o *Disk) SetKMSKeyID(v types.ID) {
+	o.KMSKeyID = v
 }
 
 // GetReinstallCount returns value of ReinstallCount
@@ -10034,48 +10393,51 @@ func (o *DiskPlanSizeInfo) SetSizeGB(size int) {
 
 // DNS represents API parameter/response structure
 type DNS struct {
-	ID             types.ID
-	Name           string
-	Description    string
-	Tags           types.Tags
-	Availability   types.EAvailability
-	IconID         types.ID `mapconv:"Icon.ID"`
-	CreatedAt      time.Time
-	ModifiedAt     time.Time
-	Records        DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-	SettingsHash   string     `json:",omitempty" mapconv:",omitempty"`
-	DNSZone        string     `mapconv:"Status.Zone"`
-	DNSNameServers []string   `mapconv:"Status.NS"`
+	ID                 types.ID
+	Name               string
+	Description        string
+	Tags               types.Tags
+	Availability       types.EAvailability
+	IconID             types.ID `mapconv:"Icon.ID"`
+	CreatedAt          time.Time
+	ModifiedAt         time.Time
+	Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+	SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
+	DNSZone            string              `mapconv:"Status.Zone"`
+	DNSNameServers     []string            `mapconv:"Status.NS"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *DNS) setDefaults() interface{} {
 	return &struct {
-		ID             types.ID
-		Name           string
-		Description    string
-		Tags           types.Tags
-		Availability   types.EAvailability
-		IconID         types.ID `mapconv:"Icon.ID"`
-		CreatedAt      time.Time
-		ModifiedAt     time.Time
-		Records        DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-		SettingsHash   string     `json:",omitempty" mapconv:",omitempty"`
-		DNSZone        string     `mapconv:"Status.Zone"`
-		DNSNameServers []string   `mapconv:"Status.NS"`
+		ID                 types.ID
+		Name               string
+		Description        string
+		Tags               types.Tags
+		Availability       types.EAvailability
+		IconID             types.ID `mapconv:"Icon.ID"`
+		CreatedAt          time.Time
+		ModifiedAt         time.Time
+		Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+		SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
+		DNSZone            string              `mapconv:"Status.Zone"`
+		DNSNameServers     []string            `mapconv:"Status.NS"`
 	}{
-		ID:             o.GetID(),
-		Name:           o.GetName(),
-		Description:    o.GetDescription(),
-		Tags:           o.GetTags(),
-		Availability:   o.GetAvailability(),
-		IconID:         o.GetIconID(),
-		CreatedAt:      o.GetCreatedAt(),
-		ModifiedAt:     o.GetModifiedAt(),
-		Records:        o.GetRecords(),
-		SettingsHash:   o.GetSettingsHash(),
-		DNSZone:        o.GetDNSZone(),
-		DNSNameServers: o.GetDNSNameServers(),
+		ID:                 o.GetID(),
+		Name:               o.GetName(),
+		Description:        o.GetDescription(),
+		Tags:               o.GetTags(),
+		Availability:       o.GetAvailability(),
+		IconID:             o.GetIconID(),
+		CreatedAt:          o.GetCreatedAt(),
+		ModifiedAt:         o.GetModifiedAt(),
+		Records:            o.GetRecords(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
+		SettingsHash:       o.GetSettingsHash(),
+		DNSZone:            o.GetDNSZone(),
+		DNSNameServers:     o.GetDNSNameServers(),
 	}
 }
 
@@ -10209,6 +10571,16 @@ func (o *DNS) SetRecords(v DNSRecords) {
 	o.Records = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *DNS) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *DNS) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetSettingsHash returns value of SettingsHash
 func (o *DNS) GetSettingsHash() string {
 	return o.SettingsHash
@@ -10307,34 +10679,65 @@ func (o *DNSRecord) SetTTL(v int) {
 }
 
 /*************************************************
+* MonitoringSuiteLog
+*************************************************/
+
+// MonitoringSuiteLog represents API parameter/response structure
+type MonitoringSuiteLog struct {
+	Enabled bool
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *MonitoringSuiteLog) setDefaults() interface{} {
+	return &struct {
+		Enabled bool
+	}{
+		Enabled: o.GetEnabled(),
+	}
+}
+
+// GetEnabled returns value of Enabled
+func (o *MonitoringSuiteLog) GetEnabled() bool {
+	return o.Enabled
+}
+
+// SetEnabled sets value to Enabled
+func (o *MonitoringSuiteLog) SetEnabled(v bool) {
+	o.Enabled = v
+}
+
+/*************************************************
 * DNSCreateRequest
 *************************************************/
 
 // DNSCreateRequest represents API parameter/response structure
 type DNSCreateRequest struct {
-	Name        string     `mapconv:"Name/Status.Zone"`
-	Records     DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-	Description string
-	Tags        types.Tags
-	IconID      types.ID `mapconv:"Icon.ID"`
+	Name               string              `mapconv:"Name/Status.Zone"`
+	Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+	Description        string
+	Tags               types.Tags
+	IconID             types.ID `mapconv:"Icon.ID"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *DNSCreateRequest) setDefaults() interface{} {
 	return &struct {
-		Name        string     `mapconv:"Name/Status.Zone"`
-		Records     DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-		Description string
-		Tags        types.Tags
-		IconID      types.ID `mapconv:"Icon.ID"`
-		Class       string   `mapconv:"Provider.Class"`
+		Name               string              `mapconv:"Name/Status.Zone"`
+		Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+		Description        string
+		Tags               types.Tags
+		IconID             types.ID `mapconv:"Icon.ID"`
+		Class              string   `mapconv:"Provider.Class"`
 	}{
-		Name:        o.GetName(),
-		Records:     o.GetRecords(),
-		Description: o.GetDescription(),
-		Tags:        o.GetTags(),
-		IconID:      o.GetIconID(),
-		Class:       "dns",
+		Name:               o.GetName(),
+		Records:            o.GetRecords(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
+		Description:        o.GetDescription(),
+		Tags:               o.GetTags(),
+		IconID:             o.GetIconID(),
+		Class:              "dns",
 	}
 }
 
@@ -10356,6 +10759,16 @@ func (o *DNSCreateRequest) GetRecords() DNSRecords {
 // SetRecords sets value to Records
 func (o *DNSCreateRequest) SetRecords(v DNSRecords) {
 	o.Records = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *DNSCreateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *DNSCreateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetDescription returns value of Description
@@ -10414,27 +10827,30 @@ func (o *DNSCreateRequest) SetIconID(v types.ID) {
 
 // DNSUpdateRequest represents API parameter/response structure
 type DNSUpdateRequest struct {
-	Description  string
-	Tags         types.Tags
-	IconID       types.ID   `mapconv:"Icon.ID"`
-	Records      DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-	SettingsHash string     `json:",omitempty" mapconv:",omitempty"`
+	Description        string
+	Tags               types.Tags
+	IconID             types.ID            `mapconv:"Icon.ID"`
+	Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+	SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *DNSUpdateRequest) setDefaults() interface{} {
 	return &struct {
-		Description  string
-		Tags         types.Tags
-		IconID       types.ID   `mapconv:"Icon.ID"`
-		Records      DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-		SettingsHash string     `json:",omitempty" mapconv:",omitempty"`
+		Description        string
+		Tags               types.Tags
+		IconID             types.ID            `mapconv:"Icon.ID"`
+		Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+		SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 	}{
-		Description:  o.GetDescription(),
-		Tags:         o.GetTags(),
-		IconID:       o.GetIconID(),
-		Records:      o.GetRecords(),
-		SettingsHash: o.GetSettingsHash(),
+		Description:        o.GetDescription(),
+		Tags:               o.GetTags(),
+		IconID:             o.GetIconID(),
+		Records:            o.GetRecords(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
+		SettingsHash:       o.GetSettingsHash(),
 	}
 }
 
@@ -10498,6 +10914,16 @@ func (o *DNSUpdateRequest) SetRecords(v DNSRecords) {
 	o.Records = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *DNSUpdateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *DNSUpdateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetSettingsHash returns value of SettingsHash
 func (o *DNSUpdateRequest) GetSettingsHash() string {
 	return o.SettingsHash
@@ -10514,18 +10940,21 @@ func (o *DNSUpdateRequest) SetSettingsHash(v string) {
 
 // DNSUpdateSettingsRequest represents API parameter/response structure
 type DNSUpdateSettingsRequest struct {
-	Records      DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-	SettingsHash string     `json:",omitempty" mapconv:",omitempty"`
+	Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+	SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *DNSUpdateSettingsRequest) setDefaults() interface{} {
 	return &struct {
-		Records      DNSRecords `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
-		SettingsHash string     `json:",omitempty" mapconv:",omitempty"`
+		Records            DNSRecords          `mapconv:"Settings.DNS.[]ResourceRecordSets,recursive"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.DNS.MonitoringSuiteLog,recursive"`
+		SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 	}{
-		Records:      o.GetRecords(),
-		SettingsHash: o.GetSettingsHash(),
+		Records:            o.GetRecords(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
+		SettingsHash:       o.GetSettingsHash(),
 	}
 }
 
@@ -10537,6 +10966,16 @@ func (o *DNSUpdateSettingsRequest) GetRecords() DNSRecords {
 // SetRecords sets value to Records
 func (o *DNSUpdateSettingsRequest) SetRecords(v DNSRecords) {
 	o.Records = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *DNSUpdateSettingsRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *DNSUpdateSettingsRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetSettingsHash returns value of SettingsHash
@@ -11751,13 +12190,14 @@ type GSLB struct {
 	IconID             types.ID `mapconv:"Icon.ID"`
 	CreatedAt          time.Time
 	ModifiedAt         time.Time
-	SettingsHash       string           `json:",omitempty" mapconv:",omitempty"`
-	FQDN               string           `mapconv:"Status.FQDN"`
-	DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-	Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-	HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-	SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-	DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
+	SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
+	FQDN               string              `mapconv:"Status.FQDN"`
+	DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+	Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+	HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+	SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+	DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
@@ -11771,13 +12211,14 @@ func (o *GSLB) setDefaults() interface{} {
 		IconID             types.ID `mapconv:"Icon.ID"`
 		CreatedAt          time.Time
 		ModifiedAt         time.Time
-		SettingsHash       string           `json:",omitempty" mapconv:",omitempty"`
-		FQDN               string           `mapconv:"Status.FQDN"`
-		DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-		Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-		HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-		SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-		DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
+		SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
+		FQDN               string              `mapconv:"Status.FQDN"`
+		DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+		Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+		HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+		SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+		DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
 	}{
 		ID:                 o.GetID(),
 		Name:               o.GetName(),
@@ -11793,6 +12234,7 @@ func (o *GSLB) setDefaults() interface{} {
 		Weighted:           o.GetWeighted(),
 		HealthCheck:        o.GetHealthCheck(),
 		SorryServer:        o.GetSorryServer(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		DestinationServers: o.GetDestinationServers(),
 	}
 }
@@ -11980,6 +12422,16 @@ func (o *GSLB) SetSorryServer(v string) {
 	o.SorryServer = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *GSLB) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *GSLB) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetDestinationServers returns value of DestinationServers
 func (o *GSLB) GetDestinationServers() GSLBServers {
 	return o.DestinationServers
@@ -12130,11 +12582,12 @@ func (o *GSLBServer) SetWeight(v types.StringNumber) {
 
 // GSLBCreateRequest represents API parameter/response structure
 type GSLBCreateRequest struct {
-	HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-	DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-	Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-	SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-	DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
+	HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+	DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+	Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+	SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+	DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
 	Name               string
 	Description        string
 	Tags               types.Tags
@@ -12144,11 +12597,12 @@ type GSLBCreateRequest struct {
 // setDefaults implements iaas.argumentDefaulter
 func (o *GSLBCreateRequest) setDefaults() interface{} {
 	return &struct {
-		HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-		DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-		Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-		SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-		DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
+		HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+		DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+		Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+		SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+		DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
 		Name               string
 		Description        string
 		Tags               types.Tags
@@ -12159,6 +12613,7 @@ func (o *GSLBCreateRequest) setDefaults() interface{} {
 		DelayLoop:          o.GetDelayLoop(),
 		Weighted:           o.GetWeighted(),
 		SorryServer:        o.GetSorryServer(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		DestinationServers: o.GetDestinationServers(),
 		Name:               o.GetName(),
 		Description:        o.GetDescription(),
@@ -12209,6 +12664,16 @@ func (o *GSLBCreateRequest) GetSorryServer() string {
 // SetSorryServer sets value to SorryServer
 func (o *GSLBCreateRequest) SetSorryServer(v string) {
 	o.SorryServer = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *GSLBCreateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *GSLBCreateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetDestinationServers returns value of DestinationServers
@@ -12290,13 +12755,14 @@ type GSLBUpdateRequest struct {
 	Name               string
 	Description        string
 	Tags               types.Tags
-	IconID             types.ID         `mapconv:"Icon.ID"`
-	HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-	DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-	Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-	SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-	DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
-	SettingsHash       string           `json:",omitempty" mapconv:",omitempty"`
+	IconID             types.ID            `mapconv:"Icon.ID"`
+	HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+	DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+	Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+	SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+	DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
+	SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
@@ -12305,13 +12771,14 @@ func (o *GSLBUpdateRequest) setDefaults() interface{} {
 		Name               string
 		Description        string
 		Tags               types.Tags
-		IconID             types.ID         `mapconv:"Icon.ID"`
-		HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-		DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-		Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-		SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-		DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
-		SettingsHash       string           `json:",omitempty" mapconv:",omitempty"`
+		IconID             types.ID            `mapconv:"Icon.ID"`
+		HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+		DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+		Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+		SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+		DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
+		SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 	}{
 		Name:               o.GetName(),
 		Description:        o.GetDescription(),
@@ -12321,6 +12788,7 @@ func (o *GSLBUpdateRequest) setDefaults() interface{} {
 		DelayLoop:          o.GetDelayLoop(),
 		Weighted:           o.GetWeighted(),
 		SorryServer:        o.GetSorryServer(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		DestinationServers: o.GetDestinationServers(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
@@ -12429,6 +12897,16 @@ func (o *GSLBUpdateRequest) SetSorryServer(v string) {
 	o.SorryServer = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *GSLBUpdateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *GSLBUpdateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetDestinationServers returns value of DestinationServers
 func (o *GSLBUpdateRequest) GetDestinationServers() GSLBServers {
 	return o.DestinationServers
@@ -12455,28 +12933,31 @@ func (o *GSLBUpdateRequest) SetSettingsHash(v string) {
 
 // GSLBUpdateSettingsRequest represents API parameter/response structure
 type GSLBUpdateSettingsRequest struct {
-	HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-	DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-	Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-	SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-	DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
-	SettingsHash       string           `json:",omitempty" mapconv:",omitempty"`
+	HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+	DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+	Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+	SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+	MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+	DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
+	SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *GSLBUpdateSettingsRequest) setDefaults() interface{} {
 	return &struct {
-		HealthCheck        *GSLBHealthCheck `mapconv:"Settings.GSLB.HealthCheck,recursive"`
-		DelayLoop          int              `mapconv:"Settings.GSLB.DelayLoop"`
-		Weighted           types.StringFlag `mapconv:"Settings.GSLB.Weighted"`
-		SorryServer        string           `mapconv:"Settings.GSLB.SorryServer"`
-		DestinationServers GSLBServers      `mapconv:"Settings.GSLB.[]Servers,recursive"`
-		SettingsHash       string           `json:",omitempty" mapconv:",omitempty"`
+		HealthCheck        *GSLBHealthCheck    `mapconv:"Settings.GSLB.HealthCheck,recursive"`
+		DelayLoop          int                 `mapconv:"Settings.GSLB.DelayLoop"`
+		Weighted           types.StringFlag    `mapconv:"Settings.GSLB.Weighted"`
+		SorryServer        string              `mapconv:"Settings.GSLB.SorryServer"`
+		MonitoringSuiteLog *MonitoringSuiteLog `mapconv:"Settings.GSLB.MonitoringSuiteLog,recursive"`
+		DestinationServers GSLBServers         `mapconv:"Settings.GSLB.[]Servers,recursive"`
+		SettingsHash       string              `json:",omitempty" mapconv:",omitempty"`
 	}{
 		HealthCheck:        o.GetHealthCheck(),
 		DelayLoop:          o.GetDelayLoop(),
 		Weighted:           o.GetWeighted(),
 		SorryServer:        o.GetSorryServer(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		DestinationServers: o.GetDestinationServers(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
@@ -12523,6 +13004,16 @@ func (o *GSLBUpdateSettingsRequest) GetSorryServer() string {
 // SetSorryServer sets value to SorryServer
 func (o *GSLBUpdateSettingsRequest) SetSorryServer(v string) {
 	o.SorryServer = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *GSLBUpdateSettingsRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *GSLBUpdateSettingsRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetDestinationServers returns value of DestinationServers
@@ -20501,6 +20992,7 @@ type ProxyLB struct {
 	StickySession        *ProxyLBStickySession        `mapconv:"Settings.ProxyLB.StickySession,recursive"`
 	Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 	BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+	MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 	ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 	Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 	Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
@@ -20533,6 +21025,7 @@ func (o *ProxyLB) setDefaults() interface{} {
 		StickySession        *ProxyLBStickySession        `mapconv:"Settings.ProxyLB.StickySession,recursive"`
 		Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 		BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+		MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 		ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 		Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 		Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
@@ -20561,6 +21054,7 @@ func (o *ProxyLB) setDefaults() interface{} {
 		StickySession:        o.GetStickySession(),
 		Gzip:                 o.GetGzip(),
 		BackendHttpKeepAlive: o.GetBackendHttpKeepAlive(),
+		MonitoringSuiteLog:   o.GetMonitoringSuiteLog(),
 		ProxyProtocol:        o.GetProxyProtocol(),
 		Syslog:               o.GetSyslog(),
 		Timeout:              o.GetTimeout(),
@@ -20791,6 +21285,16 @@ func (o *ProxyLB) GetBackendHttpKeepAlive() *ProxyLBBackendHttpKeepAlive {
 // SetBackendHttpKeepAlive sets value to BackendHttpKeepAlive
 func (o *ProxyLB) SetBackendHttpKeepAlive(v *ProxyLBBackendHttpKeepAlive) {
 	o.BackendHttpKeepAlive = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *ProxyLB) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *ProxyLB) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetProxyProtocol returns value of ProxyProtocol
@@ -21660,6 +22164,7 @@ type ProxyLBCreateRequest struct {
 	Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
 	Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 	BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+	MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 	ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 	Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 	UseVIPFailover       bool                         `mapconv:"Status.UseVIPFailover"`
@@ -21684,6 +22189,7 @@ func (o *ProxyLBCreateRequest) setDefaults() interface{} {
 		Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
 		Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 		BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+		MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 		ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 		Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 		UseVIPFailover       bool                         `mapconv:"Status.UseVIPFailover"`
@@ -21705,6 +22211,7 @@ func (o *ProxyLBCreateRequest) setDefaults() interface{} {
 		Timeout:              o.GetTimeout(),
 		Gzip:                 o.GetGzip(),
 		BackendHttpKeepAlive: o.GetBackendHttpKeepAlive(),
+		MonitoringSuiteLog:   o.GetMonitoringSuiteLog(),
 		ProxyProtocol:        o.GetProxyProtocol(),
 		Syslog:               o.GetSyslog(),
 		UseVIPFailover:       o.GetUseVIPFailover(),
@@ -21827,6 +22334,16 @@ func (o *ProxyLBCreateRequest) SetBackendHttpKeepAlive(v *ProxyLBBackendHttpKeep
 	o.BackendHttpKeepAlive = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *ProxyLBCreateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *ProxyLBCreateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetProxyProtocol returns value of ProxyProtocol
 func (o *ProxyLBCreateRequest) GetProxyProtocol() *ProxyLBProxyProtocol {
 	return o.ProxyProtocol
@@ -21943,6 +22460,7 @@ type ProxyLBUpdateRequest struct {
 	Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
 	Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 	BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+	MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 	ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 	Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 	SettingsHash         string                       `json:",omitempty" mapconv:",omitempty"`
@@ -21965,6 +22483,7 @@ func (o *ProxyLBUpdateRequest) setDefaults() interface{} {
 		Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
 		Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 		BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+		MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 		ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 		Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 		SettingsHash         string                       `json:",omitempty" mapconv:",omitempty"`
@@ -21983,6 +22502,7 @@ func (o *ProxyLBUpdateRequest) setDefaults() interface{} {
 		Timeout:              o.GetTimeout(),
 		Gzip:                 o.GetGzip(),
 		BackendHttpKeepAlive: o.GetBackendHttpKeepAlive(),
+		MonitoringSuiteLog:   o.GetMonitoringSuiteLog(),
 		ProxyProtocol:        o.GetProxyProtocol(),
 		Syslog:               o.GetSyslog(),
 		SettingsHash:         o.GetSettingsHash(),
@@ -22093,6 +22613,16 @@ func (o *ProxyLBUpdateRequest) SetBackendHttpKeepAlive(v *ProxyLBBackendHttpKeep
 	o.BackendHttpKeepAlive = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *ProxyLBUpdateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *ProxyLBUpdateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetProxyProtocol returns value of ProxyProtocol
 func (o *ProxyLBUpdateRequest) GetProxyProtocol() *ProxyLBProxyProtocol {
 	return o.ProxyProtocol
@@ -22199,6 +22729,7 @@ type ProxyLBUpdateSettingsRequest struct {
 	Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
 	Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 	BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+	MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 	ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 	Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 	SettingsHash         string                       `json:",omitempty" mapconv:",omitempty"`
@@ -22217,6 +22748,7 @@ func (o *ProxyLBUpdateSettingsRequest) setDefaults() interface{} {
 		Timeout              *ProxyLBTimeout              `json:",omitempty" mapconv:"Settings.ProxyLB.Timeout,recursive,omitempty"`
 		Gzip                 *ProxyLBGzip                 `mapconv:"Settings.ProxyLB.Gzip,recursive"`
 		BackendHttpKeepAlive *ProxyLBBackendHttpKeepAlive `mapconv:"Settings.ProxyLB.BackendHttpKeepAlive,recursive"`
+		MonitoringSuiteLog   *MonitoringSuiteLog          `mapconv:"Settings.ProxyLB.MonitoringSuiteLog,recursive"`
 		ProxyProtocol        *ProxyLBProxyProtocol        `mapconv:"Settings.ProxyLB.ProxyProtocol,recursive"`
 		Syslog               *ProxyLBSyslog               `mapconv:"Settings.ProxyLB.Syslog,recursive"`
 		SettingsHash         string                       `json:",omitempty" mapconv:",omitempty"`
@@ -22231,6 +22763,7 @@ func (o *ProxyLBUpdateSettingsRequest) setDefaults() interface{} {
 		Timeout:              o.GetTimeout(),
 		Gzip:                 o.GetGzip(),
 		BackendHttpKeepAlive: o.GetBackendHttpKeepAlive(),
+		MonitoringSuiteLog:   o.GetMonitoringSuiteLog(),
 		ProxyProtocol:        o.GetProxyProtocol(),
 		Syslog:               o.GetSyslog(),
 		SettingsHash:         o.GetSettingsHash(),
@@ -22335,6 +22868,16 @@ func (o *ProxyLBUpdateSettingsRequest) GetBackendHttpKeepAlive() *ProxyLBBackend
 // SetBackendHttpKeepAlive sets value to BackendHttpKeepAlive
 func (o *ProxyLBUpdateSettingsRequest) SetBackendHttpKeepAlive(v *ProxyLBBackendHttpKeepAlive) {
 	o.BackendHttpKeepAlive = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *ProxyLBUpdateSettingsRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *ProxyLBUpdateSettingsRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetProxyProtocol returns value of ProxyProtocol
@@ -22830,9 +23373,10 @@ type Server struct {
 	CPU                     int                         `mapconv:"ServerPlan.CPU"`
 	MemoryMB                int                         `mapconv:"ServerPlan.MemoryMB"`
 	GPU                     int                         `mapconv:"ServerPlan.GPU"`
-	ServerPlanCPUModel      string                      `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
-	ServerPlanCommitment    types.ECommitment           `json:",omitempty" mapconv:"ServerPlan.Commitment"`
-	ServerPlanGeneration    types.EPlanGeneration       `mapconv:"ServerPlan.Generation"`
+	GPUModel                string                      `json:",omitempty" mapconv:"ServerPlan.GPUModel"`
+	CPUModel                string                      `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
+	Commitment              types.ECommitment           `json:",omitempty" mapconv:"ServerPlan.Commitment"`
+	Generation              types.EPlanGeneration       `mapconv:"ServerPlan.Generation"`
 	Zone                    *ZoneInfo                   `json:",omitempty" mapconv:",omitempty,recursive"`
 	InstanceHostName        string                      `mapconv:"Instance.Host.Name"`
 	InstanceHostInfoURL     string                      `mapconv:"Instance.Host.InfoURL"`
@@ -22867,9 +23411,10 @@ func (o *Server) setDefaults() interface{} {
 		CPU                     int                         `mapconv:"ServerPlan.CPU"`
 		MemoryMB                int                         `mapconv:"ServerPlan.MemoryMB"`
 		GPU                     int                         `mapconv:"ServerPlan.GPU"`
-		ServerPlanCPUModel      string                      `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
-		ServerPlanCommitment    types.ECommitment           `json:",omitempty" mapconv:"ServerPlan.Commitment"`
-		ServerPlanGeneration    types.EPlanGeneration       `mapconv:"ServerPlan.Generation"`
+		GPUModel                string                      `json:",omitempty" mapconv:"ServerPlan.GPUModel"`
+		CPUModel                string                      `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
+		Commitment              types.ECommitment           `json:",omitempty" mapconv:"ServerPlan.Commitment"`
+		Generation              types.EPlanGeneration       `mapconv:"ServerPlan.Generation"`
 		Zone                    *ZoneInfo                   `json:",omitempty" mapconv:",omitempty,recursive"`
 		InstanceHostName        string                      `mapconv:"Instance.Host.Name"`
 		InstanceHostInfoURL     string                      `mapconv:"Instance.Host.InfoURL"`
@@ -22900,9 +23445,10 @@ func (o *Server) setDefaults() interface{} {
 		CPU:                     o.GetCPU(),
 		MemoryMB:                o.GetMemoryMB(),
 		GPU:                     o.GetGPU(),
-		ServerPlanCPUModel:      o.GetServerPlanCPUModel(),
-		ServerPlanCommitment:    o.GetServerPlanCommitment(),
-		ServerPlanGeneration:    o.GetServerPlanGeneration(),
+		GPUModel:                o.GetGPUModel(),
+		CPUModel:                o.GetCPUModel(),
+		Commitment:              o.GetCommitment(),
+		Generation:              o.GetGeneration(),
 		Zone:                    o.GetZone(),
 		InstanceHostName:        o.GetInstanceHostName(),
 		InstanceHostInfoURL:     o.GetInstanceHostInfoURL(),
@@ -23091,37 +23637,47 @@ func (o *Server) SetGPU(v int) {
 	o.GPU = v
 }
 
-// GetServerPlanCPUModel returns value of ServerPlanCPUModel
-func (o *Server) GetServerPlanCPUModel() string {
-	return o.ServerPlanCPUModel
+// GetGPUModel returns value of GPUModel
+func (o *Server) GetGPUModel() string {
+	return o.GPUModel
 }
 
-// SetServerPlanCPUModel sets value to ServerPlanCPUModel
-func (o *Server) SetServerPlanCPUModel(v string) {
-	o.ServerPlanCPUModel = v
+// SetGPUModel sets value to GPUModel
+func (o *Server) SetGPUModel(v string) {
+	o.GPUModel = v
 }
 
-// GetServerPlanCommitment returns value of ServerPlanCommitment
-func (o *Server) GetServerPlanCommitment() types.ECommitment {
-	if o.ServerPlanCommitment == types.ECommitment("") {
+// GetCPUModel returns value of CPUModel
+func (o *Server) GetCPUModel() string {
+	return o.CPUModel
+}
+
+// SetCPUModel sets value to CPUModel
+func (o *Server) SetCPUModel(v string) {
+	o.CPUModel = v
+}
+
+// GetCommitment returns value of Commitment
+func (o *Server) GetCommitment() types.ECommitment {
+	if o.Commitment == types.ECommitment("") {
 		return types.Commitments.Standard
 	}
-	return o.ServerPlanCommitment
+	return o.Commitment
 }
 
-// SetServerPlanCommitment sets value to ServerPlanCommitment
-func (o *Server) SetServerPlanCommitment(v types.ECommitment) {
-	o.ServerPlanCommitment = v
+// SetCommitment sets value to Commitment
+func (o *Server) SetCommitment(v types.ECommitment) {
+	o.Commitment = v
 }
 
-// GetServerPlanGeneration returns value of ServerPlanGeneration
-func (o *Server) GetServerPlanGeneration() types.EPlanGeneration {
-	return o.ServerPlanGeneration
+// GetGeneration returns value of Generation
+func (o *Server) GetGeneration() types.EPlanGeneration {
+	return o.Generation
 }
 
-// SetServerPlanGeneration sets value to ServerPlanGeneration
-func (o *Server) SetServerPlanGeneration(v types.EPlanGeneration) {
-	o.ServerPlanGeneration = v
+// SetGeneration sets value to Generation
+func (o *Server) SetGeneration(v types.EPlanGeneration) {
+	o.Generation = v
 }
 
 // GetZone returns value of Zone
@@ -23683,54 +24239,57 @@ func (o *ServerConnectedDisk) SetStorage(v *Storage) {
 
 // ServerCreateRequest represents API parameter/response structure
 type ServerCreateRequest struct {
-	CPU                  int                   `mapconv:"ServerPlan.CPU"`
-	MemoryMB             int                   `mapconv:"ServerPlan.MemoryMB"`
-	GPU                  int                   `mapconv:"ServerPlan.GPU"`
-	ServerPlanCPUModel   string                `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
-	ServerPlanCommitment types.ECommitment     `json:",omitempty" mapconv:"ServerPlan.Commitment"`
-	ServerPlanGeneration types.EPlanGeneration `mapconv:"ServerPlan.Generation"`
-	ConnectedSwitches    []*ConnectedSwitch    `json:",omitempty" mapconv:"[]ConnectedSwitches,recursive"`
-	InterfaceDriver      types.EInterfaceDriver
-	Name                 string
-	Description          string
-	Tags                 types.Tags
-	IconID               types.ID `mapconv:"Icon.ID"`
-	WaitDiskMigration    bool     `json:",omitempty" mapconv:",omitempty"`
-	PrivateHostID        types.ID `mapconv:"PrivateHost.ID"`
+	CPU               int                   `mapconv:"ServerPlan.CPU"`
+	MemoryMB          int                   `mapconv:"ServerPlan.MemoryMB"`
+	GPU               int                   `mapconv:"ServerPlan.GPU"`
+	GPUModel          string                `json:",omitempty" mapconv:"ServerPlan.GPUModel"`
+	CPUModel          string                `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
+	Commitment        types.ECommitment     `json:",omitempty" mapconv:"ServerPlan.Commitment"`
+	Generation        types.EPlanGeneration `mapconv:"ServerPlan.Generation"`
+	ConnectedSwitches []*ConnectedSwitch    `json:",omitempty" mapconv:"[]ConnectedSwitches,recursive"`
+	InterfaceDriver   types.EInterfaceDriver
+	Name              string
+	Description       string
+	Tags              types.Tags
+	IconID            types.ID `mapconv:"Icon.ID"`
+	WaitDiskMigration bool     `json:",omitempty" mapconv:",omitempty"`
+	PrivateHostID     types.ID `mapconv:"PrivateHost.ID"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *ServerCreateRequest) setDefaults() interface{} {
 	return &struct {
-		CPU                  int                   `mapconv:"ServerPlan.CPU"`
-		MemoryMB             int                   `mapconv:"ServerPlan.MemoryMB"`
-		GPU                  int                   `mapconv:"ServerPlan.GPU"`
-		ServerPlanCPUModel   string                `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
-		ServerPlanCommitment types.ECommitment     `json:",omitempty" mapconv:"ServerPlan.Commitment"`
-		ServerPlanGeneration types.EPlanGeneration `mapconv:"ServerPlan.Generation"`
-		ConnectedSwitches    []*ConnectedSwitch    `json:",omitempty" mapconv:"[]ConnectedSwitches,recursive"`
-		InterfaceDriver      types.EInterfaceDriver
-		Name                 string
-		Description          string
-		Tags                 types.Tags
-		IconID               types.ID `mapconv:"Icon.ID"`
-		WaitDiskMigration    bool     `json:",omitempty" mapconv:",omitempty"`
-		PrivateHostID        types.ID `mapconv:"PrivateHost.ID"`
+		CPU               int                   `mapconv:"ServerPlan.CPU"`
+		MemoryMB          int                   `mapconv:"ServerPlan.MemoryMB"`
+		GPU               int                   `mapconv:"ServerPlan.GPU"`
+		GPUModel          string                `json:",omitempty" mapconv:"ServerPlan.GPUModel"`
+		CPUModel          string                `json:",omitempty" mapconv:"ServerPlan.CPUModel"`
+		Commitment        types.ECommitment     `json:",omitempty" mapconv:"ServerPlan.Commitment"`
+		Generation        types.EPlanGeneration `mapconv:"ServerPlan.Generation"`
+		ConnectedSwitches []*ConnectedSwitch    `json:",omitempty" mapconv:"[]ConnectedSwitches,recursive"`
+		InterfaceDriver   types.EInterfaceDriver
+		Name              string
+		Description       string
+		Tags              types.Tags
+		IconID            types.ID `mapconv:"Icon.ID"`
+		WaitDiskMigration bool     `json:",omitempty" mapconv:",omitempty"`
+		PrivateHostID     types.ID `mapconv:"PrivateHost.ID"`
 	}{
-		CPU:                  o.GetCPU(),
-		MemoryMB:             o.GetMemoryMB(),
-		GPU:                  o.GetGPU(),
-		ServerPlanCPUModel:   o.GetServerPlanCPUModel(),
-		ServerPlanCommitment: o.GetServerPlanCommitment(),
-		ServerPlanGeneration: o.GetServerPlanGeneration(),
-		ConnectedSwitches:    o.GetConnectedSwitches(),
-		InterfaceDriver:      o.GetInterfaceDriver(),
-		Name:                 o.GetName(),
-		Description:          o.GetDescription(),
-		Tags:                 o.GetTags(),
-		IconID:               o.GetIconID(),
-		WaitDiskMigration:    o.GetWaitDiskMigration(),
-		PrivateHostID:        o.GetPrivateHostID(),
+		CPU:               o.GetCPU(),
+		MemoryMB:          o.GetMemoryMB(),
+		GPU:               o.GetGPU(),
+		GPUModel:          o.GetGPUModel(),
+		CPUModel:          o.GetCPUModel(),
+		Commitment:        o.GetCommitment(),
+		Generation:        o.GetGeneration(),
+		ConnectedSwitches: o.GetConnectedSwitches(),
+		InterfaceDriver:   o.GetInterfaceDriver(),
+		Name:              o.GetName(),
+		Description:       o.GetDescription(),
+		Tags:              o.GetTags(),
+		IconID:            o.GetIconID(),
+		WaitDiskMigration: o.GetWaitDiskMigration(),
+		PrivateHostID:     o.GetPrivateHostID(),
 	}
 }
 
@@ -23769,37 +24328,47 @@ func (o *ServerCreateRequest) SetGPU(v int) {
 	o.GPU = v
 }
 
-// GetServerPlanCPUModel returns value of ServerPlanCPUModel
-func (o *ServerCreateRequest) GetServerPlanCPUModel() string {
-	return o.ServerPlanCPUModel
+// GetGPUModel returns value of GPUModel
+func (o *ServerCreateRequest) GetGPUModel() string {
+	return o.GPUModel
 }
 
-// SetServerPlanCPUModel sets value to ServerPlanCPUModel
-func (o *ServerCreateRequest) SetServerPlanCPUModel(v string) {
-	o.ServerPlanCPUModel = v
+// SetGPUModel sets value to GPUModel
+func (o *ServerCreateRequest) SetGPUModel(v string) {
+	o.GPUModel = v
 }
 
-// GetServerPlanCommitment returns value of ServerPlanCommitment
-func (o *ServerCreateRequest) GetServerPlanCommitment() types.ECommitment {
-	if o.ServerPlanCommitment == types.ECommitment("") {
+// GetCPUModel returns value of CPUModel
+func (o *ServerCreateRequest) GetCPUModel() string {
+	return o.CPUModel
+}
+
+// SetCPUModel sets value to CPUModel
+func (o *ServerCreateRequest) SetCPUModel(v string) {
+	o.CPUModel = v
+}
+
+// GetCommitment returns value of Commitment
+func (o *ServerCreateRequest) GetCommitment() types.ECommitment {
+	if o.Commitment == types.ECommitment("") {
 		return types.Commitments.Standard
 	}
-	return o.ServerPlanCommitment
+	return o.Commitment
 }
 
-// SetServerPlanCommitment sets value to ServerPlanCommitment
-func (o *ServerCreateRequest) SetServerPlanCommitment(v types.ECommitment) {
-	o.ServerPlanCommitment = v
+// SetCommitment sets value to Commitment
+func (o *ServerCreateRequest) SetCommitment(v types.ECommitment) {
+	o.Commitment = v
 }
 
-// GetServerPlanGeneration returns value of ServerPlanGeneration
-func (o *ServerCreateRequest) GetServerPlanGeneration() types.EPlanGeneration {
-	return o.ServerPlanGeneration
+// GetGeneration returns value of Generation
+func (o *ServerCreateRequest) GetGeneration() types.EPlanGeneration {
+	return o.Generation
 }
 
-// SetServerPlanGeneration sets value to ServerPlanGeneration
-func (o *ServerCreateRequest) SetServerPlanGeneration(v types.EPlanGeneration) {
-	o.ServerPlanGeneration = v
+// SetGeneration sets value to Generation
+func (o *ServerCreateRequest) SetGeneration(v types.EPlanGeneration) {
+	o.Generation = v
 }
 
 // GetConnectedSwitches returns value of ConnectedSwitches
@@ -24116,30 +24685,33 @@ func (o *ServerDeleteWithDisksRequest) SetIDs(v []types.ID) {
 
 // ServerChangePlanRequest represents API parameter/response structure
 type ServerChangePlanRequest struct {
-	CPU                  int
-	MemoryMB             int
-	GPU                  int
-	ServerPlanCPUModel   string                `json:"CPUModel,omitempty"`
-	ServerPlanGeneration types.EPlanGeneration `json:"Generation,omitempty"`
-	ServerPlanCommitment types.ECommitment     `json:"Commitment,omitempty"`
+	CPU        int
+	MemoryMB   int
+	GPU        int
+	GPUModel   string                `json:"GPUModel,omitempty"`
+	CPUModel   string                `json:"CPUModel,omitempty"`
+	Generation types.EPlanGeneration `json:"Generation,omitempty"`
+	Commitment types.ECommitment     `json:"Commitment,omitempty"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
 func (o *ServerChangePlanRequest) setDefaults() interface{} {
 	return &struct {
-		CPU                  int
-		MemoryMB             int
-		GPU                  int
-		ServerPlanCPUModel   string                `json:"CPUModel,omitempty"`
-		ServerPlanGeneration types.EPlanGeneration `json:"Generation,omitempty"`
-		ServerPlanCommitment types.ECommitment     `json:"Commitment,omitempty"`
+		CPU        int
+		MemoryMB   int
+		GPU        int
+		GPUModel   string                `json:"GPUModel,omitempty"`
+		CPUModel   string                `json:"CPUModel,omitempty"`
+		Generation types.EPlanGeneration `json:"Generation,omitempty"`
+		Commitment types.ECommitment     `json:"Commitment,omitempty"`
 	}{
-		CPU:                  o.GetCPU(),
-		MemoryMB:             o.GetMemoryMB(),
-		GPU:                  o.GetGPU(),
-		ServerPlanCPUModel:   o.GetServerPlanCPUModel(),
-		ServerPlanGeneration: o.GetServerPlanGeneration(),
-		ServerPlanCommitment: o.GetServerPlanCommitment(),
+		CPU:        o.GetCPU(),
+		MemoryMB:   o.GetMemoryMB(),
+		GPU:        o.GetGPU(),
+		GPUModel:   o.GetGPUModel(),
+		CPUModel:   o.GetCPUModel(),
+		Generation: o.GetGeneration(),
+		Commitment: o.GetCommitment(),
 	}
 }
 
@@ -24183,37 +24755,47 @@ func (o *ServerChangePlanRequest) SetGPU(v int) {
 	o.GPU = v
 }
 
-// GetServerPlanCPUModel returns value of ServerPlanCPUModel
-func (o *ServerChangePlanRequest) GetServerPlanCPUModel() string {
-	return o.ServerPlanCPUModel
+// GetGPUModel returns value of GPUModel
+func (o *ServerChangePlanRequest) GetGPUModel() string {
+	return o.GPUModel
 }
 
-// SetServerPlanCPUModel sets value to ServerPlanCPUModel
-func (o *ServerChangePlanRequest) SetServerPlanCPUModel(v string) {
-	o.ServerPlanCPUModel = v
+// SetGPUModel sets value to GPUModel
+func (o *ServerChangePlanRequest) SetGPUModel(v string) {
+	o.GPUModel = v
 }
 
-// GetServerPlanGeneration returns value of ServerPlanGeneration
-func (o *ServerChangePlanRequest) GetServerPlanGeneration() types.EPlanGeneration {
-	return o.ServerPlanGeneration
+// GetCPUModel returns value of CPUModel
+func (o *ServerChangePlanRequest) GetCPUModel() string {
+	return o.CPUModel
 }
 
-// SetServerPlanGeneration sets value to ServerPlanGeneration
-func (o *ServerChangePlanRequest) SetServerPlanGeneration(v types.EPlanGeneration) {
-	o.ServerPlanGeneration = v
+// SetCPUModel sets value to CPUModel
+func (o *ServerChangePlanRequest) SetCPUModel(v string) {
+	o.CPUModel = v
 }
 
-// GetServerPlanCommitment returns value of ServerPlanCommitment
-func (o *ServerChangePlanRequest) GetServerPlanCommitment() types.ECommitment {
-	if o.ServerPlanCommitment == types.ECommitment("") {
+// GetGeneration returns value of Generation
+func (o *ServerChangePlanRequest) GetGeneration() types.EPlanGeneration {
+	return o.Generation
+}
+
+// SetGeneration sets value to Generation
+func (o *ServerChangePlanRequest) SetGeneration(v types.EPlanGeneration) {
+	o.Generation = v
+}
+
+// GetCommitment returns value of Commitment
+func (o *ServerChangePlanRequest) GetCommitment() types.ECommitment {
+	if o.Commitment == types.ECommitment("") {
 		return types.Commitments.Standard
 	}
-	return o.ServerPlanCommitment
+	return o.Commitment
 }
 
-// SetServerPlanCommitment sets value to ServerPlanCommitment
-func (o *ServerChangePlanRequest) SetServerPlanCommitment(v types.ECommitment) {
-	o.ServerPlanCommitment = v
+// SetCommitment sets value to Commitment
+func (o *ServerChangePlanRequest) SetCommitment(v types.ECommitment) {
+	o.Commitment = v
 }
 
 /*************************************************
@@ -24485,6 +25067,7 @@ type ServerPlan struct {
 	CPU          int
 	MemoryMB     int
 	GPU          int
+	GPUModel     string
 	CPUModel     string
 	Commitment   types.ECommitment
 	Generation   types.EPlanGeneration
@@ -24499,6 +25082,7 @@ func (o *ServerPlan) setDefaults() interface{} {
 		CPU          int
 		MemoryMB     int
 		GPU          int
+		GPUModel     string
 		CPUModel     string
 		Commitment   types.ECommitment
 		Generation   types.EPlanGeneration
@@ -24509,6 +25093,7 @@ func (o *ServerPlan) setDefaults() interface{} {
 		CPU:          o.GetCPU(),
 		MemoryMB:     o.GetMemoryMB(),
 		GPU:          o.GetGPU(),
+		GPUModel:     o.GetGPUModel(),
 		CPUModel:     o.GetCPUModel(),
 		Commitment:   o.GetCommitment(),
 		Generation:   o.GetGeneration(),
@@ -24594,6 +25179,16 @@ func (o *ServerPlan) GetGPU() int {
 // SetGPU sets value to GPU
 func (o *ServerPlan) SetGPU(v int) {
 	o.GPU = v
+}
+
+// GetGPUModel returns value of GPUModel
+func (o *ServerPlan) GetGPUModel() string {
+	return o.GPUModel
+}
+
+// SetGPUModel sets value to GPUModel
+func (o *ServerPlan) SetGPUModel(v string) {
+	o.GPUModel = v
 }
 
 // GetCPUModel returns value of CPUModel
@@ -25829,6 +26424,7 @@ type SimpleMonitor struct {
 	SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 	NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 	Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+	MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 	SettingsHash       string                    `json:",omitempty" mapconv:",omitempty"`
 }
 
@@ -25856,6 +26452,7 @@ func (o *SimpleMonitor) setDefaults() interface{} {
 		SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 		NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 		Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+		MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 		SettingsHash       string                    `json:",omitempty" mapconv:",omitempty"`
 	}{
 		ID:                 o.GetID(),
@@ -25879,6 +26476,7 @@ func (o *SimpleMonitor) setDefaults() interface{} {
 		SlackWebhooksURL:   o.GetSlackWebhooksURL(),
 		NotifyInterval:     o.GetNotifyInterval(),
 		Timeout:            o.GetTimeout(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
 }
@@ -26143,6 +26741,16 @@ func (o *SimpleMonitor) GetTimeout() int {
 // SetTimeout sets value to Timeout
 func (o *SimpleMonitor) SetTimeout(v int) {
 	o.Timeout = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *SimpleMonitor) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *SimpleMonitor) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetSettingsHash returns value of SettingsHash
@@ -26422,6 +27030,7 @@ type SimpleMonitorCreateRequest struct {
 	SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 	NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 	Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+	MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 	Description        string
 	Tags               types.Tags
 	IconID             types.ID `mapconv:"Icon.ID"`
@@ -26442,6 +27051,7 @@ func (o *SimpleMonitorCreateRequest) setDefaults() interface{} {
 		SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 		NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 		Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+		MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 		Description        string
 		Tags               types.Tags
 		IconID             types.ID `mapconv:"Icon.ID"`
@@ -26459,6 +27069,7 @@ func (o *SimpleMonitorCreateRequest) setDefaults() interface{} {
 		SlackWebhooksURL:   o.GetSlackWebhooksURL(),
 		NotifyInterval:     o.GetNotifyInterval(),
 		Timeout:            o.GetTimeout(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		Description:        o.GetDescription(),
 		Tags:               o.GetTags(),
 		IconID:             o.GetIconID(),
@@ -26598,6 +27209,16 @@ func (o *SimpleMonitorCreateRequest) SetTimeout(v int) {
 	o.Timeout = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *SimpleMonitorCreateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *SimpleMonitorCreateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetDescription returns value of Description
 func (o *SimpleMonitorCreateRequest) GetDescription() string {
 	return o.Description
@@ -26668,6 +27289,7 @@ type SimpleMonitorUpdateRequest struct {
 	SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 	NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 	Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+	MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 	SettingsHash       string                    `json:",omitempty" mapconv:",omitempty"`
 }
 
@@ -26688,6 +27310,7 @@ func (o *SimpleMonitorUpdateRequest) setDefaults() interface{} {
 		SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 		NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 		Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+		MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 		SettingsHash       string                    `json:",omitempty" mapconv:",omitempty"`
 	}{
 		Description:        o.GetDescription(),
@@ -26704,6 +27327,7 @@ func (o *SimpleMonitorUpdateRequest) setDefaults() interface{} {
 		SlackWebhooksURL:   o.GetSlackWebhooksURL(),
 		NotifyInterval:     o.GetNotifyInterval(),
 		Timeout:            o.GetTimeout(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
 }
@@ -26880,6 +27504,16 @@ func (o *SimpleMonitorUpdateRequest) SetTimeout(v int) {
 	o.Timeout = v
 }
 
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *SimpleMonitorUpdateRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *SimpleMonitorUpdateRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
+}
+
 // GetSettingsHash returns value of SettingsHash
 func (o *SimpleMonitorUpdateRequest) GetSettingsHash() string {
 	return o.SettingsHash
@@ -26907,6 +27541,7 @@ type SimpleMonitorUpdateSettingsRequest struct {
 	SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 	NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 	Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+	MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 	SettingsHash       string                    `json:",omitempty" mapconv:",omitempty"`
 }
 
@@ -26924,6 +27559,7 @@ func (o *SimpleMonitorUpdateSettingsRequest) setDefaults() interface{} {
 		SlackWebhooksURL   string                    `mapconv:"Settings.SimpleMonitor.NotifySlack.IncomingWebhooksURL"`
 		NotifyInterval     int                       `mapconv:"Settings.SimpleMonitor.NotifyInterval"`
 		Timeout            int                       `mapconv:"Settings.SimpleMonitor.Timeout"`
+		MonitoringSuiteLog *MonitoringSuiteLog       `mapconv:"Settings.SimpleMonitor.MonitoringSuiteLog,recursive"`
 		SettingsHash       string                    `json:",omitempty" mapconv:",omitempty"`
 	}{
 		MaxCheckAttempts:   o.GetMaxCheckAttempts(),
@@ -26937,6 +27573,7 @@ func (o *SimpleMonitorUpdateSettingsRequest) setDefaults() interface{} {
 		SlackWebhooksURL:   o.GetSlackWebhooksURL(),
 		NotifyInterval:     o.GetNotifyInterval(),
 		Timeout:            o.GetTimeout(),
+		MonitoringSuiteLog: o.GetMonitoringSuiteLog(),
 		SettingsHash:       o.GetSettingsHash(),
 	}
 }
@@ -27061,6 +27698,16 @@ func (o *SimpleMonitorUpdateSettingsRequest) GetTimeout() int {
 // SetTimeout sets value to Timeout
 func (o *SimpleMonitorUpdateSettingsRequest) SetTimeout(v int) {
 	o.Timeout = v
+}
+
+// GetMonitoringSuiteLog returns value of MonitoringSuiteLog
+func (o *SimpleMonitorUpdateSettingsRequest) GetMonitoringSuiteLog() *MonitoringSuiteLog {
+	return o.MonitoringSuiteLog
+}
+
+// SetMonitoringSuiteLog sets value to MonitoringSuiteLog
+func (o *SimpleMonitorUpdateSettingsRequest) SetMonitoringSuiteLog(v *MonitoringSuiteLog) {
+	o.MonitoringSuiteLog = v
 }
 
 // GetSettingsHash returns value of SettingsHash
@@ -27207,6 +27854,1370 @@ func (o *SimpleMonitorHealthStatus) GetLatestLogs() []string {
 // SetLatestLogs sets value to LatestLogs
 func (o *SimpleMonitorHealthStatus) SetLatestLogs(v []string) {
 	o.LatestLogs = v
+}
+
+/*************************************************
+* SimpleNotificationDestination
+*************************************************/
+
+// SimpleNotificationDestination represents API parameter/response structure
+type SimpleNotificationDestination struct {
+	ID           types.ID
+	Name         string
+	Description  string
+	Tags         types.Tags
+	Availability types.EAvailability
+	IconID       types.ID `mapconv:"Icon.ID"`
+	CreatedAt    time.Time
+	ModifiedAt   time.Time
+	Type         types.ESimpleNotificationDestinationTypes `mapconv:"Settings.Type"`
+	Disabled     bool                                      `mapconv:"Settings.Disabled"`
+	Value        string                                    `mapconv:"Settings.Value"`
+	SettingsHash string                                    `json:",omitempty" mapconv:",omitempty"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationDestination) setDefaults() interface{} {
+	return &struct {
+		ID           types.ID
+		Name         string
+		Description  string
+		Tags         types.Tags
+		Availability types.EAvailability
+		IconID       types.ID `mapconv:"Icon.ID"`
+		CreatedAt    time.Time
+		ModifiedAt   time.Time
+		Type         types.ESimpleNotificationDestinationTypes `mapconv:"Settings.Type"`
+		Disabled     bool                                      `mapconv:"Settings.Disabled"`
+		Value        string                                    `mapconv:"Settings.Value"`
+		SettingsHash string                                    `json:",omitempty" mapconv:",omitempty"`
+	}{
+		ID:           o.GetID(),
+		Name:         o.GetName(),
+		Description:  o.GetDescription(),
+		Tags:         o.GetTags(),
+		Availability: o.GetAvailability(),
+		IconID:       o.GetIconID(),
+		CreatedAt:    o.GetCreatedAt(),
+		ModifiedAt:   o.GetModifiedAt(),
+		Type:         o.GetType(),
+		Disabled:     o.GetDisabled(),
+		Value:        o.GetValue(),
+		SettingsHash: o.GetSettingsHash(),
+	}
+}
+
+// GetID returns value of ID
+func (o *SimpleNotificationDestination) GetID() types.ID {
+	return o.ID
+}
+
+// SetID sets value to ID
+func (o *SimpleNotificationDestination) SetID(v types.ID) {
+	o.ID = v
+}
+
+// SetStringID .
+func (o *SimpleNotificationDestination) SetStringID(id string) {
+	accessor.SetStringID(o, id)
+}
+
+// GetStringID .
+func (o *SimpleNotificationDestination) GetStringID() string {
+	return accessor.GetStringID(o)
+}
+
+// SetInt64ID .
+func (o *SimpleNotificationDestination) SetInt64ID(id int64) {
+	accessor.SetInt64ID(o, id)
+}
+
+// GetInt64ID .
+func (o *SimpleNotificationDestination) GetInt64ID() int64 {
+	return accessor.GetInt64ID(o)
+}
+
+// GetName returns value of Name
+func (o *SimpleNotificationDestination) GetName() string {
+	return o.Name
+}
+
+// SetName sets value to Name
+func (o *SimpleNotificationDestination) SetName(v string) {
+	o.Name = v
+}
+
+// GetDescription returns value of Description
+func (o *SimpleNotificationDestination) GetDescription() string {
+	return o.Description
+}
+
+// SetDescription sets value to Description
+func (o *SimpleNotificationDestination) SetDescription(v string) {
+	o.Description = v
+}
+
+// GetTags returns value of Tags
+func (o *SimpleNotificationDestination) GetTags() types.Tags {
+	return o.Tags
+}
+
+// SetTags sets value to Tags
+func (o *SimpleNotificationDestination) SetTags(v types.Tags) {
+	o.Tags = v
+}
+
+// HasTag 指定のタグが存在する場合trueを返す
+func (o *SimpleNotificationDestination) HasTag(tag string) bool {
+	return accessor.HasTag(o, tag)
+}
+
+// AppendTag 指定のタグを追加
+func (o *SimpleNotificationDestination) AppendTag(tag string) {
+	accessor.AppendTag(o, tag)
+}
+
+// RemoveTag 指定のタグを削除
+func (o *SimpleNotificationDestination) RemoveTag(tag string) {
+	accessor.RemoveTag(o, tag)
+}
+
+// ClearTags タグを全クリア
+func (o *SimpleNotificationDestination) ClearTags() {
+	accessor.ClearTags(o)
+}
+
+// GetAvailability returns value of Availability
+func (o *SimpleNotificationDestination) GetAvailability() types.EAvailability {
+	return o.Availability
+}
+
+// SetAvailability sets value to Availability
+func (o *SimpleNotificationDestination) SetAvailability(v types.EAvailability) {
+	o.Availability = v
+}
+
+// GetIconID returns value of IconID
+func (o *SimpleNotificationDestination) GetIconID() types.ID {
+	return o.IconID
+}
+
+// SetIconID sets value to IconID
+func (o *SimpleNotificationDestination) SetIconID(v types.ID) {
+	o.IconID = v
+}
+
+// GetCreatedAt returns value of CreatedAt
+func (o *SimpleNotificationDestination) GetCreatedAt() time.Time {
+	return o.CreatedAt
+}
+
+// SetCreatedAt sets value to CreatedAt
+func (o *SimpleNotificationDestination) SetCreatedAt(v time.Time) {
+	o.CreatedAt = v
+}
+
+// GetModifiedAt returns value of ModifiedAt
+func (o *SimpleNotificationDestination) GetModifiedAt() time.Time {
+	return o.ModifiedAt
+}
+
+// SetModifiedAt sets value to ModifiedAt
+func (o *SimpleNotificationDestination) SetModifiedAt(v time.Time) {
+	o.ModifiedAt = v
+}
+
+// GetType returns value of Type
+func (o *SimpleNotificationDestination) GetType() types.ESimpleNotificationDestinationTypes {
+	return o.Type
+}
+
+// SetType sets value to Type
+func (o *SimpleNotificationDestination) SetType(v types.ESimpleNotificationDestinationTypes) {
+	o.Type = v
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationDestination) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationDestination) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetValue returns value of Value
+func (o *SimpleNotificationDestination) GetValue() string {
+	return o.Value
+}
+
+// SetValue sets value to Value
+func (o *SimpleNotificationDestination) SetValue(v string) {
+	o.Value = v
+}
+
+// GetSettingsHash returns value of SettingsHash
+func (o *SimpleNotificationDestination) GetSettingsHash() string {
+	return o.SettingsHash
+}
+
+// SetSettingsHash sets value to SettingsHash
+func (o *SimpleNotificationDestination) SetSettingsHash(v string) {
+	o.SettingsHash = v
+}
+
+/*************************************************
+* SimpleNotificationDestinationCreateRequest
+*************************************************/
+
+// SimpleNotificationDestinationCreateRequest represents API parameter/response structure
+type SimpleNotificationDestinationCreateRequest struct {
+	Name        string
+	Description string
+	Tags        types.Tags
+	IconID      types.ID                                  `mapconv:"Icon.ID"`
+	Type        types.ESimpleNotificationDestinationTypes `mapconv:"Settings.Type"`
+	Disabled    bool                                      `mapconv:"Settings.Disabled"`
+	Value       string                                    `mapconv:"Settings.Value"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationDestinationCreateRequest) setDefaults() interface{} {
+	return &struct {
+		Name         string
+		Description  string
+		Tags         types.Tags
+		IconID       types.ID                                  `mapconv:"Icon.ID"`
+		Type         types.ESimpleNotificationDestinationTypes `mapconv:"Settings.Type"`
+		Disabled     bool                                      `mapconv:"Settings.Disabled"`
+		Value        string                                    `mapconv:"Settings.Value"`
+		Class        string                                    `mapconv:"Provider.Class"`
+		ServiceClass string
+	}{
+		Name:         o.GetName(),
+		Description:  o.GetDescription(),
+		Tags:         o.GetTags(),
+		IconID:       o.GetIconID(),
+		Type:         o.GetType(),
+		Disabled:     o.GetDisabled(),
+		Value:        o.GetValue(),
+		Class:        "saknoticedestination",
+		ServiceClass: "cloud/saknoticedestination/1",
+	}
+}
+
+// GetName returns value of Name
+func (o *SimpleNotificationDestinationCreateRequest) GetName() string {
+	return o.Name
+}
+
+// SetName sets value to Name
+func (o *SimpleNotificationDestinationCreateRequest) SetName(v string) {
+	o.Name = v
+}
+
+// GetDescription returns value of Description
+func (o *SimpleNotificationDestinationCreateRequest) GetDescription() string {
+	return o.Description
+}
+
+// SetDescription sets value to Description
+func (o *SimpleNotificationDestinationCreateRequest) SetDescription(v string) {
+	o.Description = v
+}
+
+// GetTags returns value of Tags
+func (o *SimpleNotificationDestinationCreateRequest) GetTags() types.Tags {
+	return o.Tags
+}
+
+// SetTags sets value to Tags
+func (o *SimpleNotificationDestinationCreateRequest) SetTags(v types.Tags) {
+	o.Tags = v
+}
+
+// HasTag 指定のタグが存在する場合trueを返す
+func (o *SimpleNotificationDestinationCreateRequest) HasTag(tag string) bool {
+	return accessor.HasTag(o, tag)
+}
+
+// AppendTag 指定のタグを追加
+func (o *SimpleNotificationDestinationCreateRequest) AppendTag(tag string) {
+	accessor.AppendTag(o, tag)
+}
+
+// RemoveTag 指定のタグを削除
+func (o *SimpleNotificationDestinationCreateRequest) RemoveTag(tag string) {
+	accessor.RemoveTag(o, tag)
+}
+
+// ClearTags タグを全クリア
+func (o *SimpleNotificationDestinationCreateRequest) ClearTags() {
+	accessor.ClearTags(o)
+}
+
+// GetIconID returns value of IconID
+func (o *SimpleNotificationDestinationCreateRequest) GetIconID() types.ID {
+	return o.IconID
+}
+
+// SetIconID sets value to IconID
+func (o *SimpleNotificationDestinationCreateRequest) SetIconID(v types.ID) {
+	o.IconID = v
+}
+
+// GetType returns value of Type
+func (o *SimpleNotificationDestinationCreateRequest) GetType() types.ESimpleNotificationDestinationTypes {
+	return o.Type
+}
+
+// SetType sets value to Type
+func (o *SimpleNotificationDestinationCreateRequest) SetType(v types.ESimpleNotificationDestinationTypes) {
+	o.Type = v
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationDestinationCreateRequest) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationDestinationCreateRequest) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetValue returns value of Value
+func (o *SimpleNotificationDestinationCreateRequest) GetValue() string {
+	return o.Value
+}
+
+// SetValue sets value to Value
+func (o *SimpleNotificationDestinationCreateRequest) SetValue(v string) {
+	o.Value = v
+}
+
+/*************************************************
+* SimpleNotificationDestinationUpdateRequest
+*************************************************/
+
+// SimpleNotificationDestinationUpdateRequest represents API parameter/response structure
+type SimpleNotificationDestinationUpdateRequest struct {
+	Name         string
+	Description  string
+	Tags         types.Tags
+	IconID       types.ID `mapconv:"Icon.ID"`
+	Disabled     bool     `mapconv:"Settings.Disabled"`
+	SettingsHash string   `json:",omitempty" mapconv:",omitempty"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationDestinationUpdateRequest) setDefaults() interface{} {
+	return &struct {
+		Name         string
+		Description  string
+		Tags         types.Tags
+		IconID       types.ID `mapconv:"Icon.ID"`
+		Disabled     bool     `mapconv:"Settings.Disabled"`
+		SettingsHash string   `json:",omitempty" mapconv:",omitempty"`
+	}{
+		Name:         o.GetName(),
+		Description:  o.GetDescription(),
+		Tags:         o.GetTags(),
+		IconID:       o.GetIconID(),
+		Disabled:     o.GetDisabled(),
+		SettingsHash: o.GetSettingsHash(),
+	}
+}
+
+// GetName returns value of Name
+func (o *SimpleNotificationDestinationUpdateRequest) GetName() string {
+	return o.Name
+}
+
+// SetName sets value to Name
+func (o *SimpleNotificationDestinationUpdateRequest) SetName(v string) {
+	o.Name = v
+}
+
+// GetDescription returns value of Description
+func (o *SimpleNotificationDestinationUpdateRequest) GetDescription() string {
+	return o.Description
+}
+
+// SetDescription sets value to Description
+func (o *SimpleNotificationDestinationUpdateRequest) SetDescription(v string) {
+	o.Description = v
+}
+
+// GetTags returns value of Tags
+func (o *SimpleNotificationDestinationUpdateRequest) GetTags() types.Tags {
+	return o.Tags
+}
+
+// SetTags sets value to Tags
+func (o *SimpleNotificationDestinationUpdateRequest) SetTags(v types.Tags) {
+	o.Tags = v
+}
+
+// HasTag 指定のタグが存在する場合trueを返す
+func (o *SimpleNotificationDestinationUpdateRequest) HasTag(tag string) bool {
+	return accessor.HasTag(o, tag)
+}
+
+// AppendTag 指定のタグを追加
+func (o *SimpleNotificationDestinationUpdateRequest) AppendTag(tag string) {
+	accessor.AppendTag(o, tag)
+}
+
+// RemoveTag 指定のタグを削除
+func (o *SimpleNotificationDestinationUpdateRequest) RemoveTag(tag string) {
+	accessor.RemoveTag(o, tag)
+}
+
+// ClearTags タグを全クリア
+func (o *SimpleNotificationDestinationUpdateRequest) ClearTags() {
+	accessor.ClearTags(o)
+}
+
+// GetIconID returns value of IconID
+func (o *SimpleNotificationDestinationUpdateRequest) GetIconID() types.ID {
+	return o.IconID
+}
+
+// SetIconID sets value to IconID
+func (o *SimpleNotificationDestinationUpdateRequest) SetIconID(v types.ID) {
+	o.IconID = v
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationDestinationUpdateRequest) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationDestinationUpdateRequest) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetSettingsHash returns value of SettingsHash
+func (o *SimpleNotificationDestinationUpdateRequest) GetSettingsHash() string {
+	return o.SettingsHash
+}
+
+// SetSettingsHash sets value to SettingsHash
+func (o *SimpleNotificationDestinationUpdateRequest) SetSettingsHash(v string) {
+	o.SettingsHash = v
+}
+
+/*************************************************
+* SimpleNotificationDestinationUpdateSettingsRequest
+*************************************************/
+
+// SimpleNotificationDestinationUpdateSettingsRequest represents API parameter/response structure
+type SimpleNotificationDestinationUpdateSettingsRequest struct {
+	Disabled     bool   `mapconv:"Settings.Disabled"`
+	SettingsHash string `json:",omitempty" mapconv:",omitempty"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationDestinationUpdateSettingsRequest) setDefaults() interface{} {
+	return &struct {
+		Disabled     bool   `mapconv:"Settings.Disabled"`
+		SettingsHash string `json:",omitempty" mapconv:",omitempty"`
+	}{
+		Disabled:     o.GetDisabled(),
+		SettingsHash: o.GetSettingsHash(),
+	}
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationDestinationUpdateSettingsRequest) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationDestinationUpdateSettingsRequest) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetSettingsHash returns value of SettingsHash
+func (o *SimpleNotificationDestinationUpdateSettingsRequest) GetSettingsHash() string {
+	return o.SettingsHash
+}
+
+// SetSettingsHash sets value to SettingsHash
+func (o *SimpleNotificationDestinationUpdateSettingsRequest) SetSettingsHash(v string) {
+	o.SettingsHash = v
+}
+
+/*************************************************
+* SimpleNotificationDestinationStatus
+*************************************************/
+
+// SimpleNotificationDestinationStatus represents API parameter/response structure
+type SimpleNotificationDestinationStatus struct {
+	Disabled   bool
+	ModifiedAt time.Time
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationDestinationStatus) setDefaults() interface{} {
+	return &struct {
+		Disabled   bool
+		ModifiedAt time.Time
+	}{
+		Disabled:   o.GetDisabled(),
+		ModifiedAt: o.GetModifiedAt(),
+	}
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationDestinationStatus) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationDestinationStatus) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetModifiedAt returns value of ModifiedAt
+func (o *SimpleNotificationDestinationStatus) GetModifiedAt() time.Time {
+	return o.ModifiedAt
+}
+
+// SetModifiedAt sets value to ModifiedAt
+func (o *SimpleNotificationDestinationStatus) SetModifiedAt(v time.Time) {
+	o.ModifiedAt = v
+}
+
+/*************************************************
+* SimpleNotificationGroup
+*************************************************/
+
+// SimpleNotificationGroup represents API parameter/response structure
+type SimpleNotificationGroup struct {
+	ID           types.ID
+	Name         string
+	Description  string
+	Tags         types.Tags
+	Availability types.EAvailability
+	IconID       types.ID `mapconv:"Icon.ID"`
+	CreatedAt    time.Time
+	ModifiedAt   time.Time
+	Destinations []string `mapconv:"Settings.Destinations"`
+	Disabled     bool     `mapconv:"Settings.Disabled"`
+	Sources      []string `mapconv:"Settings.Sources"`
+	SettingsHash string   `json:",omitempty" mapconv:",omitempty"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationGroup) setDefaults() interface{} {
+	return &struct {
+		ID           types.ID
+		Name         string
+		Description  string
+		Tags         types.Tags
+		Availability types.EAvailability
+		IconID       types.ID `mapconv:"Icon.ID"`
+		CreatedAt    time.Time
+		ModifiedAt   time.Time
+		Destinations []string `mapconv:"Settings.Destinations"`
+		Disabled     bool     `mapconv:"Settings.Disabled"`
+		Sources      []string `mapconv:"Settings.Sources"`
+		SettingsHash string   `json:",omitempty" mapconv:",omitempty"`
+	}{
+		ID:           o.GetID(),
+		Name:         o.GetName(),
+		Description:  o.GetDescription(),
+		Tags:         o.GetTags(),
+		Availability: o.GetAvailability(),
+		IconID:       o.GetIconID(),
+		CreatedAt:    o.GetCreatedAt(),
+		ModifiedAt:   o.GetModifiedAt(),
+		Destinations: o.GetDestinations(),
+		Disabled:     o.GetDisabled(),
+		Sources:      o.GetSources(),
+		SettingsHash: o.GetSettingsHash(),
+	}
+}
+
+// GetID returns value of ID
+func (o *SimpleNotificationGroup) GetID() types.ID {
+	return o.ID
+}
+
+// SetID sets value to ID
+func (o *SimpleNotificationGroup) SetID(v types.ID) {
+	o.ID = v
+}
+
+// SetStringID .
+func (o *SimpleNotificationGroup) SetStringID(id string) {
+	accessor.SetStringID(o, id)
+}
+
+// GetStringID .
+func (o *SimpleNotificationGroup) GetStringID() string {
+	return accessor.GetStringID(o)
+}
+
+// SetInt64ID .
+func (o *SimpleNotificationGroup) SetInt64ID(id int64) {
+	accessor.SetInt64ID(o, id)
+}
+
+// GetInt64ID .
+func (o *SimpleNotificationGroup) GetInt64ID() int64 {
+	return accessor.GetInt64ID(o)
+}
+
+// GetName returns value of Name
+func (o *SimpleNotificationGroup) GetName() string {
+	return o.Name
+}
+
+// SetName sets value to Name
+func (o *SimpleNotificationGroup) SetName(v string) {
+	o.Name = v
+}
+
+// GetDescription returns value of Description
+func (o *SimpleNotificationGroup) GetDescription() string {
+	return o.Description
+}
+
+// SetDescription sets value to Description
+func (o *SimpleNotificationGroup) SetDescription(v string) {
+	o.Description = v
+}
+
+// GetTags returns value of Tags
+func (o *SimpleNotificationGroup) GetTags() types.Tags {
+	return o.Tags
+}
+
+// SetTags sets value to Tags
+func (o *SimpleNotificationGroup) SetTags(v types.Tags) {
+	o.Tags = v
+}
+
+// HasTag 指定のタグが存在する場合trueを返す
+func (o *SimpleNotificationGroup) HasTag(tag string) bool {
+	return accessor.HasTag(o, tag)
+}
+
+// AppendTag 指定のタグを追加
+func (o *SimpleNotificationGroup) AppendTag(tag string) {
+	accessor.AppendTag(o, tag)
+}
+
+// RemoveTag 指定のタグを削除
+func (o *SimpleNotificationGroup) RemoveTag(tag string) {
+	accessor.RemoveTag(o, tag)
+}
+
+// ClearTags タグを全クリア
+func (o *SimpleNotificationGroup) ClearTags() {
+	accessor.ClearTags(o)
+}
+
+// GetAvailability returns value of Availability
+func (o *SimpleNotificationGroup) GetAvailability() types.EAvailability {
+	return o.Availability
+}
+
+// SetAvailability sets value to Availability
+func (o *SimpleNotificationGroup) SetAvailability(v types.EAvailability) {
+	o.Availability = v
+}
+
+// GetIconID returns value of IconID
+func (o *SimpleNotificationGroup) GetIconID() types.ID {
+	return o.IconID
+}
+
+// SetIconID sets value to IconID
+func (o *SimpleNotificationGroup) SetIconID(v types.ID) {
+	o.IconID = v
+}
+
+// GetCreatedAt returns value of CreatedAt
+func (o *SimpleNotificationGroup) GetCreatedAt() time.Time {
+	return o.CreatedAt
+}
+
+// SetCreatedAt sets value to CreatedAt
+func (o *SimpleNotificationGroup) SetCreatedAt(v time.Time) {
+	o.CreatedAt = v
+}
+
+// GetModifiedAt returns value of ModifiedAt
+func (o *SimpleNotificationGroup) GetModifiedAt() time.Time {
+	return o.ModifiedAt
+}
+
+// SetModifiedAt sets value to ModifiedAt
+func (o *SimpleNotificationGroup) SetModifiedAt(v time.Time) {
+	o.ModifiedAt = v
+}
+
+// GetDestinations returns value of Destinations
+func (o *SimpleNotificationGroup) GetDestinations() []string {
+	return o.Destinations
+}
+
+// SetDestinations sets value to Destinations
+func (o *SimpleNotificationGroup) SetDestinations(v []string) {
+	o.Destinations = v
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationGroup) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationGroup) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetSources returns value of Sources
+func (o *SimpleNotificationGroup) GetSources() []string {
+	return o.Sources
+}
+
+// SetSources sets value to Sources
+func (o *SimpleNotificationGroup) SetSources(v []string) {
+	o.Sources = v
+}
+
+// GetSettingsHash returns value of SettingsHash
+func (o *SimpleNotificationGroup) GetSettingsHash() string {
+	return o.SettingsHash
+}
+
+// SetSettingsHash sets value to SettingsHash
+func (o *SimpleNotificationGroup) SetSettingsHash(v string) {
+	o.SettingsHash = v
+}
+
+/*************************************************
+* SimpleNotificationGroupCreateRequest
+*************************************************/
+
+// SimpleNotificationGroupCreateRequest represents API parameter/response structure
+type SimpleNotificationGroupCreateRequest struct {
+	Name         string
+	Description  string
+	Tags         types.Tags
+	IconID       types.ID `mapconv:"Icon.ID"`
+	Destinations []string `mapconv:"Settings.Destinations"`
+	Disabled     bool     `mapconv:"Settings.Disabled"`
+	Sources      []string `mapconv:"Settings.Sources"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationGroupCreateRequest) setDefaults() interface{} {
+	return &struct {
+		Name         string
+		Description  string
+		Tags         types.Tags
+		IconID       types.ID `mapconv:"Icon.ID"`
+		Destinations []string `mapconv:"Settings.Destinations"`
+		Disabled     bool     `mapconv:"Settings.Disabled"`
+		Sources      []string `mapconv:"Settings.Sources"`
+		Class        string   `mapconv:"Provider.Class"`
+		ServiceClass string
+	}{
+		Name:         o.GetName(),
+		Description:  o.GetDescription(),
+		Tags:         o.GetTags(),
+		IconID:       o.GetIconID(),
+		Destinations: o.GetDestinations(),
+		Disabled:     o.GetDisabled(),
+		Sources:      o.GetSources(),
+		Class:        "saknoticegroup",
+		ServiceClass: "cloud/saknoticegroup/1",
+	}
+}
+
+// GetName returns value of Name
+func (o *SimpleNotificationGroupCreateRequest) GetName() string {
+	return o.Name
+}
+
+// SetName sets value to Name
+func (o *SimpleNotificationGroupCreateRequest) SetName(v string) {
+	o.Name = v
+}
+
+// GetDescription returns value of Description
+func (o *SimpleNotificationGroupCreateRequest) GetDescription() string {
+	return o.Description
+}
+
+// SetDescription sets value to Description
+func (o *SimpleNotificationGroupCreateRequest) SetDescription(v string) {
+	o.Description = v
+}
+
+// GetTags returns value of Tags
+func (o *SimpleNotificationGroupCreateRequest) GetTags() types.Tags {
+	return o.Tags
+}
+
+// SetTags sets value to Tags
+func (o *SimpleNotificationGroupCreateRequest) SetTags(v types.Tags) {
+	o.Tags = v
+}
+
+// HasTag 指定のタグが存在する場合trueを返す
+func (o *SimpleNotificationGroupCreateRequest) HasTag(tag string) bool {
+	return accessor.HasTag(o, tag)
+}
+
+// AppendTag 指定のタグを追加
+func (o *SimpleNotificationGroupCreateRequest) AppendTag(tag string) {
+	accessor.AppendTag(o, tag)
+}
+
+// RemoveTag 指定のタグを削除
+func (o *SimpleNotificationGroupCreateRequest) RemoveTag(tag string) {
+	accessor.RemoveTag(o, tag)
+}
+
+// ClearTags タグを全クリア
+func (o *SimpleNotificationGroupCreateRequest) ClearTags() {
+	accessor.ClearTags(o)
+}
+
+// GetIconID returns value of IconID
+func (o *SimpleNotificationGroupCreateRequest) GetIconID() types.ID {
+	return o.IconID
+}
+
+// SetIconID sets value to IconID
+func (o *SimpleNotificationGroupCreateRequest) SetIconID(v types.ID) {
+	o.IconID = v
+}
+
+// GetDestinations returns value of Destinations
+func (o *SimpleNotificationGroupCreateRequest) GetDestinations() []string {
+	return o.Destinations
+}
+
+// SetDestinations sets value to Destinations
+func (o *SimpleNotificationGroupCreateRequest) SetDestinations(v []string) {
+	o.Destinations = v
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationGroupCreateRequest) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationGroupCreateRequest) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetSources returns value of Sources
+func (o *SimpleNotificationGroupCreateRequest) GetSources() []string {
+	return o.Sources
+}
+
+// SetSources sets value to Sources
+func (o *SimpleNotificationGroupCreateRequest) SetSources(v []string) {
+	o.Sources = v
+}
+
+/*************************************************
+* SimpleNotificationGroupUpdateRequest
+*************************************************/
+
+// SimpleNotificationGroupUpdateRequest represents API parameter/response structure
+type SimpleNotificationGroupUpdateRequest struct {
+	Name         string
+	Description  string
+	Tags         types.Tags
+	IconID       types.ID `mapconv:"Icon.ID"`
+	Destinations []string `mapconv:"Settings.Destinations"`
+	Disabled     bool     `mapconv:"Settings.Disabled"`
+	Sources      []string `mapconv:"Settings.Sources"`
+	SettingsHash string   `json:",omitempty" mapconv:",omitempty"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationGroupUpdateRequest) setDefaults() interface{} {
+	return &struct {
+		Name         string
+		Description  string
+		Tags         types.Tags
+		IconID       types.ID `mapconv:"Icon.ID"`
+		Destinations []string `mapconv:"Settings.Destinations"`
+		Disabled     bool     `mapconv:"Settings.Disabled"`
+		Sources      []string `mapconv:"Settings.Sources"`
+		SettingsHash string   `json:",omitempty" mapconv:",omitempty"`
+	}{
+		Name:         o.GetName(),
+		Description:  o.GetDescription(),
+		Tags:         o.GetTags(),
+		IconID:       o.GetIconID(),
+		Destinations: o.GetDestinations(),
+		Disabled:     o.GetDisabled(),
+		Sources:      o.GetSources(),
+		SettingsHash: o.GetSettingsHash(),
+	}
+}
+
+// GetName returns value of Name
+func (o *SimpleNotificationGroupUpdateRequest) GetName() string {
+	return o.Name
+}
+
+// SetName sets value to Name
+func (o *SimpleNotificationGroupUpdateRequest) SetName(v string) {
+	o.Name = v
+}
+
+// GetDescription returns value of Description
+func (o *SimpleNotificationGroupUpdateRequest) GetDescription() string {
+	return o.Description
+}
+
+// SetDescription sets value to Description
+func (o *SimpleNotificationGroupUpdateRequest) SetDescription(v string) {
+	o.Description = v
+}
+
+// GetTags returns value of Tags
+func (o *SimpleNotificationGroupUpdateRequest) GetTags() types.Tags {
+	return o.Tags
+}
+
+// SetTags sets value to Tags
+func (o *SimpleNotificationGroupUpdateRequest) SetTags(v types.Tags) {
+	o.Tags = v
+}
+
+// HasTag 指定のタグが存在する場合trueを返す
+func (o *SimpleNotificationGroupUpdateRequest) HasTag(tag string) bool {
+	return accessor.HasTag(o, tag)
+}
+
+// AppendTag 指定のタグを追加
+func (o *SimpleNotificationGroupUpdateRequest) AppendTag(tag string) {
+	accessor.AppendTag(o, tag)
+}
+
+// RemoveTag 指定のタグを削除
+func (o *SimpleNotificationGroupUpdateRequest) RemoveTag(tag string) {
+	accessor.RemoveTag(o, tag)
+}
+
+// ClearTags タグを全クリア
+func (o *SimpleNotificationGroupUpdateRequest) ClearTags() {
+	accessor.ClearTags(o)
+}
+
+// GetIconID returns value of IconID
+func (o *SimpleNotificationGroupUpdateRequest) GetIconID() types.ID {
+	return o.IconID
+}
+
+// SetIconID sets value to IconID
+func (o *SimpleNotificationGroupUpdateRequest) SetIconID(v types.ID) {
+	o.IconID = v
+}
+
+// GetDestinations returns value of Destinations
+func (o *SimpleNotificationGroupUpdateRequest) GetDestinations() []string {
+	return o.Destinations
+}
+
+// SetDestinations sets value to Destinations
+func (o *SimpleNotificationGroupUpdateRequest) SetDestinations(v []string) {
+	o.Destinations = v
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationGroupUpdateRequest) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationGroupUpdateRequest) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetSources returns value of Sources
+func (o *SimpleNotificationGroupUpdateRequest) GetSources() []string {
+	return o.Sources
+}
+
+// SetSources sets value to Sources
+func (o *SimpleNotificationGroupUpdateRequest) SetSources(v []string) {
+	o.Sources = v
+}
+
+// GetSettingsHash returns value of SettingsHash
+func (o *SimpleNotificationGroupUpdateRequest) GetSettingsHash() string {
+	return o.SettingsHash
+}
+
+// SetSettingsHash sets value to SettingsHash
+func (o *SimpleNotificationGroupUpdateRequest) SetSettingsHash(v string) {
+	o.SettingsHash = v
+}
+
+/*************************************************
+* SimpleNotificationGroupUpdateSettingsRequest
+*************************************************/
+
+// SimpleNotificationGroupUpdateSettingsRequest represents API parameter/response structure
+type SimpleNotificationGroupUpdateSettingsRequest struct {
+	Disabled     bool   `mapconv:"Settings.Disabled"`
+	SettingsHash string `json:",omitempty" mapconv:",omitempty"`
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationGroupUpdateSettingsRequest) setDefaults() interface{} {
+	return &struct {
+		Disabled     bool   `mapconv:"Settings.Disabled"`
+		SettingsHash string `json:",omitempty" mapconv:",omitempty"`
+	}{
+		Disabled:     o.GetDisabled(),
+		SettingsHash: o.GetSettingsHash(),
+	}
+}
+
+// GetDisabled returns value of Disabled
+func (o *SimpleNotificationGroupUpdateSettingsRequest) GetDisabled() bool {
+	return o.Disabled
+}
+
+// SetDisabled sets value to Disabled
+func (o *SimpleNotificationGroupUpdateSettingsRequest) SetDisabled(v bool) {
+	o.Disabled = v
+}
+
+// GetSettingsHash returns value of SettingsHash
+func (o *SimpleNotificationGroupUpdateSettingsRequest) GetSettingsHash() string {
+	return o.SettingsHash
+}
+
+// SetSettingsHash sets value to SettingsHash
+func (o *SimpleNotificationGroupUpdateSettingsRequest) SetSettingsHash(v string) {
+	o.SettingsHash = v
+}
+
+/*************************************************
+* SimpleNotificationHistories
+*************************************************/
+
+// SimpleNotificationHistories represents API parameter/response structure
+type SimpleNotificationHistories struct {
+	NotificationHistories []*SimpleNotificationHistory
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationHistories) setDefaults() interface{} {
+	return &struct {
+		NotificationHistories []*SimpleNotificationHistory
+	}{
+		NotificationHistories: o.GetNotificationHistories(),
+	}
+}
+
+// GetNotificationHistories returns value of NotificationHistories
+func (o *SimpleNotificationHistories) GetNotificationHistories() []*SimpleNotificationHistory {
+	return o.NotificationHistories
+}
+
+// SetNotificationHistories sets value to NotificationHistories
+func (o *SimpleNotificationHistories) SetNotificationHistories(v []*SimpleNotificationHistory) {
+	o.NotificationHistories = v
+}
+
+/*************************************************
+* SimpleNotificationHistory
+*************************************************/
+
+// SimpleNotificationHistory represents API parameter/response structure
+type SimpleNotificationHistory struct {
+	RequestID  string
+	SourceID   string
+	ReceivedAt time.Time
+	Message    *SimpleNotificationHistoryMessage
+	Statuses   []*SimpleNotificationHistoryStatus
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationHistory) setDefaults() interface{} {
+	return &struct {
+		RequestID  string
+		SourceID   string
+		ReceivedAt time.Time
+		Message    *SimpleNotificationHistoryMessage
+		Statuses   []*SimpleNotificationHistoryStatus
+	}{
+		RequestID:  o.GetRequestID(),
+		SourceID:   o.GetSourceID(),
+		ReceivedAt: o.GetReceivedAt(),
+		Message:    o.GetMessage(),
+		Statuses:   o.GetStatuses(),
+	}
+}
+
+// GetRequestID returns value of RequestID
+func (o *SimpleNotificationHistory) GetRequestID() string {
+	return o.RequestID
+}
+
+// SetRequestID sets value to RequestID
+func (o *SimpleNotificationHistory) SetRequestID(v string) {
+	o.RequestID = v
+}
+
+// GetSourceID returns value of SourceID
+func (o *SimpleNotificationHistory) GetSourceID() string {
+	return o.SourceID
+}
+
+// SetSourceID sets value to SourceID
+func (o *SimpleNotificationHistory) SetSourceID(v string) {
+	o.SourceID = v
+}
+
+// GetReceivedAt returns value of ReceivedAt
+func (o *SimpleNotificationHistory) GetReceivedAt() time.Time {
+	return o.ReceivedAt
+}
+
+// SetReceivedAt sets value to ReceivedAt
+func (o *SimpleNotificationHistory) SetReceivedAt(v time.Time) {
+	o.ReceivedAt = v
+}
+
+// GetMessage returns value of Message
+func (o *SimpleNotificationHistory) GetMessage() *SimpleNotificationHistoryMessage {
+	return o.Message
+}
+
+// SetMessage sets value to Message
+func (o *SimpleNotificationHistory) SetMessage(v *SimpleNotificationHistoryMessage) {
+	o.Message = v
+}
+
+// GetStatuses returns value of Statuses
+func (o *SimpleNotificationHistory) GetStatuses() []*SimpleNotificationHistoryStatus {
+	return o.Statuses
+}
+
+// SetStatuses sets value to Statuses
+func (o *SimpleNotificationHistory) SetStatuses(v []*SimpleNotificationHistoryStatus) {
+	o.Statuses = v
+}
+
+/*************************************************
+* SimpleNotificationHistoryMessage
+*************************************************/
+
+// SimpleNotificationHistoryMessage represents API parameter/response structure
+type SimpleNotificationHistoryMessage struct {
+	Body      string
+	Color     string
+	ColorCode string
+	IconURL   string
+	ImageURL  string
+	Title     string
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationHistoryMessage) setDefaults() interface{} {
+	return &struct {
+		Body      string
+		Color     string
+		ColorCode string
+		IconURL   string
+		ImageURL  string
+		Title     string
+	}{
+		Body:      o.GetBody(),
+		Color:     o.GetColor(),
+		ColorCode: o.GetColorCode(),
+		IconURL:   o.GetIconURL(),
+		ImageURL:  o.GetImageURL(),
+		Title:     o.GetTitle(),
+	}
+}
+
+// GetBody returns value of Body
+func (o *SimpleNotificationHistoryMessage) GetBody() string {
+	return o.Body
+}
+
+// SetBody sets value to Body
+func (o *SimpleNotificationHistoryMessage) SetBody(v string) {
+	o.Body = v
+}
+
+// GetColor returns value of Color
+func (o *SimpleNotificationHistoryMessage) GetColor() string {
+	return o.Color
+}
+
+// SetColor sets value to Color
+func (o *SimpleNotificationHistoryMessage) SetColor(v string) {
+	o.Color = v
+}
+
+// GetColorCode returns value of ColorCode
+func (o *SimpleNotificationHistoryMessage) GetColorCode() string {
+	return o.ColorCode
+}
+
+// SetColorCode sets value to ColorCode
+func (o *SimpleNotificationHistoryMessage) SetColorCode(v string) {
+	o.ColorCode = v
+}
+
+// GetIconURL returns value of IconURL
+func (o *SimpleNotificationHistoryMessage) GetIconURL() string {
+	return o.IconURL
+}
+
+// SetIconURL sets value to IconURL
+func (o *SimpleNotificationHistoryMessage) SetIconURL(v string) {
+	o.IconURL = v
+}
+
+// GetImageURL returns value of ImageURL
+func (o *SimpleNotificationHistoryMessage) GetImageURL() string {
+	return o.ImageURL
+}
+
+// SetImageURL sets value to ImageURL
+func (o *SimpleNotificationHistoryMessage) SetImageURL(v string) {
+	o.ImageURL = v
+}
+
+// GetTitle returns value of Title
+func (o *SimpleNotificationHistoryMessage) GetTitle() string {
+	return o.Title
+}
+
+// SetTitle sets value to Title
+func (o *SimpleNotificationHistoryMessage) SetTitle(v string) {
+	o.Title = v
+}
+
+/*************************************************
+* SimpleNotificationHistoryStatus
+*************************************************/
+
+// SimpleNotificationHistoryStatus represents API parameter/response structure
+type SimpleNotificationHistoryStatus struct {
+	ID                    string
+	Status                int
+	ErrorInfo             string
+	NotificationRequestID string
+	GroupID               string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+// setDefaults implements iaas.argumentDefaulter
+func (o *SimpleNotificationHistoryStatus) setDefaults() interface{} {
+	return &struct {
+		ID                    string
+		Status                int
+		ErrorInfo             string
+		NotificationRequestID string
+		GroupID               string
+		CreatedAt             time.Time
+		UpdatedAt             time.Time
+	}{
+		ID:                    o.GetID(),
+		Status:                o.GetStatus(),
+		ErrorInfo:             o.GetErrorInfo(),
+		NotificationRequestID: o.GetNotificationRequestID(),
+		GroupID:               o.GetGroupID(),
+		CreatedAt:             o.GetCreatedAt(),
+		UpdatedAt:             o.GetUpdatedAt(),
+	}
+}
+
+// GetID returns value of ID
+func (o *SimpleNotificationHistoryStatus) GetID() string {
+	return o.ID
+}
+
+// SetID sets value to ID
+func (o *SimpleNotificationHistoryStatus) SetID(v string) {
+	o.ID = v
+}
+
+// GetStatus returns value of Status
+func (o *SimpleNotificationHistoryStatus) GetStatus() int {
+	return o.Status
+}
+
+// SetStatus sets value to Status
+func (o *SimpleNotificationHistoryStatus) SetStatus(v int) {
+	o.Status = v
+}
+
+// GetErrorInfo returns value of ErrorInfo
+func (o *SimpleNotificationHistoryStatus) GetErrorInfo() string {
+	return o.ErrorInfo
+}
+
+// SetErrorInfo sets value to ErrorInfo
+func (o *SimpleNotificationHistoryStatus) SetErrorInfo(v string) {
+	o.ErrorInfo = v
+}
+
+// GetNotificationRequestID returns value of NotificationRequestID
+func (o *SimpleNotificationHistoryStatus) GetNotificationRequestID() string {
+	return o.NotificationRequestID
+}
+
+// SetNotificationRequestID sets value to NotificationRequestID
+func (o *SimpleNotificationHistoryStatus) SetNotificationRequestID(v string) {
+	o.NotificationRequestID = v
+}
+
+// GetGroupID returns value of GroupID
+func (o *SimpleNotificationHistoryStatus) GetGroupID() string {
+	return o.GroupID
+}
+
+// SetGroupID sets value to GroupID
+func (o *SimpleNotificationHistoryStatus) SetGroupID(v string) {
+	o.GroupID = v
+}
+
+// GetCreatedAt returns value of CreatedAt
+func (o *SimpleNotificationHistoryStatus) GetCreatedAt() time.Time {
+	return o.CreatedAt
+}
+
+// SetCreatedAt sets value to CreatedAt
+func (o *SimpleNotificationHistoryStatus) SetCreatedAt(v time.Time) {
+	o.CreatedAt = v
+}
+
+// GetUpdatedAt returns value of UpdatedAt
+func (o *SimpleNotificationHistoryStatus) GetUpdatedAt() time.Time {
+	return o.UpdatedAt
+}
+
+// SetUpdatedAt sets value to UpdatedAt
+func (o *SimpleNotificationHistoryStatus) SetUpdatedAt(v time.Time) {
+	o.UpdatedAt = v
 }
 
 /*************************************************
@@ -27374,188 +29385,6 @@ func (o *SSHKeyCreateRequest) GetPublicKey() string {
 // SetPublicKey sets value to PublicKey
 func (o *SSHKeyCreateRequest) SetPublicKey(v string) {
 	o.PublicKey = v
-}
-
-/*************************************************
-* SSHKeyGenerated
-*************************************************/
-
-// SSHKeyGenerated represents API parameter/response structure
-type SSHKeyGenerated struct {
-	ID          types.ID
-	Name        string
-	Description string
-	CreatedAt   time.Time
-	PublicKey   string
-	Fingerprint string
-	PrivateKey  string
-}
-
-// setDefaults implements iaas.argumentDefaulter
-func (o *SSHKeyGenerated) setDefaults() interface{} {
-	return &struct {
-		ID          types.ID
-		Name        string
-		Description string
-		CreatedAt   time.Time
-		PublicKey   string
-		Fingerprint string
-		PrivateKey  string
-	}{
-		ID:          o.GetID(),
-		Name:        o.GetName(),
-		Description: o.GetDescription(),
-		CreatedAt:   o.GetCreatedAt(),
-		PublicKey:   o.GetPublicKey(),
-		Fingerprint: o.GetFingerprint(),
-		PrivateKey:  o.GetPrivateKey(),
-	}
-}
-
-// GetID returns value of ID
-func (o *SSHKeyGenerated) GetID() types.ID {
-	return o.ID
-}
-
-// SetID sets value to ID
-func (o *SSHKeyGenerated) SetID(v types.ID) {
-	o.ID = v
-}
-
-// SetStringID .
-func (o *SSHKeyGenerated) SetStringID(id string) {
-	accessor.SetStringID(o, id)
-}
-
-// GetStringID .
-func (o *SSHKeyGenerated) GetStringID() string {
-	return accessor.GetStringID(o)
-}
-
-// SetInt64ID .
-func (o *SSHKeyGenerated) SetInt64ID(id int64) {
-	accessor.SetInt64ID(o, id)
-}
-
-// GetInt64ID .
-func (o *SSHKeyGenerated) GetInt64ID() int64 {
-	return accessor.GetInt64ID(o)
-}
-
-// GetName returns value of Name
-func (o *SSHKeyGenerated) GetName() string {
-	return o.Name
-}
-
-// SetName sets value to Name
-func (o *SSHKeyGenerated) SetName(v string) {
-	o.Name = v
-}
-
-// GetDescription returns value of Description
-func (o *SSHKeyGenerated) GetDescription() string {
-	return o.Description
-}
-
-// SetDescription sets value to Description
-func (o *SSHKeyGenerated) SetDescription(v string) {
-	o.Description = v
-}
-
-// GetCreatedAt returns value of CreatedAt
-func (o *SSHKeyGenerated) GetCreatedAt() time.Time {
-	return o.CreatedAt
-}
-
-// SetCreatedAt sets value to CreatedAt
-func (o *SSHKeyGenerated) SetCreatedAt(v time.Time) {
-	o.CreatedAt = v
-}
-
-// GetPublicKey returns value of PublicKey
-func (o *SSHKeyGenerated) GetPublicKey() string {
-	return o.PublicKey
-}
-
-// SetPublicKey sets value to PublicKey
-func (o *SSHKeyGenerated) SetPublicKey(v string) {
-	o.PublicKey = v
-}
-
-// GetFingerprint returns value of Fingerprint
-func (o *SSHKeyGenerated) GetFingerprint() string {
-	return o.Fingerprint
-}
-
-// SetFingerprint sets value to Fingerprint
-func (o *SSHKeyGenerated) SetFingerprint(v string) {
-	o.Fingerprint = v
-}
-
-// GetPrivateKey returns value of PrivateKey
-func (o *SSHKeyGenerated) GetPrivateKey() string {
-	return o.PrivateKey
-}
-
-// SetPrivateKey sets value to PrivateKey
-func (o *SSHKeyGenerated) SetPrivateKey(v string) {
-	o.PrivateKey = v
-}
-
-/*************************************************
-* SSHKeyGenerateRequest
-*************************************************/
-
-// SSHKeyGenerateRequest represents API parameter/response structure
-type SSHKeyGenerateRequest struct {
-	Name        string
-	Description string
-	PassPhrase  string
-}
-
-// setDefaults implements iaas.argumentDefaulter
-func (o *SSHKeyGenerateRequest) setDefaults() interface{} {
-	return &struct {
-		Name           string
-		Description    string
-		PassPhrase     string
-		GenerateFormat string
-	}{
-		Name:           o.GetName(),
-		Description:    o.GetDescription(),
-		PassPhrase:     o.GetPassPhrase(),
-		GenerateFormat: "openssh",
-	}
-}
-
-// GetName returns value of Name
-func (o *SSHKeyGenerateRequest) GetName() string {
-	return o.Name
-}
-
-// SetName sets value to Name
-func (o *SSHKeyGenerateRequest) SetName(v string) {
-	o.Name = v
-}
-
-// GetDescription returns value of Description
-func (o *SSHKeyGenerateRequest) GetDescription() string {
-	return o.Description
-}
-
-// SetDescription sets value to Description
-func (o *SSHKeyGenerateRequest) SetDescription(v string) {
-	o.Description = v
-}
-
-// GetPassPhrase returns value of PassPhrase
-func (o *SSHKeyGenerateRequest) GetPassPhrase() string {
-	return o.PassPhrase
-}
-
-// SetPassPhrase sets value to PassPhrase
-func (o *SSHKeyGenerateRequest) SetPassPhrase(v string) {
-	o.PassPhrase = v
 }
 
 /*************************************************
@@ -28730,6 +30559,7 @@ type VPCRouterSetting struct {
 	StaticRoute               []*VPCRouterStaticRoute        `mapconv:"Router.StaticRoutes.[]Config,omitempty,recursive"`
 	SyslogHost                string                         `mapconv:"Router.SyslogHost"`
 	ScheduledMaintenance      *VPCRouterScheduledMaintenance `mapconv:"Router.ScheduledMaintenance,omitempty,recursive"`
+	MonitoringSuite           *MonitoringSuite               `mapconv:"Router.MonitoringSuite,omitempty,recursive"`
 }
 
 // setDefaults implements iaas.argumentDefaulter
@@ -28755,6 +30585,7 @@ func (o *VPCRouterSetting) setDefaults() interface{} {
 		StaticRoute               []*VPCRouterStaticRoute        `mapconv:"Router.StaticRoutes.[]Config,omitempty,recursive"`
 		SyslogHost                string                         `mapconv:"Router.SyslogHost"`
 		ScheduledMaintenance      *VPCRouterScheduledMaintenance `mapconv:"Router.ScheduledMaintenance,omitempty,recursive"`
+		MonitoringSuite           *MonitoringSuite               `mapconv:"Router.MonitoringSuite,omitempty,recursive"`
 	}{
 		VRID:                      o.GetVRID(),
 		InternetConnectionEnabled: o.GetInternetConnectionEnabled(),
@@ -28776,6 +30607,7 @@ func (o *VPCRouterSetting) setDefaults() interface{} {
 		StaticRoute:               o.GetStaticRoute(),
 		SyslogHost:                o.GetSyslogHost(),
 		ScheduledMaintenance:      o.GetScheduledMaintenance(),
+		MonitoringSuite:           o.GetMonitoringSuite(),
 	}
 }
 
@@ -28977,6 +30809,16 @@ func (o *VPCRouterSetting) GetScheduledMaintenance() *VPCRouterScheduledMaintena
 // SetScheduledMaintenance sets value to ScheduledMaintenance
 func (o *VPCRouterSetting) SetScheduledMaintenance(v *VPCRouterScheduledMaintenance) {
 	o.ScheduledMaintenance = v
+}
+
+// GetMonitoringSuite returns value of MonitoringSuite
+func (o *VPCRouterSetting) GetMonitoringSuite() *MonitoringSuite {
+	return o.MonitoringSuite
+}
+
+// SetMonitoringSuite sets value to MonitoringSuite
+func (o *VPCRouterSetting) SetMonitoringSuite(v *MonitoringSuite) {
+	o.MonitoringSuite = v
 }
 
 /*************************************************

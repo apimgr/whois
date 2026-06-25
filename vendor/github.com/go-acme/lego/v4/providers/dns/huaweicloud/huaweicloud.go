@@ -2,6 +2,7 @@
 package huaweicloud
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,10 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/go-acme/lego/v4/platform/wait"
+	"github.com/go-acme/lego/v4/providers/dns/huaweicloud/internal"
 	"github.com/go-acme/lego/v4/providers/dns/internal/ptr"
 	hwauthbasic "github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
 	hwconfig "github.com/huaweicloud/huaweicloud-sdk-go-v3/core/config"
@@ -62,7 +65,7 @@ func NewDefaultConfig() *Config {
 // DNSProvider implements the challenge.Provider interface.
 type DNSProvider struct {
 	config *Config
-	client *hwdns.DnsClient
+	client *internal.DnsClient
 
 	recordIDs   map[string]string
 	recordIDsMu sync.Mutex
@@ -119,7 +122,7 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 
 	return &DNSProvider{
 		config:    config,
-		client:    hwdns.NewDnsClient(client),
+		client:    internal.NewDnsClient(client),
 		recordIDs: map[string]string{},
 	}, nil
 }
@@ -147,19 +150,27 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	d.recordIDs[token] = recordSetID
 	d.recordIDsMu.Unlock()
 
-	err = wait.For("record set sync on "+domain, d.config.PropagationTimeout, d.config.PollingInterval, func() (bool, error) {
-		rs, errShow := d.client.ShowRecordSet(&hwmodel.ShowRecordSetRequest{
-			ZoneId:      zoneID,
-			RecordsetId: recordSetID,
-		})
-		if errShow != nil {
-			return false, fmt.Errorf("show record set: %w", errShow)
-		}
+	err = wait.Retry(context.Background(),
+		func() error {
+			rs, errShow := d.client.ShowRecordSet(&hwmodel.ShowRecordSetRequest{
+				ZoneId:      zoneID,
+				RecordsetId: recordSetID,
+			})
+			if errShow != nil {
+				return fmt.Errorf("show record set: %w", errShow)
+			}
 
-		return !strings.HasSuffix(ptr.Deref(rs.Status), "PENDING_"), nil
-	})
+			if !strings.HasSuffix(ptr.Deref(rs.Status), "PENDING_") {
+				return nil
+			}
+
+			return fmt.Errorf("status: %s", ptr.Deref(rs.Status))
+		},
+		backoff.WithBackOff(backoff.NewConstantBackOff(d.config.PollingInterval)),
+		backoff.WithMaxElapsedTime(d.config.PropagationTimeout),
+	)
 	if err != nil {
-		return fmt.Errorf("huaweicloud: %w", err)
+		return fmt.Errorf("huaweicloud: record set sync on %s: %w", domain, err)
 	}
 
 	return nil
@@ -173,6 +184,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.recordIDsMu.Lock()
 	recordID, ok := d.recordIDs[token]
 	d.recordIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("huaweicloud: unknown record ID for '%s' '%s'", info.EffectiveFQDN, token)
 	}
@@ -196,6 +208,10 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	if err != nil {
 		return fmt.Errorf("huaweicloud: delete record: %w", err)
 	}
+
+	d.recordIDsMu.Lock()
+	delete(d.recordIDs, token)
+	d.recordIDsMu.Unlock()
 
 	return nil
 }

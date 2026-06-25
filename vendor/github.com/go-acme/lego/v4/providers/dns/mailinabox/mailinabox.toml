@@ -8,7 +8,7 @@ Example = '''
 MAILINABOX_EMAIL=user@example.com \
 MAILINABOX_PASSWORD=yyyy \
 MAILINABOX_BASE_URL=https://box.example.com \
-lego --email you@example.com --dns mailinabox -d '*.example.com' -d example.com run
+lego --dns mailinabox -d '*.example.com' -d example.com run
 '''
 
 [Configuration]
@@ -19,6 +19,7 @@ lego --email you@example.com --dns mailinabox -d '*.example.com' -d example.com 
   [Configuration.Additional]
     MAILINABOX_POLLING_INTERVAL = "Time between DNS propagation check in seconds (Default: 4)"
     MAILINABOX_PROPAGATION_TIMEOUT = "Maximum waiting time for DNS propagation in seconds (Default: 120)"
+    MAILINABOX_HTTP_TIMEOUT = "API request timeout in seconds (Default: 30)"
 
 [Links]
   API = "https://mailinabox.email/api-docs.html"

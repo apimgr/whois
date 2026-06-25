@@ -11,6 +11,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/internal/useragent"
 	"github.com/ovh/go-ovh/ovh"
 )
@@ -83,10 +84,6 @@ type Config struct {
 	HTTPClient         *http.Client
 }
 
-func (c *Config) hasAppKeyAuth() bool {
-	return c.ApplicationKey != "" || c.ApplicationSecret != "" || c.ConsumerKey != ""
-}
-
 // NewDefaultConfig returns a default configuration for the DNSProvider.
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -99,10 +96,15 @@ func NewDefaultConfig() *Config {
 	}
 }
 
+func (c *Config) hasAppKeyAuth() bool {
+	return c.ApplicationKey != "" || c.ApplicationSecret != "" || c.ConsumerKey != ""
+}
+
 // DNSProvider implements the challenge.Provider interface.
 type DNSProvider struct {
-	config      *Config
-	client      *ovh.Client
+	config *Config
+	client *ovh.Client
+
 	recordIDs   map[string]int64
 	recordIDsMu sync.Mutex
 }
@@ -190,6 +192,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 
 	// Create TXT record
 	var respData Record
+
 	err = d.client.Post(reqURL, reqData, &respData)
 	if err != nil {
 		return fmt.Errorf("ovh: error when call api to add record (%s): %w", reqURL, err)
@@ -197,6 +200,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 
 	// Apply the change
 	reqURL = fmt.Sprintf("/domain/zone/%s/refresh", authZone)
+
 	err = d.client.Post(reqURL, nil, nil)
 	if err != nil {
 		return fmt.Errorf("ovh: error when call api to refresh zone (%s): %w", reqURL, err)
@@ -217,6 +221,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.recordIDsMu.Lock()
 	recordID, ok := d.recordIDs[token]
 	d.recordIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("ovh: unknown record ID for '%s'", info.EffectiveFQDN)
 	}
@@ -237,6 +242,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 
 	// Apply the change
 	reqURL = fmt.Sprintf("/domain/zone/%s/refresh", authZone)
+
 	err = d.client.Post(reqURL, nil, nil)
 	if err != nil {
 		return fmt.Errorf("ovh: error when call api to refresh zone (%s): %w", reqURL, err)
@@ -257,8 +263,10 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 }
 
 func newClient(config *Config) (*ovh.Client, error) {
-	var client *ovh.Client
-	var err error
+	var (
+		client *ovh.Client
+		err    error
+	)
 
 	switch {
 	case config.hasAppKeyAuth():
@@ -276,6 +284,12 @@ func newClient(config *Config) (*ovh.Client, error) {
 	}
 
 	client.UserAgent = useragent.Get()
+
+	if config.HTTPClient != nil {
+		client.Client = config.HTTPClient
+	}
+
+	client.Client = clientdebug.Wrap(client.Client)
 
 	return client, nil
 }

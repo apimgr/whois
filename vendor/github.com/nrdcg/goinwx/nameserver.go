@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/fatih/structs"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 )
 
 const (
@@ -26,7 +26,7 @@ type NameserverService service
 
 // Check checks a domain on nameservers.
 func (s *NameserverService) Check(domain string, nameservers []string) (*NameserverCheckResponse, error) {
-	req := s.client.NewRequest(methodNameserverCheck, map[string]interface{}{
+	req := s.client.NewRequest(methodNameserverCheck, map[string]any{
 		"domain": domain,
 		"ns":     nameservers,
 	})
@@ -37,6 +37,7 @@ func (s *NameserverService) Check(domain string, nameservers []string) (*Nameser
 	}
 
 	var result NameserverCheckResponse
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
 		return nil, err
@@ -55,6 +56,7 @@ func (s *NameserverService) Info(request *NameserverInfoRequest) (*NameserverInf
 	}
 
 	result := NameserverInfoResponse{}
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
 		return nil, err
@@ -64,9 +66,10 @@ func (s *NameserverService) Info(request *NameserverInfoRequest) (*NameserverInf
 }
 
 // List lists nameservers for a domain.
+//
 // Deprecated: use ListWithParams instead.
 func (s *NameserverService) List(domain string) (*NameserverListResponse, error) {
-	requestMap := map[string]interface{}{
+	requestMap := map[string]any{
 		"domain": "*",
 		"wide":   2,
 	}
@@ -83,6 +86,7 @@ func (s *NameserverService) List(domain string) (*NameserverListResponse, error)
 	}
 
 	result := NameserverListResponse{}
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
 		return nil, err
@@ -108,6 +112,7 @@ func (s *NameserverService) ListWithParams(request *NameserverListRequest) (*Nam
 	}
 
 	result := NameserverListResponse{}
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
 		return nil, err
@@ -126,6 +131,7 @@ func (s *NameserverService) Create(request *NameserverCreateRequest) (int, error
 	}
 
 	var result map[string]int
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
 		return 0, err
@@ -135,25 +141,26 @@ func (s *NameserverService) Create(request *NameserverCreateRequest) (int, error
 }
 
 // CreateRecord creates a DNS record.
-func (s *NameserverService) CreateRecord(request *NameserverRecordRequest) (int, error) {
+func (s *NameserverService) CreateRecord(request *NameserverRecordRequest) (string, error) {
 	req := s.client.NewRequest(methodNameserverCreateRecord, structs.Map(request))
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 
-	var result map[string]int
+	var result map[string]string
+
 	err = mapstructure.Decode(resp, &result)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 
 	return result["id"], nil
 }
 
 // UpdateRecord updates a DNS record.
-func (s *NameserverService) UpdateRecord(recID int, request *NameserverRecordRequest) error {
+func (s *NameserverService) UpdateRecord(recID string, request *NameserverRecordRequest) error {
 	if request == nil {
 		return errors.New("request can't be nil")
 	}
@@ -172,8 +179,8 @@ func (s *NameserverService) UpdateRecord(recID int, request *NameserverRecordReq
 }
 
 // DeleteRecord deletes a DNS record.
-func (s *NameserverService) DeleteRecord(recID int) error {
-	req := s.client.NewRequest(methodNameserverDeleteRecord, map[string]interface{}{
+func (s *NameserverService) DeleteRecord(recID string) error {
+	req := s.client.NewRequest(methodNameserverDeleteRecord, map[string]any{
 		"id": recID,
 	})
 
@@ -186,7 +193,7 @@ func (s *NameserverService) DeleteRecord(recID int) error {
 }
 
 // FindRecordByID search a DNS record by ID.
-func (s *NameserverService) FindRecordByID(recID int) (*NameserverRecord, *NameserverDomain, error) {
+func (s *NameserverService) FindRecordByID(recID string) (*NameserverRecord, *NameserverDomain, error) {
 	listResp, err := s.client.Nameservers.ListWithParams(&NameserverListRequest{})
 	if err != nil {
 		return nil, nil, err
@@ -205,7 +212,7 @@ func (s *NameserverService) FindRecordByID(recID int) (*NameserverRecord, *Names
 		}
 	}
 
-	return nil, nil, fmt.Errorf("couldn't find INWX Record for id %d", recID)
+	return nil, nil, fmt.Errorf("couldn't find INWX Record for id %s", recID)
 }
 
 // NameserverCheckResponse API model.
@@ -252,7 +259,7 @@ type NameserverCreateRequest struct {
 type NameserverInfoRequest struct {
 	Domain   string `structs:"domain,omitempty"`
 	RoID     int    `structs:"roId,omitempty"`
-	RecordID int    `structs:"recordId,omitempty"`
+	RecordID string `structs:"recordId,omitempty"`
 	Type     string `structs:"type,omitempty"`
 	Name     string `structs:"name,omitempty"`
 	Content  string `structs:"content,omitempty"`
@@ -261,6 +268,7 @@ type NameserverInfoRequest struct {
 }
 
 // NamserverInfoResponse API model.
+//
 // Deprecated: Use NameserverInfoResponse instead.
 type NamserverInfoResponse = NameserverInfoResponse
 
@@ -285,7 +293,7 @@ type SlaveInfo struct {
 
 // NameserverRecord API model.
 type NameserverRecord struct {
-	ID                     int    `mapstructure:"id"`
+	ID                     string `mapstructure:"id"`
 	Name                   string `mapstructure:"name"`
 	Type                   string `mapstructure:"type"`
 	Content                string `mapstructure:"content"`
@@ -308,6 +316,7 @@ type NameserverListRequest struct {
 }
 
 // NamserverListResponse API model.
+//
 // Deprecated: Use NameserverListResponse instead.
 type NamserverListResponse = NameserverListResponse
 

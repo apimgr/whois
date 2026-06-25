@@ -14,12 +14,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scaleway/scaleway-sdk-go/internal/errors"
-	"github.com/scaleway/scaleway-sdk-go/internal/marshaler"
-	"github.com/scaleway/scaleway-sdk-go/internal/parameter"
-	"github.com/scaleway/scaleway-sdk-go/namegenerator"
-	"github.com/scaleway/scaleway-sdk-go/scw"
 	std "github.com/scaleway/scaleway-sdk-go/api/std"
+	"github.com/scaleway/scaleway-sdk-go/errors"
+	"github.com/scaleway/scaleway-sdk-go/internal/async"
+	"github.com/scaleway/scaleway-sdk-go/marshaler"
+	"github.com/scaleway/scaleway-sdk-go/namegenerator"
+	"github.com/scaleway/scaleway-sdk-go/parameter"
+	"github.com/scaleway/scaleway-sdk-go/scw"
+)
+
+const (
+	defaultDomainRetryInterval = 15 * time.Second
+	defaultDomainTimeout       = 5 * time.Minute
 )
 
 // always import dependencies
@@ -56,7 +62,7 @@ const (
 func (enum ContactEmailStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "email_status_unknown"
+		return string(ContactEmailStatusEmailStatusUnknown)
 	}
 	return string(enum)
 }
@@ -109,7 +115,7 @@ const (
 func (enum ContactExtensionFRMode) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "mode_unknown"
+		return string(ContactExtensionFRModeModeUnknown)
 	}
 	return string(enum)
 }
@@ -190,7 +196,7 @@ const (
 func (enum ContactExtensionNLLegalForm) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "legal_form_unknown"
+		return string(ContactExtensionNLLegalFormLegalFormUnknown)
 	}
 	return string(enum)
 }
@@ -253,7 +259,7 @@ const (
 func (enum ContactLegalForm) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "legal_form_unknown"
+		return string(ContactLegalFormLegalFormUnknown)
 	}
 	return string(enum)
 }
@@ -297,7 +303,7 @@ const (
 func (enum ContactStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "status_unknown"
+		return string(ContactStatusStatusUnknown)
 	}
 	return string(enum)
 }
@@ -343,7 +349,7 @@ const (
 func (enum DNSZoneStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown"
+		return string(DNSZoneStatusUnknown)
 	}
 	return string(enum)
 }
@@ -407,7 +413,7 @@ const (
 func (enum DSRecordAlgorithm) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "rsamd5"
+		return string(DSRecordAlgorithmRsamd5)
 	}
 	return string(enum)
 }
@@ -461,7 +467,7 @@ const (
 func (enum DSRecordDigestType) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "sha_1"
+		return string(DSRecordDigestTypeSha1)
 	}
 	return string(enum)
 }
@@ -508,7 +514,7 @@ const (
 func (enum DomainFeatureStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "feature_status_unknown"
+		return string(DomainFeatureStatusFeatureStatusUnknown)
 	}
 	return string(enum)
 }
@@ -558,7 +564,7 @@ const (
 func (enum DomainRegistrationStatusTransferStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "status_unknown"
+		return string(DomainRegistrationStatusTransferStatusStatusUnknown)
 	}
 	return string(enum)
 }
@@ -625,7 +631,7 @@ const (
 func (enum DomainStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "status_unknown"
+		return string(DomainStatusStatusUnknown)
 	}
 	return string(enum)
 }
@@ -680,7 +686,7 @@ const (
 func (enum HostStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown_status"
+		return string(HostStatusUnknownStatus)
 	}
 	return string(enum)
 }
@@ -709,6 +715,72 @@ func (enum *HostStatus) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type InboundTransferStatus string
+
+const (
+	// Unknown status.
+	InboundTransferStatusUnknown = InboundTransferStatus("unknown")
+	// Domain transfer in progress.
+	InboundTransferStatusInProgress = InboundTransferStatus("in_progress")
+	// Domain successfully transferred.
+	InboundTransferStatusDone = InboundTransferStatus("done")
+	// Internal error.
+	InboundTransferStatusErrInternal = InboundTransferStatus("err_internal")
+	// Domain is in a pending status.
+	InboundTransferStatusErrDomainPending = InboundTransferStatus("err_domain_pending")
+	// Domain is already being transferred.
+	InboundTransferStatusErrAlreadyTransferring = InboundTransferStatus("err_already_transferring")
+	// Domain transfer is prohibited (transfer/update prohibited status or is currently locked).
+	InboundTransferStatusErrTransferProhibited = InboundTransferStatus("err_transfer_prohibited")
+	// Transfer is not supported for this TLD or the domain is premium.
+	InboundTransferStatusErrTransferImpossible = InboundTransferStatus("err_transfer_impossible")
+	// Invalid authcode.
+	InboundTransferStatusErrInvalidAuthcode = InboundTransferStatus("err_invalid_authcode")
+	// Domain name was created less than 60 days ago.
+	InboundTransferStatusErrDomainTooYoung = InboundTransferStatus("err_domain_too_young")
+	// Too many transfer requests for this domain name.
+	InboundTransferStatusErrTooManyRequests = InboundTransferStatus("err_too_many_requests")
+)
+
+func (enum InboundTransferStatus) String() string {
+	if enum == "" {
+		// return default value if empty
+		return string(InboundTransferStatusUnknown)
+	}
+	return string(enum)
+}
+
+func (enum InboundTransferStatus) Values() []InboundTransferStatus {
+	return []InboundTransferStatus{
+		"unknown",
+		"in_progress",
+		"done",
+		"err_internal",
+		"err_domain_pending",
+		"err_already_transferring",
+		"err_transfer_prohibited",
+		"err_transfer_impossible",
+		"err_invalid_authcode",
+		"err_domain_too_young",
+		"err_too_many_requests",
+	}
+}
+
+func (enum InboundTransferStatus) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%s"`, enum)), nil
+}
+
+func (enum *InboundTransferStatus) UnmarshalJSON(data []byte) error {
+	tmp := ""
+
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+
+	*enum = InboundTransferStatus(InboundTransferStatus(tmp).String())
+	return nil
+}
+
 type LinkedProduct string
 
 const (
@@ -721,7 +793,7 @@ const (
 func (enum LinkedProduct) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown_product"
+		return string(LinkedProductUnknownProduct)
 	}
 	return string(enum)
 }
@@ -763,7 +835,7 @@ const (
 func (enum ListContactsRequestRole) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown_role"
+		return string(ListContactsRequestRoleUnknownRole)
 	}
 	return string(enum)
 }
@@ -804,7 +876,7 @@ const (
 func (enum ListDNSZoneRecordsRequestOrderBy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "name_asc"
+		return string(ListDNSZoneRecordsRequestOrderByNameAsc)
 	}
 	return string(enum)
 }
@@ -855,7 +927,7 @@ const (
 func (enum ListDNSZonesRequestOrderBy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "domain_asc"
+		return string(ListDNSZonesRequestOrderByDomainAsc)
 	}
 	return string(enum)
 }
@@ -900,7 +972,7 @@ const (
 func (enum ListDomainsRequestOrderBy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "domain_asc"
+		return string(ListDomainsRequestOrderByDomainAsc)
 	}
 	return string(enum)
 }
@@ -939,7 +1011,7 @@ const (
 func (enum ListRenewableDomainsRequestOrderBy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "domain_asc"
+		return string(ListRenewableDomainsRequestOrderByDomainAsc)
 	}
 	return string(enum)
 }
@@ -990,7 +1062,7 @@ const (
 func (enum ListTasksRequestOrderBy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "domain_desc"
+		return string(ListTasksRequestOrderByDomainDesc)
 	}
 	return string(enum)
 }
@@ -1035,7 +1107,7 @@ const (
 func (enum ListTldsRequestOrderBy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "name_asc"
+		return string(ListTldsRequestOrderByNameAsc)
 	}
 	return string(enum)
 }
@@ -1074,7 +1146,7 @@ const (
 func (enum RawFormat) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown_raw_format"
+		return string(RawFormatUnknownRawFormat)
 	}
 	return string(enum)
 }
@@ -1115,7 +1187,7 @@ const (
 func (enum RecordHTTPServiceConfigStrategy) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "random"
+		return string(RecordHTTPServiceConfigStrategyRandom)
 	}
 	return string(enum)
 }
@@ -1195,7 +1267,7 @@ const (
 func (enum RecordType) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown"
+		return string(RecordTypeUnknown)
 	}
 	return string(enum)
 }
@@ -1258,7 +1330,7 @@ const (
 func (enum RenewableDomainStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown"
+		return string(RenewableDomainStatusUnknown)
 	}
 	return string(enum)
 }
@@ -1305,7 +1377,7 @@ const (
 func (enum SSLCertificateStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown"
+		return string(SSLCertificateStatusUnknown)
 	}
 	return string(enum)
 }
@@ -1355,7 +1427,7 @@ const (
 func (enum TaskStatus) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unavailable"
+		return string(TaskStatusUnavailable)
 	}
 	return string(enum)
 }
@@ -1442,7 +1514,7 @@ const (
 func (enum TaskType) String() string {
 	if enum == "" {
 		// return default value if empty
-		return "unknown"
+		return string(TaskTypeUnknown)
 	}
 	return string(enum)
 }
@@ -1657,6 +1729,17 @@ type ContactExtensionFR struct {
 	CodeAuthAfnicInfo *ContactExtensionFRCodeAuthAfnicInfo `json:"code_auth_afnic_info,omitempty"`
 }
 
+// ContactExtensionIT: contact extension it.
+type ContactExtensionIT struct {
+	// Deprecated
+	EuropeanCitizenship *string `json:"european_citizenship,omitempty"`
+
+	// Deprecated
+	TaxCode *string `json:"tax_code,omitempty"`
+
+	Pin string `json:"pin"`
+}
+
 // ContactExtensionNL: contact extension nl.
 type ContactExtensionNL struct {
 	// LegalForm: default value: legal_form_unknown
@@ -1701,8 +1784,7 @@ type RecordChangeAdd struct {
 }
 
 // RecordChangeClear: record change clear.
-type RecordChangeClear struct {
-}
+type RecordChangeClear struct{}
 
 // RecordChangeDelete: record change delete.
 type RecordChangeDelete struct {
@@ -1791,6 +1873,8 @@ type Contact struct {
 
 	// Status: default value: status_unknown
 	Status ContactStatus `json:"status"`
+
+	ExtensionIt *ContactExtensionIT `json:"extension_it"`
 }
 
 // ContactRolesRoles: contact roles roles.
@@ -1884,6 +1968,8 @@ type NewContact struct {
 	State *string `json:"state"`
 
 	ExtensionNl *ContactExtensionNL `json:"extension_nl"`
+
+	ExtensionIt *ContactExtensionIT `json:"extension_it"`
 }
 
 // CheckContactsCompatibilityResponseContactCheckResult: check contacts compatibility response contact check result.
@@ -2028,6 +2114,34 @@ type DomainSummary struct {
 	PendingTrade bool `json:"pending_trade"`
 }
 
+// InboundTransfer: inbound transfer.
+type InboundTransfer struct {
+	// ID: the unique identifier of the inbound transfer.
+	ID string `json:"id"`
+
+	// CreatedAt: the creation date of the inbound transfer.
+	CreatedAt *time.Time `json:"created_at"`
+
+	// LastUpdatedAt: the last modification date of the inbound transfer.
+	LastUpdatedAt *time.Time `json:"last_updated_at"`
+
+	// ProjectID: the project ID associated with the inbound transfer.
+	ProjectID string `json:"project_id"`
+
+	// Domain: the domain associated with the inbound transfer.
+	Domain string `json:"domain"`
+
+	// Status: inbound transfer status.
+	// Default value: unknown
+	Status InboundTransferStatus `json:"status"`
+
+	// Message: human-friendly message to describe the current inbound transfer status.
+	Message string `json:"message"`
+
+	// TaskID: the unique identifier of the associated task.
+	TaskID string `json:"task_id"`
+}
+
 // RenewableDomain: renewable domain.
 type RenewableDomain struct {
 	Domain string `json:"domain"`
@@ -2146,8 +2260,7 @@ type ClearDNSZoneRecordsRequest struct {
 }
 
 // ClearDNSZoneRecordsResponse: clear dns zone records response.
-type ClearDNSZoneRecordsResponse struct {
-}
+type ClearDNSZoneRecordsResponse struct{}
 
 // CloneDNSZoneRequest: clone dns zone request.
 type CloneDNSZoneRequest struct {
@@ -2193,8 +2306,7 @@ type DeleteDNSZoneRequest struct {
 }
 
 // DeleteDNSZoneResponse: delete dns zone response.
-type DeleteDNSZoneResponse struct {
-}
+type DeleteDNSZoneResponse struct{}
 
 // DeleteDNSZoneTsigKeyRequest: delete dns zone tsig key request.
 type DeleteDNSZoneTsigKeyRequest struct {
@@ -2202,8 +2314,7 @@ type DeleteDNSZoneTsigKeyRequest struct {
 }
 
 // DeleteExternalDomainResponse: delete external domain response.
-type DeleteExternalDomainResponse struct {
-}
+type DeleteExternalDomainResponse struct{}
 
 // DeleteSSLCertificateRequest: delete ssl certificate request.
 type DeleteSSLCertificateRequest struct {
@@ -2211,8 +2322,7 @@ type DeleteSSLCertificateRequest struct {
 }
 
 // DeleteSSLCertificateResponse: delete ssl certificate response.
-type DeleteSSLCertificateResponse struct {
-}
+type DeleteSSLCertificateResponse struct{}
 
 // Domain: domain.
 type Domain struct {
@@ -2376,7 +2486,7 @@ func (r *ListContactsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListContactsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListContactsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListContactsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2448,7 +2558,7 @@ func (r *ListDNSZoneRecordsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListDNSZoneRecordsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListDNSZoneRecordsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListDNSZoneRecordsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2486,7 +2596,7 @@ func (r *ListDNSZoneVersionRecordsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListDNSZoneVersionRecordsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListDNSZoneVersionRecordsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListDNSZoneVersionRecordsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2524,7 +2634,7 @@ func (r *ListDNSZoneVersionsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListDNSZoneVersionsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListDNSZoneVersionsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListDNSZoneVersionsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2592,7 +2702,7 @@ func (r *ListDNSZonesResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListDNSZonesResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListDNSZonesResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListDNSZonesResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2618,7 +2728,7 @@ func (r *ListDomainHostsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListDomainHostsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListDomainHostsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListDomainHostsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2644,7 +2754,7 @@ func (r *ListDomainsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListDomainsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListDomainsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListDomainsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2653,6 +2763,32 @@ func (r *ListDomainsResponse) UnsafeAppend(res interface{}) (uint32, error) {
 	r.Domains = append(r.Domains, results.Domains...)
 	r.TotalCount += uint32(len(results.Domains))
 	return uint32(len(results.Domains)), nil
+}
+
+// ListInboundTransfersResponse: list inbound transfers response.
+type ListInboundTransfersResponse struct {
+	TotalCount uint32 `json:"total_count"`
+
+	InboundTransfers []*InboundTransfer `json:"inbound_transfers"`
+}
+
+// UnsafeGetTotalCount should not be used
+// Internal usage only
+func (r *ListInboundTransfersResponse) UnsafeGetTotalCount() uint32 {
+	return r.TotalCount
+}
+
+// UnsafeAppend should not be used
+// Internal usage only
+func (r *ListInboundTransfersResponse) UnsafeAppend(res any) (uint32, error) {
+	results, ok := res.(*ListInboundTransfersResponse)
+	if !ok {
+		return 0, errors.New("%T type cannot be appended to type %T", res, r)
+	}
+
+	r.InboundTransfers = append(r.InboundTransfers, results.InboundTransfers...)
+	r.TotalCount += uint32(len(results.InboundTransfers))
+	return uint32(len(results.InboundTransfers)), nil
 }
 
 // ListRenewableDomainsResponse: list renewable domains response.
@@ -2670,7 +2806,7 @@ func (r *ListRenewableDomainsResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListRenewableDomainsResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListRenewableDomainsResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListRenewableDomainsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2707,7 +2843,7 @@ func (r *ListSSLCertificatesResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListSSLCertificatesResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListSSLCertificatesResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListSSLCertificatesResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2733,7 +2869,7 @@ func (r *ListTasksResponse) UnsafeGetTotalCount() uint32 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListTasksResponse) UnsafeAppend(res interface{}) (uint32, error) {
+func (r *ListTasksResponse) UnsafeAppend(res any) (uint32, error) {
 	results, ok := res.(*ListTasksResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2761,7 +2897,7 @@ func (r *ListTldsResponse) UnsafeGetTotalCount() uint64 {
 
 // UnsafeAppend should not be used
 // Internal usage only
-func (r *ListTldsResponse) UnsafeAppend(res interface{}) (uint64, error) {
+func (r *ListTldsResponse) UnsafeAppend(res any) (uint64, error) {
 	results, ok := res.(*ListTldsResponse)
 	if !ok {
 		return 0, errors.New("%T type cannot be appended to type %T", res, r)
@@ -2977,6 +3113,19 @@ type RegistrarAPIListDomainsRequest struct {
 	Domain *string `json:"-"`
 }
 
+// RegistrarAPIListInboundTransfersRequest: registrar api list inbound transfers request.
+type RegistrarAPIListInboundTransfersRequest struct {
+	Page int32 `json:"-"`
+
+	PageSize *uint32 `json:"-"`
+
+	ProjectID string `json:"-"`
+
+	OrganizationID string `json:"-"`
+
+	Domain string `json:"-"`
+}
+
 // RegistrarAPIListRenewableDomainsRequest: registrar api list renewable domains request.
 type RegistrarAPIListRenewableDomainsRequest struct {
 	Page *int32 `json:"-"`
@@ -3046,6 +3195,18 @@ type RegistrarAPIRenewDomainsRequest struct {
 	DurationInYears uint32 `json:"duration_in_years"`
 
 	ForceLateRenewal *bool `json:"force_late_renewal,omitempty"`
+}
+
+// RegistrarAPIRetryInboundTransferRequest: registrar api retry inbound transfer request.
+type RegistrarAPIRetryInboundTransferRequest struct {
+	// Domain: the domain being transferred.
+	Domain string `json:"domain"`
+
+	// ProjectID: the project ID to associated with the inbound transfer.
+	ProjectID string `json:"project_id"`
+
+	// AuthCode: an optional new auth code to replace the previous one for the retry.
+	AuthCode *string `json:"auth_code,omitempty"`
 }
 
 // RegistrarAPISearchAvailableDomainsRequest: registrar api search available domains request.
@@ -3146,6 +3307,8 @@ type RegistrarAPIUpdateContactRequest struct {
 	State *string `json:"state,omitempty"`
 
 	ExtensionNl *ContactExtensionNL `json:"extension_nl,omitempty"`
+
+	ExtensionIt *ContactExtensionIT `json:"extension_it,omitempty"`
 }
 
 // RegistrarAPIUpdateDomainHostRequest: registrar api update domain host request.
@@ -3188,13 +3351,31 @@ type RestoreDNSZoneVersionRequest struct {
 }
 
 // RestoreDNSZoneVersionResponse: restore dns zone version response.
-type RestoreDNSZoneVersionResponse struct {
+type RestoreDNSZoneVersionResponse struct{}
+
+// RetryInboundTransferResponse: retry inbound transfer response.
+type RetryInboundTransferResponse struct{}
+
+// SearchAvailableDomainsConsoleResponse: search available domains console response.
+type SearchAvailableDomainsConsoleResponse struct {
+	ExactMatchDomain *AvailableDomain `json:"exact_match_domain"`
+
+	AvailableDomains []*AvailableDomain `json:"available_domains"`
 }
 
 // SearchAvailableDomainsResponse: search available domains response.
 type SearchAvailableDomainsResponse struct {
 	// AvailableDomains: array of available domains.
 	AvailableDomains []*AvailableDomain `json:"available_domains"`
+}
+
+// UnauthenticatedRegistrarAPISearchAvailableDomainsConsoleRequest: unauthenticated registrar api search available domains console request.
+type UnauthenticatedRegistrarAPISearchAvailableDomainsConsoleRequest struct {
+	Domain string `json:"-"`
+
+	Tlds []string `json:"-"`
+
+	StrictSearch bool `json:"-"`
 }
 
 // UpdateDNSZoneNameserversRequest: update dns zone nameservers request.
@@ -3792,7 +3973,7 @@ func (s *API) RestoreDNSZoneVersion(req *RestoreDNSZoneVersionRequest, opts ...s
 	return &resp, nil
 }
 
-// GetSSLCertificate: Get the DNS zone's TLS certificate. If you do not have a certificate, the ouptut returns `no certificate found`.
+// GetSSLCertificate: Get the DNS zone's TLS certificate. If you do not have a certificate, the output returns `no certificate found`.
 func (s *API) GetSSLCertificate(req *GetSSLCertificateRequest, opts ...scw.RequestOption) (*SSLCertificate, error) {
 	var err error
 
@@ -3812,6 +3993,51 @@ func (s *API) GetSSLCertificate(req *GetSSLCertificateRequest, opts ...scw.Reque
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// WaitForSSLCertificateRequest is used by WaitForSSLCertificate method.
+type WaitForSSLCertificateRequest struct {
+	DNSZone       string
+	Timeout       *time.Duration
+	RetryInterval *time.Duration
+}
+
+// WaitForSSLCertificate waits for the SSLCertificate to reach a terminal state.
+func (s *API) WaitForSSLCertificate(req *WaitForSSLCertificateRequest, opts ...scw.RequestOption) (*SSLCertificate, error) {
+	timeout := defaultDomainTimeout
+	if req.Timeout != nil {
+		timeout = *req.Timeout
+	}
+
+	retryInterval := defaultDomainRetryInterval
+	if req.RetryInterval != nil {
+		retryInterval = *req.RetryInterval
+	}
+	transientStatuses := map[SSLCertificateStatus]struct{}{
+		SSLCertificateStatusPending: {},
+	}
+
+	res, err := async.WaitSync(&async.WaitSyncConfig{
+		Get: func() (any, bool, error) {
+			res, err := s.GetSSLCertificate(&GetSSLCertificateRequest{
+				DNSZone: req.DNSZone,
+			}, opts...)
+			if err != nil {
+				return nil, false, err
+			}
+
+			_, isTransient := transientStatuses[res.Status]
+
+			return res, !isTransient, nil
+		},
+		IntervalStrategy: async.LinearIntervalStrategy(retryInterval),
+		Timeout:          timeout,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "waiting for SSLCertificate failed")
+	}
+
+	return res.(*SSLCertificate), nil
 }
 
 // CreateSSLCertificate: Create a new TLS certificate or retrieve information about an existing TLS certificate.
@@ -3970,6 +4196,76 @@ func (s *RegistrarAPI) ListTasks(req *RegistrarAPIListTasksRequest, opts ...scw.
 	}
 
 	var resp ListTasksResponse
+
+	err = s.client.Do(scwReq, &resp, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ListInboundTransfers: List all inbound transfer operations on the account.
+// You can filter the list of inbound transfers by domain name.
+func (s *RegistrarAPI) ListInboundTransfers(req *RegistrarAPIListInboundTransfersRequest, opts ...scw.RequestOption) (*ListInboundTransfersResponse, error) {
+	var err error
+
+	defaultPageSize, exist := s.client.GetDefaultPageSize()
+	if (req.PageSize == nil || *req.PageSize == 0) && exist {
+		req.PageSize = &defaultPageSize
+	}
+
+	if req.ProjectID == "" {
+		defaultProjectID, _ := s.client.GetDefaultProjectID()
+		req.ProjectID = defaultProjectID
+	}
+
+	if req.OrganizationID == "" {
+		defaultOrganizationID, _ := s.client.GetDefaultOrganizationID()
+		req.OrganizationID = defaultOrganizationID
+	}
+
+	query := url.Values{}
+	parameter.AddToQuery(query, "page", req.Page)
+	parameter.AddToQuery(query, "page_size", req.PageSize)
+	parameter.AddToQuery(query, "project_id", req.ProjectID)
+	parameter.AddToQuery(query, "organization_id", req.OrganizationID)
+	parameter.AddToQuery(query, "domain", req.Domain)
+
+	scwReq := &scw.ScalewayRequest{
+		Method: "GET",
+		Path:   "/domain/v2beta1/inbound-transfers",
+		Query:  query,
+	}
+
+	var resp ListInboundTransfersResponse
+
+	err = s.client.Do(scwReq, &resp, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RetryInboundTransfer: Request a retry for the transfer of a domain from another registrar to Scaleway Domains and DNS.
+func (s *RegistrarAPI) RetryInboundTransfer(req *RegistrarAPIRetryInboundTransferRequest, opts ...scw.RequestOption) (*RetryInboundTransferResponse, error) {
+	var err error
+
+	if req.ProjectID == "" {
+		defaultProjectID, _ := s.client.GetDefaultProjectID()
+		req.ProjectID = defaultProjectID
+	}
+
+	scwReq := &scw.ScalewayRequest{
+		Method: "POST",
+		Path:   "/domain/v2beta1/retry-inbound-transfer",
+	}
+
+	err = scwReq.SetBody(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp RetryInboundTransferResponse
 
 	err = s.client.Do(scwReq, &resp, opts...)
 	if err != nil {
@@ -4333,6 +4629,57 @@ func (s *RegistrarAPI) GetDomain(req *RegistrarAPIGetDomainRequest, opts ...scw.
 	return &resp, nil
 }
 
+// WaitForDomainRequest is used by WaitForDomain method.
+type WaitForDomainRequest struct {
+	Domain        string
+	Timeout       *time.Duration
+	RetryInterval *time.Duration
+}
+
+// WaitForDomain waits for the Domain to reach a terminal state.
+func (s *RegistrarAPI) WaitForDomain(req *WaitForDomainRequest, opts ...scw.RequestOption) (*Domain, error) {
+	timeout := defaultDomainTimeout
+	if req.Timeout != nil {
+		timeout = *req.Timeout
+	}
+
+	retryInterval := defaultDomainRetryInterval
+	if req.RetryInterval != nil {
+		retryInterval = *req.RetryInterval
+	}
+	transientStatuses := map[DomainStatus]struct{}{
+		DomainStatusCreating: {},
+		DomainStatusRenewing: {},
+		DomainStatusXfering:  {},
+		DomainStatusExpiring: {},
+		DomainStatusUpdating: {},
+		DomainStatusChecking: {},
+		DomainStatusDeleting: {},
+	}
+
+	res, err := async.WaitSync(&async.WaitSyncConfig{
+		Get: func() (any, bool, error) {
+			res, err := s.GetDomain(&RegistrarAPIGetDomainRequest{
+				Domain: req.Domain,
+			}, opts...)
+			if err != nil {
+				return nil, false, err
+			}
+
+			_, isTransient := transientStatuses[res.Status]
+
+			return res, !isTransient, nil
+		},
+		IntervalStrategy: async.LinearIntervalStrategy(retryInterval),
+		Timeout:          timeout,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "waiting for Domain failed")
+	}
+
+	return res.(*Domain), nil
+}
+
 // UpdateDomain: Update contacts for a specific domain or create a new contact.<br/>
 // If you add the same contact for multiple roles (owner, administrative, technical), only one ID will be created and used for all of the roles.
 func (s *RegistrarAPI) UpdateDomain(req *RegistrarAPIUpdateDomainRequest, opts ...scw.RequestOption) (*Domain, error) {
@@ -4469,7 +4816,7 @@ func (s *RegistrarAPI) DisableDomainAutoRenew(req *RegistrarAPIDisableDomainAuto
 	return &resp, nil
 }
 
-// GetDomainAuthCode: Retrieve the authorization code to tranfer an unlocked domain. The output returns an error if the domain is locked.
+// GetDomainAuthCode: Retrieve the authorization code to transfer an unlocked domain. The output returns an error if the domain is locked.
 // Some TLDs may have a different procedure to retrieve the authorization code. In that case, the information displays in the message field.
 func (s *RegistrarAPI) GetDomainAuthCode(req *RegistrarAPIGetDomainAuthCodeRequest, opts ...scw.RequestOption) (*GetDomainAuthCodeResponse, error) {
 	var err error
@@ -4710,6 +5057,60 @@ func (s *RegistrarAPI) DeleteDomainHost(req *RegistrarAPIDeleteDomainHostRequest
 	}
 
 	var resp Host
+
+	err = s.client.Do(scwReq, &resp, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Unauthenticated Domain search API.
+type UnauthenticatedRegistrarAPI struct {
+	client *scw.Client
+}
+
+// NewUnauthenticatedRegistrarAPI returns a UnauthenticatedRegistrarAPI object from a Scaleway client.
+func NewUnauthenticatedRegistrarAPI(client *scw.Client) *UnauthenticatedRegistrarAPI {
+	return &UnauthenticatedRegistrarAPI{
+		client: client,
+	}
+}
+
+// GetServiceInfo:
+func (s *UnauthenticatedRegistrarAPI) GetServiceInfo(opts ...scw.RequestOption) (*scw.ServiceInfo, error) {
+	var err error
+
+	scwReq := &scw.ScalewayRequest{
+		Method: "GET",
+		Path:   "/domain/v2beta1/search",
+	}
+
+	var resp scw.ServiceInfo
+
+	err = s.client.Do(scwReq, &resp, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// SearchAvailableDomainsConsole:
+func (s *UnauthenticatedRegistrarAPI) SearchAvailableDomainsConsole(req *UnauthenticatedRegistrarAPISearchAvailableDomainsConsoleRequest, opts ...scw.RequestOption) (*SearchAvailableDomainsConsoleResponse, error) {
+	var err error
+
+	query := url.Values{}
+	parameter.AddToQuery(query, "domain", req.Domain)
+	parameter.AddToQuery(query, "tlds", req.Tlds)
+	parameter.AddToQuery(query, "strict_search", req.StrictSearch)
+
+	scwReq := &scw.ScalewayRequest{
+		Method: "GET",
+		Path:   "/domain/v2beta1/search-domains-console",
+		Query:  query,
+	}
+
+	var resp SearchAvailableDomainsConsoleResponse
 
 	err = s.client.Do(scwReq, &resp, opts...)
 	if err != nil {

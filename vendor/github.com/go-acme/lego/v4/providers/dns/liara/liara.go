@@ -13,6 +13,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/log"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/liara/internal"
 	"github.com/hashicorp/go-retryablehttp"
 )
@@ -22,6 +23,7 @@ const (
 	envNamespace = "LIARA_"
 
 	EnvAPIKey = envNamespace + "API_KEY"
+	EnvTeamID = envNamespace + "TEAM_ID"
 
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
@@ -38,7 +40,9 @@ var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
 // Config is used to configure the creation of the DNSProvider.
 type Config struct {
-	APIKey             string
+	APIKey string
+	TeamID string
+
 	TTL                int
 	PropagationTimeout time.Duration
 	PollingInterval    time.Duration
@@ -76,6 +80,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 
 	config := NewDefaultConfig()
 	config.APIKey = values[EnvAPIKey]
+	config.TeamID = env.GetOrFile(EnvTeamID)
 
 	return NewDNSProviderConfig(config)
 }
@@ -99,13 +104,20 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	}
 
 	retryClient := retryablehttp.NewClient()
+
 	retryClient.RetryMax = 5
 	if config.HTTPClient != nil {
 		retryClient.HTTPClient = config.HTTPClient
 	}
+
 	retryClient.Logger = log.Logger
 
-	client := internal.NewClient(internal.OAuthStaticAccessToken(retryClient.StandardClient(), config.APIKey))
+	client := internal.NewClient(
+		clientdebug.Wrap(
+			internal.OAuthStaticAccessToken(retryClient.StandardClient(), config.APIKey),
+		),
+		config.TeamID,
+	)
 
 	return &DNSProvider{
 		config:    config,
@@ -140,6 +152,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		Contents: []internal.Content{{Text: info.Value}},
 		TTL:      d.config.TTL,
 	}
+
 	newRecord, err := d.client.CreateRecord(context.Background(), dns01.UnFqdn(authZone), record)
 	if err != nil {
 		return fmt.Errorf("liara: failed to create TXT record, fqdn=%s: %w", info.EffectiveFQDN, err)
@@ -165,6 +178,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.recordIDsMu.Lock()
 	recordID, ok := d.recordIDs[token]
 	d.recordIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("liara: unknown record ID for '%s' '%s'", info.EffectiveFQDN, token)
 	}

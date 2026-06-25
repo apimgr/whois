@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -2087,7 +2087,7 @@ func (o *DiskOp) transformFindResults(data []byte) (*DiskFindResult, error) {
 	return results, nil
 }
 
-func (o *DiskOp) transformCreateArgs(createParam *DiskCreateRequest, distantFrom []types.ID) (*diskCreateRequestEnvelope, error) {
+func (o *DiskOp) transformCreateArgs(createParam *DiskCreateRequest, distantFrom []types.ID, kmeKeyID types.ID) (*diskCreateRequestEnvelope, error) {
 	if createParam == nil {
 		createParam = &DiskCreateRequest{}
 	}
@@ -2102,12 +2102,21 @@ func (o *DiskOp) transformCreateArgs(createParam *DiskCreateRequest, distantFrom
 	if v, ok := arg1.(argumentDefaulter); ok {
 		arg1 = v.setDefaults()
 	}
+	if kmeKeyID == types.ID(int64(0)) {
+		kmeKeyID = types.ID(int64(0))
+	}
+	var arg2 interface{} = kmeKeyID
+	if v, ok := arg2.(argumentDefaulter); ok {
+		arg2 = v.setDefaults()
+	}
 	args := &struct {
 		Arg0 interface{} `mapconv:"Disk,recursive"`
 		Arg1 interface{} `mapconv:"DistantFrom"`
+		Arg2 interface{} `mapconv:"KMSKey.ID"`
 	}{
 		Arg0: arg0,
 		Arg1: arg1,
+		Arg2: arg2,
 	}
 
 	v := &diskCreateRequestEnvelope{}
@@ -2160,7 +2169,7 @@ func (o *DiskOp) transformConfigArgs(id types.ID, edit *DiskEditRequest) (*diskC
 	return v, nil
 }
 
-func (o *DiskOp) transformCreateWithConfigArgs(createParam *DiskCreateRequest, editParam *DiskEditRequest, bootAtAvailable bool, distantFrom []types.ID) (*diskCreateWithConfigRequestEnvelope, error) {
+func (o *DiskOp) transformCreateWithConfigArgs(createParam *DiskCreateRequest, editParam *DiskEditRequest, bootAtAvailable bool, distantFrom []types.ID, kmeKeyID types.ID) (*diskCreateWithConfigRequestEnvelope, error) {
 	if createParam == nil {
 		createParam = &DiskCreateRequest{}
 	}
@@ -2189,16 +2198,25 @@ func (o *DiskOp) transformCreateWithConfigArgs(createParam *DiskCreateRequest, e
 	if v, ok := arg3.(argumentDefaulter); ok {
 		arg3 = v.setDefaults()
 	}
+	if kmeKeyID == types.ID(int64(0)) {
+		kmeKeyID = types.ID(int64(0))
+	}
+	var arg4 interface{} = kmeKeyID
+	if v, ok := arg4.(argumentDefaulter); ok {
+		arg4 = v.setDefaults()
+	}
 	args := &struct {
 		Arg0 interface{} `mapconv:"Disk,recursive"`
 		Arg1 interface{} `mapconv:"Config,recursive"`
 		Arg2 interface{} `mapconv:"BootAtAvailable"`
 		Arg3 interface{} `mapconv:"DistantFrom"`
+		Arg4 interface{} `mapconv:"KMSKey.ID"`
 	}{
 		Arg0: arg0,
 		Arg1: arg1,
 		Arg2: arg2,
 		Arg3: arg3,
+		Arg4: arg4,
 	}
 
 	v := &diskCreateWithConfigRequestEnvelope{}
@@ -7409,6 +7427,396 @@ func (o *SimpleMonitorOp) transformHealthStatusResults(data []byte) (*simpleMoni
 	return results, nil
 }
 
+func (o *SimpleNotificationDestinationOp) transformFindArgs(conditions *FindCondition) (*simpleNotificationDestinationFindRequestEnvelope, error) {
+	if conditions == nil {
+		conditions = &FindCondition{}
+	}
+	var arg0 interface{} = conditions
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{} `mapconv:",squash"`
+	}{
+		Arg0: arg0,
+	}
+
+	v := &simpleNotificationDestinationFindRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformFindResults(data []byte) (*SimpleNotificationDestinationFindResult, error) {
+	nakedResponse := &simpleNotificationDestinationFindResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &SimpleNotificationDestinationFindResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformCreateArgs(param *SimpleNotificationDestinationCreateRequest) (*simpleNotificationDestinationCreateRequestEnvelope, error) {
+	if param == nil {
+		param = &SimpleNotificationDestinationCreateRequest{}
+	}
+	var arg0 interface{} = param
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{} `mapconv:"CommonServiceItem,recursive"`
+	}{
+		Arg0: arg0,
+	}
+
+	v := &simpleNotificationDestinationCreateRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformCreateResults(data []byte) (*simpleNotificationDestinationCreateResult, error) {
+	nakedResponse := &simpleNotificationDestinationCreateResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationDestinationCreateResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformReadResults(data []byte) (*simpleNotificationDestinationReadResult, error) {
+	nakedResponse := &simpleNotificationDestinationReadResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationDestinationReadResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformUpdateArgs(id types.ID, param *SimpleNotificationDestinationUpdateRequest) (*simpleNotificationDestinationUpdateRequestEnvelope, error) {
+	if id == types.ID(int64(0)) {
+		id = types.ID(int64(0))
+	}
+	var arg0 interface{} = id
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	if param == nil {
+		param = &SimpleNotificationDestinationUpdateRequest{}
+	}
+	var arg1 interface{} = param
+	if v, ok := arg1.(argumentDefaulter); ok {
+		arg1 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{}
+		Arg1 interface{} `mapconv:"CommonServiceItem,recursive"`
+	}{
+		Arg0: arg0,
+		Arg1: arg1,
+	}
+
+	v := &simpleNotificationDestinationUpdateRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformUpdateResults(data []byte) (*simpleNotificationDestinationUpdateResult, error) {
+	nakedResponse := &simpleNotificationDestinationUpdateResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationDestinationUpdateResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformUpdateSettingsArgs(id types.ID, param *SimpleNotificationDestinationUpdateSettingsRequest) (*simpleNotificationDestinationUpdateSettingsRequestEnvelope, error) {
+	if id == types.ID(int64(0)) {
+		id = types.ID(int64(0))
+	}
+	var arg0 interface{} = id
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	if param == nil {
+		param = &SimpleNotificationDestinationUpdateSettingsRequest{}
+	}
+	var arg1 interface{} = param
+	if v, ok := arg1.(argumentDefaulter); ok {
+		arg1 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{}
+		Arg1 interface{} `mapconv:"CommonServiceItem,recursive"`
+	}{
+		Arg0: arg0,
+		Arg1: arg1,
+	}
+
+	v := &simpleNotificationDestinationUpdateSettingsRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformUpdateSettingsResults(data []byte) (*simpleNotificationDestinationUpdateSettingsResult, error) {
+	nakedResponse := &simpleNotificationDestinationUpdateSettingsResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationDestinationUpdateSettingsResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationDestinationOp) transformStatusResults(data []byte) (*simpleNotificationDestinationStatusResult, error) {
+	nakedResponse := &simpleNotificationDestinationStatusResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationDestinationStatusResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformFindArgs(conditions *FindCondition) (*simpleNotificationGroupFindRequestEnvelope, error) {
+	if conditions == nil {
+		conditions = &FindCondition{}
+	}
+	var arg0 interface{} = conditions
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{} `mapconv:",squash"`
+	}{
+		Arg0: arg0,
+	}
+
+	v := &simpleNotificationGroupFindRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformFindResults(data []byte) (*SimpleNotificationGroupFindResult, error) {
+	nakedResponse := &simpleNotificationGroupFindResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &SimpleNotificationGroupFindResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformCreateArgs(param *SimpleNotificationGroupCreateRequest) (*simpleNotificationGroupCreateRequestEnvelope, error) {
+	if param == nil {
+		param = &SimpleNotificationGroupCreateRequest{}
+	}
+	var arg0 interface{} = param
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{} `mapconv:"CommonServiceItem,recursive"`
+	}{
+		Arg0: arg0,
+	}
+
+	v := &simpleNotificationGroupCreateRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformCreateResults(data []byte) (*simpleNotificationGroupCreateResult, error) {
+	nakedResponse := &simpleNotificationGroupCreateResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationGroupCreateResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformReadResults(data []byte) (*simpleNotificationGroupReadResult, error) {
+	nakedResponse := &simpleNotificationGroupReadResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationGroupReadResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformUpdateArgs(id types.ID, param *SimpleNotificationGroupUpdateRequest) (*simpleNotificationGroupUpdateRequestEnvelope, error) {
+	if id == types.ID(int64(0)) {
+		id = types.ID(int64(0))
+	}
+	var arg0 interface{} = id
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	if param == nil {
+		param = &SimpleNotificationGroupUpdateRequest{}
+	}
+	var arg1 interface{} = param
+	if v, ok := arg1.(argumentDefaulter); ok {
+		arg1 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{}
+		Arg1 interface{} `mapconv:"CommonServiceItem,recursive"`
+	}{
+		Arg0: arg0,
+		Arg1: arg1,
+	}
+
+	v := &simpleNotificationGroupUpdateRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformUpdateResults(data []byte) (*simpleNotificationGroupUpdateResult, error) {
+	nakedResponse := &simpleNotificationGroupUpdateResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationGroupUpdateResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformUpdateSettingsArgs(id types.ID, param *SimpleNotificationGroupUpdateSettingsRequest) (*simpleNotificationGroupUpdateSettingsRequestEnvelope, error) {
+	if id == types.ID(int64(0)) {
+		id = types.ID(int64(0))
+	}
+	var arg0 interface{} = id
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	if param == nil {
+		param = &SimpleNotificationGroupUpdateSettingsRequest{}
+	}
+	var arg1 interface{} = param
+	if v, ok := arg1.(argumentDefaulter); ok {
+		arg1 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{}
+		Arg1 interface{} `mapconv:"CommonServiceItem,recursive"`
+	}{
+		Arg0: arg0,
+		Arg1: arg1,
+	}
+
+	v := &simpleNotificationGroupUpdateSettingsRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformUpdateSettingsResults(data []byte) (*simpleNotificationGroupUpdateSettingsResult, error) {
+	nakedResponse := &simpleNotificationGroupUpdateSettingsResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationGroupUpdateSettingsResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformPostMessageArgs(id types.ID, message string) (*simpleNotificationGroupPostMessageRequestEnvelope, error) {
+	if id == types.ID(int64(0)) {
+		id = types.ID(int64(0))
+	}
+	var arg0 interface{} = id
+	if v, ok := arg0.(argumentDefaulter); ok {
+		arg0 = v.setDefaults()
+	}
+	if message == "" {
+		message = ""
+	}
+	var arg1 interface{} = message
+	if v, ok := arg1.(argumentDefaulter); ok {
+		arg1 = v.setDefaults()
+	}
+	args := &struct {
+		Arg0 interface{}
+		Arg1 interface{} `mapconv:"Message"`
+	}{
+		Arg0: arg0,
+		Arg1: arg1,
+	}
+
+	v := &simpleNotificationGroupPostMessageRequestEnvelope{}
+	if err := mapconv.ConvertTo(args, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (o *SimpleNotificationGroupOp) transformHistoryResults(data []byte) (*simpleNotificationGroupHistoryResult, error) {
+	nakedResponse := &simpleNotificationGroupHistoryResponseEnvelope{}
+	if err := json.Unmarshal(data, nakedResponse); err != nil {
+		return nil, err
+	}
+
+	results := &simpleNotificationGroupHistoryResult{}
+	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 func (o *SSHKeyOp) transformFindArgs(conditions *FindCondition) (*sSHKeyFindRequestEnvelope, error) {
 	if conditions == nil {
 		conditions = &FindCondition{}
@@ -7471,40 +7879,6 @@ func (o *SSHKeyOp) transformCreateResults(data []byte) (*sSHKeyCreateResult, err
 	}
 
 	results := &sSHKeyCreateResult{}
-	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
-func (o *SSHKeyOp) transformGenerateArgs(param *SSHKeyGenerateRequest) (*sSHKeyGenerateRequestEnvelope, error) {
-	if param == nil {
-		param = &SSHKeyGenerateRequest{}
-	}
-	var arg0 interface{} = param
-	if v, ok := arg0.(argumentDefaulter); ok {
-		arg0 = v.setDefaults()
-	}
-	args := &struct {
-		Arg0 interface{} `mapconv:"SSHKey,recursive"`
-	}{
-		Arg0: arg0,
-	}
-
-	v := &sSHKeyGenerateRequestEnvelope{}
-	if err := mapconv.ConvertTo(args, v); err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-func (o *SSHKeyOp) transformGenerateResults(data []byte) (*sSHKeyGenerateResult, error) {
-	nakedResponse := &sSHKeyGenerateResponseEnvelope{}
-	if err := json.Unmarshal(data, nakedResponse); err != nil {
-		return nil, err
-	}
-
-	results := &sSHKeyGenerateResult{}
 	if err := mapconv.ConvertFrom(nakedResponse, results); err != nil {
 		return nil, err
 	}

@@ -17,7 +17,7 @@ import (
 // For more information about load balancer TLS security policies, see [Configuring TLS security policies on your Amazon Lightsail load balancers] in the
 // Amazon Lightsail Developer Guide.
 //
-// [Configuring TLS security policies on your Amazon Lightsail load balancers]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-configure-load-balancer-tls-security-policy
+// [Configuring TLS security policies on your Amazon Lightsail load balancers]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configure-load-balancer-tls-security-policy
 func (c *Client) GetLoadBalancerTlsPolicies(ctx context.Context, params *GetLoadBalancerTlsPoliciesInput, optFns ...func(*Options)) (*GetLoadBalancerTlsPoliciesOutput, error) {
 	if params == nil {
 		params = &GetLoadBalancerTlsPoliciesInput{}
@@ -98,7 +98,7 @@ func (c *Client) addOperationGetLoadBalancerTlsPoliciesMiddlewares(stack *middle
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -122,10 +122,10 @@ func (c *Client) addOperationGetLoadBalancerTlsPoliciesMiddlewares(stack *middle
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opGetLoadBalancerTlsPolicies(options.Region), middleware.Before); err != nil {
@@ -146,16 +146,13 @@ func (c *Client) addOperationGetLoadBalancerTlsPoliciesMiddlewares(stack *middle
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

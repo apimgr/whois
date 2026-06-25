@@ -20,7 +20,7 @@ import (
 // mismatch or if you are familiar with the new host key or certificate on the
 // instance. For more information, see [Troubleshooting connection issues when using the Amazon Lightsail browser-based SSH or RDP client].
 //
-// [Troubleshooting connection issues when using the Amazon Lightsail browser-based SSH or RDP client]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-troubleshooting-browser-based-ssh-rdp-client-connection
+// [Troubleshooting connection issues when using the Amazon Lightsail browser-based SSH or RDP client]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-troubleshooting-browser-based-ssh-rdp-client-connection
 func (c *Client) DeleteKnownHostKeys(ctx context.Context, params *DeleteKnownHostKeysInput, optFns ...func(*Options)) (*DeleteKnownHostKeysOutput, error) {
 	if params == nil {
 		params = &DeleteKnownHostKeysInput{}
@@ -94,7 +94,7 @@ func (c *Client) addOperationDeleteKnownHostKeysMiddlewares(stack *middleware.St
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -118,10 +118,10 @@ func (c *Client) addOperationDeleteKnownHostKeysMiddlewares(stack *middleware.St
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpDeleteKnownHostKeysValidationMiddleware(stack); err != nil {
@@ -145,16 +145,13 @@ func (c *Client) addOperationDeleteKnownHostKeysMiddlewares(stack *middleware.St
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

@@ -11,8 +11,8 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/mijnhost/internal"
-	"github.com/miekg/dns"
 )
 
 // Environment variables names.
@@ -27,6 +27,8 @@ const (
 	EnvSequenceInterval   = envNamespace + "SEQUENCE_INTERVAL"
 	EnvHTTPTimeout        = envNamespace + "HTTP_TIMEOUT"
 )
+
+const txtType = "TXT"
 
 var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
@@ -85,6 +87,12 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 
 	client := internal.NewClient(config.APIKey)
 
+	if config.HTTPClient != nil {
+		client.HTTPClient = config.HTTPClient
+	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
+
 	return &DNSProvider{
 		config: config,
 		client: client,
@@ -105,9 +113,11 @@ func (d *DNSProvider) Sequential() time.Duration {
 
 // Present creates a TXT record to fulfill the dns-01 challenge.
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	domains, err := d.client.ListDomains(context.Background())
+	domains, err := d.client.ListDomains(ctx)
 	if err != nil {
 		return fmt.Errorf("mijnhost: list domains: %w", err)
 	}
@@ -117,7 +127,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		return fmt.Errorf("mijnhost: find domain: %w", err)
 	}
 
-	records, err := d.client.GetRecords(context.Background(), dom.Domain)
+	records, err := d.client.GetRecords(ctx, dom.Domain)
 	if err != nil {
 		return fmt.Errorf("mijnhost: get records: %w", err)
 	}
@@ -128,7 +138,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	}
 
 	record := internal.Record{
-		Type:  "TXT",
+		Type:  txtType,
 		Name:  subDomain,
 		Value: info.Value,
 		TTL:   d.config.TTL,
@@ -137,12 +147,12 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 	// mijn.host doesn't support multiple values for a domain,
 	// so we removed existing record for the subdomain.
 	cleanedRecords := filterRecords(records, func(record internal.Record) bool {
-		return record.Name == subDomain || record.Name == dns01.UnFqdn(info.EffectiveFQDN)
+		return record.Type == txtType && (record.Name == subDomain || record.Name == dns01.UnFqdn(info.EffectiveFQDN))
 	})
 
 	cleanedRecords = append(cleanedRecords, record)
 
-	err = d.client.UpdateRecords(context.Background(), dom.Domain, cleanedRecords)
+	err = d.client.UpdateRecords(ctx, dom.Domain, cleanedRecords)
 	if err != nil {
 		return fmt.Errorf("mijnhost: update records: %w", err)
 	}
@@ -152,9 +162,11 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 
 // CleanUp removes the TXT record.
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
-	domains, err := d.client.ListDomains(context.Background())
+	domains, err := d.client.ListDomains(ctx)
 	if err != nil {
 		return fmt.Errorf("mijnhost: list domains: %w", err)
 	}
@@ -164,16 +176,16 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		return fmt.Errorf("mijnhost: find domain: %w", err)
 	}
 
-	records, err := d.client.GetRecords(context.Background(), dom.Domain)
+	records, err := d.client.GetRecords(ctx, dom.Domain)
 	if err != nil {
 		return fmt.Errorf("mijnhost: get records: %w", err)
 	}
 
 	cleanedRecords := filterRecords(records, func(record internal.Record) bool {
-		return record.Value == info.Value
+		return record.Type == txtType && record.Value == info.Value
 	})
 
-	err = d.client.UpdateRecords(context.Background(), dom.Domain, cleanedRecords)
+	err = d.client.UpdateRecords(ctx, dom.Domain, cleanedRecords)
 	if err != nil {
 		return fmt.Errorf("mijnhost: update records: %w", err)
 	}
@@ -182,11 +194,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 }
 
 func findDomain(domains []internal.Domain, fqdn string) (internal.Domain, error) {
-	labelIndexes := dns.Split(fqdn)
-
-	for _, index := range labelIndexes {
-		domain := dns01.UnFqdn(fqdn[index:])
-
+	for domain := range dns01.UnFqdnDomainsSeq(fqdn) {
 		for _, dom := range domains {
 			if dom.Domain == domain {
 				return dom, nil

@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -209,9 +209,9 @@ type DatabaseAPI interface {
 // DiskAPI is interface for operate Disk resource
 type DiskAPI interface {
 	Find(ctx context.Context, zone string, conditions *FindCondition) (*DiskFindResult, error)
-	Create(ctx context.Context, zone string, createParam *DiskCreateRequest, distantFrom []types.ID) (*Disk, error)
+	Create(ctx context.Context, zone string, createParam *DiskCreateRequest, distantFrom []types.ID, kmeKeyID types.ID) (*Disk, error)
 	Config(ctx context.Context, zone string, id types.ID, edit *DiskEditRequest) error
-	CreateWithConfig(ctx context.Context, zone string, createParam *DiskCreateRequest, editParam *DiskEditRequest, bootAtAvailable bool, distantFrom []types.ID) (*Disk, error)
+	CreateWithConfig(ctx context.Context, zone string, createParam *DiskCreateRequest, editParam *DiskEditRequest, bootAtAvailable bool, distantFrom []types.ID, kmeKeyID types.ID) (*Disk, error)
 	ResizePartition(ctx context.Context, zone string, id types.ID, param *DiskResizePartitionRequest) error
 	ConnectToServer(ctx context.Context, zone string, id types.ID, serverID types.ID) error
 	DisconnectFromServer(ctx context.Context, zone string, id types.ID) error
@@ -668,6 +668,37 @@ type SimpleMonitorAPI interface {
 }
 
 /*************************************************
+* SimpleNotificationDestinationAPI
+*************************************************/
+
+// SimpleNotificationDestinationAPI is interface for operate SimpleNotificationDestination resource
+type SimpleNotificationDestinationAPI interface {
+	Find(ctx context.Context, conditions *FindCondition) (*SimpleNotificationDestinationFindResult, error)
+	Create(ctx context.Context, param *SimpleNotificationDestinationCreateRequest) (*SimpleNotificationDestination, error)
+	Read(ctx context.Context, id types.ID) (*SimpleNotificationDestination, error)
+	Update(ctx context.Context, id types.ID, param *SimpleNotificationDestinationUpdateRequest) (*SimpleNotificationDestination, error)
+	UpdateSettings(ctx context.Context, id types.ID, param *SimpleNotificationDestinationUpdateSettingsRequest) (*SimpleNotificationDestination, error)
+	Delete(ctx context.Context, id types.ID) error
+	Status(ctx context.Context, id types.ID) (*SimpleNotificationDestinationStatus, error)
+}
+
+/*************************************************
+* SimpleNotificationGroupAPI
+*************************************************/
+
+// SimpleNotificationGroupAPI is interface for operate SimpleNotificationGroup resource
+type SimpleNotificationGroupAPI interface {
+	Find(ctx context.Context, conditions *FindCondition) (*SimpleNotificationGroupFindResult, error)
+	Create(ctx context.Context, param *SimpleNotificationGroupCreateRequest) (*SimpleNotificationGroup, error)
+	Read(ctx context.Context, id types.ID) (*SimpleNotificationGroup, error)
+	Update(ctx context.Context, id types.ID, param *SimpleNotificationGroupUpdateRequest) (*SimpleNotificationGroup, error)
+	UpdateSettings(ctx context.Context, id types.ID, param *SimpleNotificationGroupUpdateSettingsRequest) (*SimpleNotificationGroup, error)
+	Delete(ctx context.Context, id types.ID) error
+	PostMessage(ctx context.Context, id types.ID, message string) error
+	History(ctx context.Context) (*SimpleNotificationHistories, error)
+}
+
+/*************************************************
 * SSHKeyAPI
 *************************************************/
 
@@ -675,7 +706,6 @@ type SimpleMonitorAPI interface {
 type SSHKeyAPI interface {
 	Find(ctx context.Context, conditions *FindCondition) (*SSHKeyFindResult, error)
 	Create(ctx context.Context, param *SSHKeyCreateRequest) (*SSHKey, error)
-	Generate(ctx context.Context, param *SSHKeyGenerateRequest) (*SSHKeyGenerated, error)
 	Read(ctx context.Context, id types.ID) (*SSHKey, error)
 	Update(ctx context.Context, id types.ID, param *SSHKeyUpdateRequest) (*SSHKey, error)
 	Delete(ctx context.Context, id types.ID) error

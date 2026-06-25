@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,11 +50,12 @@ type GSLBSettings struct {
 
 // GSLBSetting GSLBの設定
 type GSLBSetting struct {
-	DelayLoop   int              `json:",omitempty" yaml:"delay_loop,omitempty" structs:",omitempty"`
-	HealthCheck *GSLBHealthCheck `json:",omitempty" yaml:"health_check,omitempty" structs:",omitempty"`
-	Weighted    types.StringFlag `yaml:"weighted"`
-	Servers     []*GSLBServer    `yaml:"servers"`
-	SorryServer string           `json:",omitempty" yaml:",omitempty" structs:",omitempty"` // ソーリーサーバー
+	DelayLoop          int                       `json:",omitempty" yaml:"delay_loop,omitempty" structs:",omitempty"`
+	HealthCheck        *GSLBHealthCheck          `json:",omitempty" yaml:"health_check,omitempty" structs:",omitempty"`
+	Weighted           types.StringFlag          `yaml:"weighted"`
+	Servers            []*GSLBServer             `yaml:"servers"`
+	SorryServer        string                    `json:",omitempty" yaml:",omitempty" structs:",omitempty"` // ソーリーサーバー
+	MonitoringSuiteLog *MonitoringSuiteLogString `json:",omitempty" yaml:"monitoring_suite_log,omitempty" structs:",omitempty"`
 }
 
 // GSLBHealthCheck ヘルスチェック

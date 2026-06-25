@@ -1,12 +1,12 @@
-Name = "UKFast SafeDNS"
+Name = "ANS SafeDNS"
 Description = ''''''
-URL = "https://www.ukfast.co.uk/dns-hosting.html"
+URL = "https://www.ans.co.uk/"
 Code = "safedns"
 Since = "v4.6.0"
 
 Example = '''
 SAFEDNS_AUTH_TOKEN=xxxxxx \
-lego --email you@example.com --dns safedns -d '*.example.com' -d example.com run
+lego --dns safedns -d '*.example.com' -d example.com run
 '''
 
 [Configuration]

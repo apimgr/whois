@@ -68,8 +68,9 @@ func NewDefaultConfig() *Config {
 
 // DNSProvider implements the challenge.Provider interface.
 type DNSProvider struct {
-	config       *Config
-	client       *gophercloud.ServiceClient
+	config *Config
+	client *gophercloud.ServiceClient
+
 	dnsEntriesMu sync.Mutex
 }
 
@@ -85,7 +86,6 @@ func NewDNSProvider() (*DNSProvider, error) {
 		opts, erro := clientconfig.AuthOptions(&clientconfig.ClientOpts{
 			Cloud: val[EnvCloud],
 		})
-
 		if erro != nil {
 			return nil, fmt.Errorf("designate: %w", erro)
 		}
@@ -202,6 +202,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	if err != nil {
 		return fmt.Errorf("designate: error for %s in CleanUp: %w", info.EffectiveFQDN, err)
 	}
+
 	return nil
 }
 
@@ -241,14 +242,20 @@ func (d *DNSProvider) updateRecord(record *recordsets.RecordSet, value string) e
 	}
 
 	result := recordsets.Update(d.client, record.ZoneID, record.ID, updateOpts)
+
 	return result.Err
 }
 
 func (d *DNSProvider) getZoneID(wanted string) (string, error) {
-	allPages, err := zones.List(d.client, nil).AllPages()
+	listOpts := zones.ListOpts{
+		Name: wanted,
+	}
+
+	allPages, err := zones.List(d.client, listOpts).AllPages()
 	if err != nil {
 		return "", err
 	}
+
 	allZones, err := zones.ExtractZones(allPages)
 	if err != nil {
 		return "", err
@@ -259,14 +266,21 @@ func (d *DNSProvider) getZoneID(wanted string) (string, error) {
 			return zone.ID, nil
 		}
 	}
+
 	return "", fmt.Errorf("zone id not found for %s", wanted)
 }
 
 func (d *DNSProvider) getRecord(zoneID, wanted string) (*recordsets.RecordSet, error) {
-	allPages, err := recordsets.ListByZone(d.client, zoneID, nil).AllPages()
+	listOpts := recordsets.ListOpts{
+		Name: wanted,
+		Type: "TXT",
+	}
+
+	allPages, err := recordsets.ListByZone(d.client, zoneID, listOpts).AllPages()
 	if err != nil {
 		return nil, err
 	}
+
 	allRecords, err := recordsets.ExtractRecordSets(allPages)
 	if err != nil {
 		return nil, err

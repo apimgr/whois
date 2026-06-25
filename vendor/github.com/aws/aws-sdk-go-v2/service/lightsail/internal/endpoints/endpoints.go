@@ -87,6 +87,7 @@ func New() *Resolver {
 var partitionRegexp = struct {
 	Aws      *regexp.Regexp
 	AwsCn    *regexp.Regexp
+	AwsEusc  *regexp.Regexp
 	AwsIso   *regexp.Regexp
 	AwsIsoB  *regexp.Regexp
 	AwsIsoE  *regexp.Regexp
@@ -96,6 +97,7 @@ var partitionRegexp = struct {
 
 	Aws:      regexp.MustCompile("^(us|eu|ap|sa|ca|me|af|il|mx)\\-\\w+\\-\\d+$"),
 	AwsCn:    regexp.MustCompile("^cn\\-\\w+\\-\\d+$"),
+	AwsEusc:  regexp.MustCompile("^eusc\\-(de)\\-\\w+\\-\\d+$"),
 	AwsIso:   regexp.MustCompile("^us\\-iso\\-\\w+\\-\\d+$"),
 	AwsIsoB:  regexp.MustCompile("^us\\-isob\\-\\w+\\-\\d+$"),
 	AwsIsoE:  regexp.MustCompile("^eu\\-isoe\\-\\w+\\-\\d+$"),
@@ -153,6 +155,12 @@ var defaultPartitions = endpoints.Partitions{
 			}: endpoints.Endpoint{},
 			endpoints.EndpointKey{
 				Region: "ap-southeast-2",
+			}: endpoints.Endpoint{},
+			endpoints.EndpointKey{
+				Region: "ap-southeast-3",
+			}: endpoints.Endpoint{},
+			endpoints.EndpointKey{
+				Region: "ap-southeast-5",
 			}: endpoints.Endpoint{},
 			endpoints.EndpointKey{
 				Region: "ca-central-1",
@@ -216,6 +224,41 @@ var defaultPartitions = endpoints.Partitions{
 			},
 		},
 		RegionRegex:    partitionRegexp.AwsCn,
+		IsRegionalized: true,
+	},
+	{
+		ID: "aws-eusc",
+		Defaults: map[endpoints.DefaultKey]endpoints.Endpoint{
+			{
+				Variant: endpoints.DualStackVariant,
+			}: {
+				Hostname:          "lightsail.{region}.api.amazonwebservices.eu",
+				Protocols:         []string{"https"},
+				SignatureVersions: []string{"v4"},
+			},
+			{
+				Variant: endpoints.FIPSVariant,
+			}: {
+				Hostname:          "lightsail-fips.{region}.amazonaws.eu",
+				Protocols:         []string{"https"},
+				SignatureVersions: []string{"v4"},
+			},
+			{
+				Variant: endpoints.FIPSVariant | endpoints.DualStackVariant,
+			}: {
+				Hostname:          "lightsail-fips.{region}.api.amazonwebservices.eu",
+				Protocols:         []string{"https"},
+				SignatureVersions: []string{"v4"},
+			},
+			{
+				Variant: 0,
+			}: {
+				Hostname:          "lightsail.{region}.amazonaws.eu",
+				Protocols:         []string{"https"},
+				SignatureVersions: []string{"v4"},
+			},
+		},
+		RegionRegex:    partitionRegexp.AwsEusc,
 		IsRegionalized: true,
 	},
 	{

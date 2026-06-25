@@ -8,13 +8,14 @@ import (
 	"time"
 )
 
-func authToken(userName string, wapiPass string) string {
+func authToken(userName, wapiPass string) string {
 	return sha1string(userName + sha1string(wapiPass) + czechHourString())
 }
 
 func sha1string(txt string) string {
 	h := sha1.New()
 	_, _ = io.WriteString(h, txt)
+
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -46,18 +47,19 @@ func utcToCet(utc time.Time) time.Time {
 	if utcMonth < time.March || utcMonth > time.October {
 		return utc.Add(time.Hour)
 	}
+
 	if utcMonth > time.March && utcMonth < time.October {
 		return utc.Add(time.Hour * 2)
 	}
 
 	dayOff := 0
+
 	breaking := time.Date(utc.Year(), utcMonth+1, dayOff, 1, 0, 0, 0, time.UTC)
-	for {
-		if breaking.Weekday() == time.Sunday {
-			break
-		}
+	for breaking.Weekday() != time.Sunday {
 		dayOff--
+
 		breaking = time.Date(utc.Year(), utcMonth+1, dayOff, 1, 0, 0, 0, time.UTC)
+
 		if dayOff < -7 {
 			panic("safety exit to avoid infinite loop")
 		}
@@ -66,6 +68,7 @@ func utcToCet(utc time.Time) time.Time {
 	if (utcMonth == time.March && utc.Before(breaking)) || (utcMonth == time.October && utc.After(breaking)) {
 		return utc.Add(time.Hour)
 	}
+
 	return utc.Add(time.Hour * 2)
 }
 

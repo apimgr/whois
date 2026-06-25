@@ -5,14 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/internal/ptr"
-	"github.com/miekg/dns"
+	"github.com/go-acme/lego/v4/providers/dns/internal/useragent"
 	"github.com/nrdcg/bunny-go"
 	"golang.org/x/net/publicsuffix"
 )
@@ -26,6 +28,7 @@ const (
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
 	EnvPollingInterval    = envNamespace + "POLLING_INTERVAL"
+	EnvHTTPTimeout        = envNamespace + "HTTP_TIMEOUT"
 )
 
 const minTTL = 60
@@ -34,10 +37,12 @@ var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
 // Config is used to configure the creation of the DNSProvider.
 type Config struct {
-	APIKey             string
+	APIKey string
+
 	PropagationTimeout time.Duration
 	PollingInterval    time.Duration
 	TTL                int
+	HTTPClient         *http.Client
 }
 
 // NewDefaultConfig returns a default configuration for the DNSProvider.
@@ -46,6 +51,9 @@ func NewDefaultConfig() *Config {
 		TTL:                env.GetOrDefaultInt(EnvTTL, minTTL),
 		PropagationTimeout: env.GetOrDefaultSecond(EnvPropagationTimeout, 120*time.Second),
 		PollingInterval:    env.GetOrDefaultSecond(EnvPollingInterval, dns01.DefaultPollingInterval),
+		HTTPClient: &http.Client{
+			Timeout: env.GetOrDefaultSecond(EnvHTTPTimeout, 30*time.Second),
+		},
 	}
 }
 
@@ -83,9 +91,19 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		return nil, fmt.Errorf("bunny: invalid TTL, TTL (%d) must be greater than %d", config.TTL, minTTL)
 	}
 
-	client := bunny.NewClient(config.APIKey)
+	if config.HTTPClient == nil {
+		config.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+	}
 
-	return &DNSProvider{config: config, client: client}, nil
+	config.HTTPClient = clientdebug.Wrap(config.HTTPClient)
+
+	return &DNSProvider{
+		config: config,
+		client: bunny.NewClient(config.APIKey,
+			bunny.WithUserAgent(useragent.Get()),
+			bunny.WithHTTPClient(config.HTTPClient),
+		),
+	}, nil
 }
 
 // Timeout returns the timeout and interval to use when checking for DNS propagation.
@@ -141,10 +159,12 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	}
 
 	var record *bunny.DNSRecord
+
 	for _, r := range zone.Records {
 		if ptr.Deref(r.Name) == subDomain && ptr.Deref(r.Type) == bunny.DNSRecordTypeTXT {
 			r := r
 			record = &r
+
 			break
 		}
 	}
@@ -180,6 +200,7 @@ func findZone(zones *bunny.DNSZones, domain string) *bunny.DNSZone {
 	var domainLength int
 
 	var zone *bunny.DNSZone
+
 	for _, item := range zones.Items {
 		if item == nil {
 			continue
@@ -200,16 +221,14 @@ func findZone(zones *bunny.DNSZones, domain string) *bunny.DNSZone {
 func possibleDomains(domain string) []string {
 	var domains []string
 
-	labelIndexes := dns.Split(domain)
-
-	for _, index := range labelIndexes {
-		tld, _ := publicsuffix.PublicSuffix(domain)
-		if tld == domain[index:] {
+	tld, _ := publicsuffix.PublicSuffix(domain)
+	for d := range dns01.DomainsSeq(domain) {
+		if tld == d {
 			// skip the TLD
 			break
 		}
 
-		domains = append(domains, dns01.UnFqdn(domain[index:]))
+		domains = append(domains, dns01.UnFqdn(d))
 	}
 
 	return domains

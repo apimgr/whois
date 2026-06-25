@@ -10,6 +10,8 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
+	"github.com/miekg/dns"
 	"github.com/nrdcg/auroradns"
 )
 
@@ -51,10 +53,11 @@ func NewDefaultConfig() *Config {
 
 // DNSProvider implements the challenge.Provider interface.
 type DNSProvider struct {
+	config *Config
+	client *auroradns.Client
+
 	recordIDs   map[string]string
 	recordIDsMu sync.Mutex
-	config      *Config
-	client      *auroradns.Client
 }
 
 // NewDNSProvider returns a DNSProvider instance configured for AuroraDNS.
@@ -93,7 +96,7 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		return nil, fmt.Errorf("aurora: %w", err)
 	}
 
-	client, err := auroradns.NewClient(tr.Client(), auroradns.WithBaseURL(config.BaseURL))
+	client, err := auroradns.NewClient(clientdebug.Wrap(tr.Client()), auroradns.WithBaseURL(config.BaseURL))
 	if err != nil {
 		return nil, fmt.Errorf("aurora: %w", err)
 	}
@@ -161,7 +164,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		return fmt.Errorf("aurora: unknown recordID for %q", info.EffectiveFQDN)
 	}
 
-	authZone, err := dns01.FindZoneByFqdn(dns01.ToFqdn(info.EffectiveFQDN))
+	authZone, err := dns01.FindZoneByFqdn(dns.Fqdn(info.EffectiveFQDN))
 	if err != nil {
 		return fmt.Errorf("aurora: could not find zone for domain %q: %w", domain, err)
 	}

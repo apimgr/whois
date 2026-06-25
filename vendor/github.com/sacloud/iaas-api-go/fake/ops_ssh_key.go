@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,23 +62,6 @@ func (o *SSHKeyOp) Create(ctx context.Context, param *iaas.SSHKeyCreateRequest) 
 	result.Fingerprint = ssh.FingerprintLegacyMD5(pk)
 
 	putSSHKey(iaas.APIDefaultZone, result)
-	return result, nil
-}
-
-// Generate is fake implementation
-func (o *SSHKeyOp) Generate(ctx context.Context, param *iaas.SSHKeyGenerateRequest) (*iaas.SSHKeyGenerated, error) {
-	key := &iaas.SSHKey{}
-	copySameNameField(param, key)
-	fill(key, fillID, fillCreatedAt)
-
-	result := &iaas.SSHKeyGenerated{}
-	copySameNameField(key, result)
-
-	result.PublicKey = GeneratedPublicKey
-	result.PrivateKey = GeneratedPrivateKey
-	result.Fingerprint = GeneratedFingerprint
-
-	putSSHKey(iaas.APIDefaultZone, key)
 	return result, nil
 }
 

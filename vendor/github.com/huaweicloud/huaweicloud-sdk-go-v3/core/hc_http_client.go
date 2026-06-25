@@ -20,6 +20,7 @@
 package core
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -48,6 +49,7 @@ const (
 	contentType     = "Content-Type"
 	applicationXml  = "application/xml"
 	applicationBson = "application/bson"
+	usdkValue       = "huaweicloud-usdk-go/3.0"
 )
 
 type HcHttpClient struct {
@@ -111,6 +113,7 @@ func (hc *HcHttpClient) SyncInvokeWithExtraHeaders(req interface{}, reqDef *def.
 		httpRequest *request.DefaultHttpRequest
 		resp        *response.DefaultHttpResponse
 		err         error
+		errMsgs     []string
 	)
 
 	for {
@@ -124,15 +127,45 @@ func (hc *HcHttpClient) SyncInvokeWithExtraHeaders(req interface{}, reqDef *def.
 			break
 		}
 
-		var dnsErr *net.DNSError
-		if errors.As(err, &dnsErr) && atomic.LoadInt32(&hc.endpointIndex) < int32(len(hc.endpoints)-1) {
+		if shouldRetry(err) && atomic.LoadInt32(&hc.endpointIndex) < int32(len(hc.endpoints)-1) {
 			atomic.AddInt32(&hc.endpointIndex, 1)
+			errMsgs = append(errMsgs, err.Error())
 		} else {
-			return nil, err
+			if len(errMsgs) == 0 {
+				return nil, err
+			}
+			errMsgs = append(errMsgs, err.Error())
+			return nil, errors.New(strings.Join(errMsgs, "; "))
 		}
 	}
 
 	return hc.extractResponse(httpRequest, resp, reqDef)
+}
+
+func shouldRetry(err error) bool {
+	var urlError *url.Error
+	if errors.As(err, &urlError) {
+		var dnsError *net.DNSError
+		if errors.As(err, &dnsError) {
+			return true
+		}
+
+		if urlError.Err == nil {
+			return false
+		}
+
+		switch urlError.Err.(type) {
+		case x509.UnknownAuthorityError:
+			return true
+		case x509.CertificateInvalidError:
+			return true
+		case x509.HostnameError:
+			return true
+		default:
+		}
+	}
+
+	return false
 }
 
 func (hc *HcHttpClient) extractEndpoint(req interface{}, reqDef *def.HttpRequestDef, attrMaps map[string]string) (string, error) {
@@ -215,10 +248,13 @@ func (hc *HcHttpClient) fillExtraHeaders(builder *request.HttpRequestBuilder, ex
 	}
 
 	// user-agent
-	uaValue := "huaweicloud-usdk-go/3.0"
+	uaValue := usdkValue
+	if hc.httpClient.GetHttpConfig().UserAgent != "" {
+		uaValue = uaValue + "; " + hc.httpClient.GetHttpConfig().UserAgent
+	}
 	for k, v := range headers {
 		if strings.ToLower(k) == strings.ToLower(userAgent) {
-			uaValue = uaValue + ";" + v
+			uaValue = uaValue + "; " + v
 		} else {
 			builder.AddHeaderParam(k, v)
 		}
@@ -260,6 +296,8 @@ func (hc *HcHttpClient) fillParamsFromReq(req interface{}, t reflect.Type, reqDe
 			hasBody = true
 		case def.Form:
 			builder.AddFormParam(fieldDef.JsonTag, value.Interface().(def.FormData))
+		default:
+
 		}
 	}
 

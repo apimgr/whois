@@ -11,20 +11,25 @@ import (
 
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 	"github.com/go-acme/lego/v4/providers/dns/internal/useragent"
+	"github.com/miekg/dns"
 	selectelapi "github.com/selectel/domains-go/pkg/v2"
-	"github.com/selectel/go-selvpcclient/v3/selvpcclient"
+	"github.com/selectel/go-selvpcclient/v4/selvpcclient"
 	"golang.org/x/net/idna"
 )
 
 const (
 	envNamespace = "SELECTELV2_"
 
-	EnvBaseURL    = envNamespace + "BASE_URL"
-	EnvUsernameOS = envNamespace + "USERNAME"
-	EnvPasswordOS = envNamespace + "PASSWORD"
-	EnvAccount    = envNamespace + "ACCOUNT_ID"
-	EnvProjectID  = envNamespace + "PROJECT_ID"
+	EnvBaseURL        = envNamespace + "BASE_URL"
+	EnvUsernameOS     = envNamespace + "USERNAME"
+	EnvPasswordOS     = envNamespace + "PASSWORD"
+	EnvDomainName     = envNamespace + "ACCOUNT_ID"
+	EnvProjectID      = envNamespace + "PROJECT_ID"
+	EnvAuthRegion     = envNamespace + "AUTH_REGION"
+	EnvAuthURL        = envNamespace + "AUTH_URL"
+	EnvUserDomainName = envNamespace + "USER_DOMAIN_NAME"
 
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
@@ -33,7 +38,12 @@ const (
 )
 
 const (
-	defaultBaseURL            = "https://api.selectel.ru/domains/v2"
+	defaultBaseURL    = "https://api.selectel.ru/domains/v2"
+	defaultAuthRegion = "ru-1"
+	defaultAuthURL    = "https://cloud.api.selcloud.ru/identity/v3/"
+)
+
+const (
 	defaultTTL                = 60
 	defaultPropagationTimeout = 120 * time.Second
 	defaultPollingInterval    = 5 * time.Second
@@ -46,11 +56,15 @@ var errNotFound = errors.New("rrset not found")
 
 // Config is used to configure the creation of the DNSProvider.
 type Config struct {
-	BaseURL            string
-	Username           string
-	Password           string
-	Account            string
-	ProjectID          string
+	BaseURL        string
+	Username       string
+	Password       string
+	DomainName     string
+	ProjectID      string
+	AuthURL        string
+	AuthRegion     string
+	UserDomainName string
+
 	TTL                int
 	PropagationTimeout time.Duration
 	PollingInterval    time.Duration
@@ -60,7 +74,10 @@ type Config struct {
 // NewDefaultConfig returns a default configuration for the DNSProvider.
 func NewDefaultConfig() *Config {
 	return &Config{
-		BaseURL:            env.GetOrDefaultString(EnvBaseURL, defaultBaseURL),
+		BaseURL:    env.GetOrDefaultString(EnvBaseURL, defaultBaseURL),
+		AuthRegion: env.GetOrDefaultString(EnvAuthRegion, defaultAuthRegion),
+		AuthURL:    env.GetOrDefaultString(EnvAuthURL, defaultAuthURL),
+
 		TTL:                env.GetOrDefaultInt(EnvTTL, defaultTTL),
 		PropagationTimeout: env.GetOrDefaultSecond(EnvPropagationTimeout, defaultPropagationTimeout),
 		PollingInterval:    env.GetOrDefaultSecond(EnvPollingInterval, defaultPollingInterval),
@@ -77,7 +94,7 @@ type DNSProvider struct {
 
 // NewDNSProvider returns a DNSProvider instance configured for Selectel Domains APIv2.
 func NewDNSProvider() (*DNSProvider, error) {
-	values, err := env.Get(EnvUsernameOS, EnvPasswordOS, EnvAccount, EnvProjectID)
+	values, err := env.Get(EnvUsernameOS, EnvPasswordOS, EnvDomainName, EnvProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("selectelv2: %w", err)
 	}
@@ -85,8 +102,9 @@ func NewDNSProvider() (*DNSProvider, error) {
 	config := NewDefaultConfig()
 	config.Username = values[EnvUsernameOS]
 	config.Password = values[EnvPasswordOS]
-	config.Account = values[EnvAccount]
+	config.DomainName = values[EnvDomainName]
 	config.ProjectID = values[EnvProjectID]
+	config.UserDomainName = env.GetOrDefaultString(EnvUserDomainName, "")
 
 	return NewDNSProviderConfig(config)
 }
@@ -105,8 +123,8 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 		return nil, errors.New("selectelv2: missing password")
 	}
 
-	if config.Account == "" {
-		return nil, errors.New("selectelv2: missing account")
+	if config.DomainName == "" {
+		return nil, errors.New("selectelv2: missing account ID")
 	}
 
 	if config.ProjectID == "" {
@@ -117,22 +135,22 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	useragent.SetHeader(headers)
 
 	return &DNSProvider{
-		baseClient: selectelapi.NewClient(config.BaseURL, config.HTTPClient, headers),
+		baseClient: selectelapi.NewClient(config.BaseURL, clientdebug.Wrap(config.HTTPClient), headers),
 		config:     config,
 	}, nil
 }
 
 // Timeout returns the Timeout and interval to use when checking for DNS propagation.
 // Adjusting here to cope with spikes in propagation times.
-func (p *DNSProvider) Timeout() (timeout, interval time.Duration) {
-	return p.config.PropagationTimeout, p.config.PollingInterval
+func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
+	return d.config.PropagationTimeout, d.config.PollingInterval
 }
 
 // Present creates a TXT record to fulfill DNS-01 challenge.
-func (p *DNSProvider) Present(domain, _, keyAuth string) error {
+func (d *DNSProvider) Present(domain, _, keyAuth string) error {
 	ctx := context.Background()
 
-	client, err := p.authorize()
+	client, err := d.authorize(ctx)
 	if err != nil {
 		return fmt.Errorf("selectelv2: authorize: %w", err)
 	}
@@ -153,7 +171,7 @@ func (p *DNSProvider) Present(domain, _, keyAuth string) error {
 		newRRSet := &selectelapi.RRSet{
 			Name:    info.EffectiveFQDN,
 			Type:    selectelapi.TXT,
-			TTL:     p.config.TTL,
+			TTL:     d.config.TTL,
 			Records: []selectelapi.RecordItem{{Content: fmt.Sprintf("%q", info.Value)}},
 		}
 
@@ -176,10 +194,10 @@ func (p *DNSProvider) Present(domain, _, keyAuth string) error {
 }
 
 // CleanUp removes a TXT record used for DNS-01 challenge.
-func (p *DNSProvider) CleanUp(domain, _, keyAuth string) error {
+func (d *DNSProvider) CleanUp(domain, _, keyAuth string) error {
 	ctx := context.Background()
 
-	client, err := p.authorize()
+	client, err := d.authorize(ctx)
 	if err != nil {
 		return fmt.Errorf("selectelv2: authorize: %w", err)
 	}
@@ -220,8 +238,8 @@ func (p *DNSProvider) CleanUp(domain, _, keyAuth string) error {
 	return nil
 }
 
-func (p *DNSProvider) authorize() (*clientWrapper, error) {
-	token, err := obtainOpenstackToken(p.config)
+func (d *DNSProvider) authorize(ctx context.Context) (*clientWrapper, error) {
+	token, err := obtainOpenstackToken(ctx, d.config)
 	if err != nil {
 		return nil, err
 	}
@@ -230,16 +248,20 @@ func (p *DNSProvider) authorize() (*clientWrapper, error) {
 	extraHeaders.Set(tokenHeader, token)
 
 	return &clientWrapper{
-		DNSClient: p.baseClient.WithHeaders(extraHeaders),
+		DNSClient: d.baseClient.WithHeaders(extraHeaders),
 	}, nil
 }
 
-func obtainOpenstackToken(config *Config) (string, error) {
+func obtainOpenstackToken(ctx context.Context, config *Config) (string, error) {
 	vpcClient, err := selvpcclient.NewClient(&selvpcclient.ClientOptions{
+		Context:        ctx,
+		DomainName:     config.DomainName,
+		AuthURL:        config.AuthURL,
+		AuthRegion:     config.AuthRegion,
 		Username:       config.Username,
 		Password:       config.Password,
-		UserDomainName: config.Account,
 		ProjectID:      config.ProjectID,
+		UserDomainName: config.UserDomainName,
 	})
 	if err != nil {
 		return "", fmt.Errorf("new VPC client: %w", err)
@@ -266,7 +288,7 @@ func (w *clientWrapper) getZone(ctx context.Context, name string) (*selectelapi.
 	}
 
 	for _, zone := range zones.GetItems() {
-		if zone.Name == dns01.ToFqdn(unicodeName) {
+		if zone.Name == dns.Fqdn(unicodeName) {
 			return zone, nil
 		}
 	}
@@ -275,10 +297,10 @@ func (w *clientWrapper) getZone(ctx context.Context, name string) (*selectelapi.
 		return nil, fmt.Errorf("zone '%s' for challenge has not been found", name)
 	}
 
-	// -1 can not be returned since if no dots present we exit above
-	i := strings.Index(name, ".")
+	// after is always defined since if no dots present we exit above.
+	_, after, _ := strings.Cut(name, ".")
 
-	return w.getZone(ctx, name[i+1:])
+	return w.getZone(ctx, after)
 }
 
 func (w *clientWrapper) getRRset(ctx context.Context, name, zoneID string) (*selectelapi.RRSet, error) {
@@ -295,7 +317,7 @@ func (w *clientWrapper) getRRset(ctx context.Context, name, zoneID string) (*sel
 	}
 
 	for _, rrset := range resp.GetItems() {
-		if rrset.Name == dns01.ToFqdn(unicodeName) {
+		if rrset.Name == dns.Fqdn(unicodeName) {
 			return rrset, nil
 		}
 	}

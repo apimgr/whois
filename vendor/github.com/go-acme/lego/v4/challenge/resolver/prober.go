@@ -50,11 +50,14 @@ func NewProber(solverManager *SolverManager) *Prober {
 func (p *Prober) Solve(authorizations []acme.Authorization) error {
 	failures := make(obtainError)
 
-	var authSolvers []*selectedAuthSolver
-	var authSolversSequential []*selectedAuthSolver
+	var (
+		authSolvers           []*selectedAuthSolver
+		authSolversSequential []*selectedAuthSolver
+	)
 
 	// Loop through the resources, basically through the domains.
 	// First pass just selects a solver for each authz.
+
 	for _, authz := range authorizations {
 		domain := challenge.GetTargetedDomain(authz)
 		if authz.Status == acme.StatusValid {
@@ -90,47 +93,88 @@ func (p *Prober) Solve(authorizations []acme.Authorization) error {
 	if len(failures) > 0 {
 		return failures
 	}
+
 	return nil
 }
 
 func sequentialSolve(authSolvers []*selectedAuthSolver, failures obtainError) {
+	// Some CA are using the same token,
+	// this can be a problem with the DNS01 challenge when the DNS provider doesn't support duplicate TXT records.
+	// In the sequential mode, this is not a problem because we can solve the challenges in order.
+	// But it can reduce the number of call the DNS provider APIs.
+	uniq := make(map[string]struct{})
+
 	for i, authSolver := range authSolvers {
 		// Submit the challenge
 		domain := challenge.GetTargetedDomain(authSolver.authz)
 
+		chlg, _ := challenge.FindChallenge(challenge.DNS01, authSolver.authz)
+
 		if solvr, ok := authSolver.solver.(preSolver); ok {
+			if _, ok := uniq[authSolver.authz.Identifier.Value+chlg.Token]; ok && chlg.Token != "" {
+				log.Infof("acme: duplicate token for %q (DNS-01); skipping pre-solve.", authSolver.authz.Identifier.Value)
+				continue
+			}
+
 			err := solvr.PreSolve(authSolver.authz)
 			if err != nil {
 				failures[domain] = err
+
 				cleanUp(authSolver.solver, authSolver.authz)
+
 				continue
 			}
+
+			uniq[authSolver.authz.Identifier.Value+chlg.Token] = struct{}{}
 		}
 
 		// Solve challenge
 		err := authSolver.solver.Solve(authSolver.authz)
 		if err != nil {
 			failures[domain] = err
+
 			cleanUp(authSolver.solver, authSolver.authz)
+
 			continue
 		}
 
-		// Clean challenge
-		cleanUp(authSolver.solver, authSolver.authz)
+		if _, ok := uniq[authSolver.authz.Identifier.Value+chlg.Token]; ok || chlg.Token == "" {
+			// Clean challenge
+			cleanUp(authSolver.solver, authSolver.authz)
 
-		if len(authSolvers)-1 > i {
-			solvr := authSolver.solver.(sequential)
-			_, interval := solvr.Sequential()
-			log.Infof("sequence: wait for %s", interval)
-			time.Sleep(interval)
+			if len(authSolvers)-1 > i {
+				solvr := authSolver.solver.(sequential)
+				_, interval := solvr.Sequential()
+				log.Infof("sequence: wait for %s", interval)
+				time.Sleep(interval)
+			}
+
+			delete(uniq, authSolver.authz.Identifier.Value+chlg.Token)
+		} else {
+			log.Infof("acme: duplicate token for %q (DNS-01); skipping cleanup.", authSolver.authz.Identifier.Value)
 		}
 	}
 }
 
 func parallelSolve(authSolvers []*selectedAuthSolver, failures obtainError) {
+	// Some CA are using the same token,
+	// this can be a problem with the DNS01 challenge when the DNS provider doesn't support duplicate TXT records.
+	uniq := make(map[string]struct{})
+
 	// For all valid preSolvers, first submit the challenges, so they have max time to propagate
 	for _, authSolver := range authSolvers {
 		authz := authSolver.authz
+
+		chlg, err := challenge.FindChallenge(challenge.DNS01, authz)
+		if err == nil {
+			if _, ok := uniq[authz.Identifier.Value+chlg.Token]; ok {
+				log.Infof("acme: duplicate token for %q (DNS-01); skipping pre-solve.", authSolver.authz.Identifier.Value)
+				continue
+			}
+
+			uniq[authz.Identifier.Value+chlg.Token] = struct{}{}
+		}
+
 		if solvr, ok := authSolver.solver.(preSolver); ok {
 			err := solvr.PreSolve(authz)
 			if err != nil {
@@ -142,6 +186,16 @@ func parallelSolve(authSolvers []*selectedAuthSolver, failures obtainError) {
 	defer func() {
 		// Clean all created TXT records
 		for _, authSolver := range authSolvers {
+			chlg, err := challenge.FindChallenge(challenge.DNS01, authSolver.authz)
+			if err == nil {
+				if _, ok := uniq[authSolver.authz.Identifier.Value+chlg.Token]; ok {
+					delete(uniq, authSolver.authz.Identifier.Value+chlg.Token)
+				} else {
+					log.Infof("acme: duplicate token for %q (DNS-01); skipping cleanup.", authSolver.authz.Identifier.Value)
+					continue
+				}
+			}
+
 			cleanUp(authSolver.solver, authSolver.authz)
 		}
 	}()
@@ -149,6 +203,7 @@ func parallelSolve(authSolvers []*selectedAuthSolver, failures obtainError) {
 	// Finally solve all challenges for real
 	for _, authSolver := range authSolvers {
 		authz := authSolver.authz
+
 		domain := challenge.GetTargetedDomain(authz)
 		if failures[domain] != nil {
 			// already failed in previous loop
@@ -165,6 +220,7 @@ func parallelSolve(authSolvers []*selectedAuthSolver, failures obtainError) {
 func cleanUp(solvr solver, authz acme.Authorization) {
 	if solvr, ok := solvr.(cleanup); ok {
 		domain := challenge.GetTargetedDomain(authz)
+
 		err := solvr.CleanUp(authz)
 		if err != nil {
 			log.Warnf("[%s] acme: cleaning up failed: %v ", domain, err)

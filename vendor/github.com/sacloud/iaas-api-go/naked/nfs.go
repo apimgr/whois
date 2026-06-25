@@ -1,4 +1,4 @@
-// Copyright 2022-2023 The sacloud/iaas-api-go Authors
+// Copyright 2022-2025 The sacloud/iaas-api-go Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ type NFS struct {
 	Availability types.EAvailability `json:",omitempty" yaml:"availability,omitempty" structs:",omitempty"`
 	Class        string              `json:",omitempty" yaml:"class,omitempty" structs:",omitempty"`
 	Instance     *Instance           `json:",omitempty" yaml:"instance,omitempty" structs:",omitempty"`
-	Interfaces   []*Interface        `json:",omitempty" yaml:"interfaces,omitempty" structs:",omitempty"`
+	Interfaces   Interfaces          `json:",omitempty" yaml:"interfaces,omitempty" structs:",omitempty"`
 	Plan         *AppliancePlan      `json:",omitempty" yaml:"plan,omitempty" structs:",omitempty"`
 	Remark       *ApplianceRemark    `json:",omitempty" yaml:"remark,omitempty" structs:",omitempty"`
 	ServiceClass string              `json:",omitempty" yaml:"service_class,omitempty" structs:",omitempty"`

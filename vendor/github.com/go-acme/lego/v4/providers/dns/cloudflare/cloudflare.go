@@ -11,21 +11,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/log"
 	"github.com/go-acme/lego/v4/platform/config/env"
+	"github.com/go-acme/lego/v4/providers/dns/cloudflare/internal"
 )
 
 // Environment variables names.
 const (
 	envNamespace = "CLOUDFLARE_"
 
-	EnvEmail        = envNamespace + "EMAIL"
-	EnvAPIKey       = envNamespace + "API_KEY"
+	EnvEmail  = envNamespace + "EMAIL"
+	EnvAPIKey = envNamespace + "API_KEY"
+
 	EnvDNSAPIToken  = envNamespace + "DNS_API_TOKEN"
 	EnvZoneAPIToken = envNamespace + "ZONE_API_TOKEN"
+
+	EnvBaseURL = envNamespace + "BASE_URL"
 
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
@@ -52,6 +55,8 @@ type Config struct {
 
 	AuthToken string
 	ZoneToken string
+
+	BaseURL string
 
 	TTL                int
 	PropagationTimeout time.Duration
@@ -99,6 +104,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 	)
 	if err != nil {
 		var errT error
+
 		values, errT = env.GetWithFallback(
 			[]string{EnvDNSAPIToken, altEnvName(EnvDNSAPIToken)},
 			[]string{EnvZoneAPIToken, altEnvName(EnvZoneAPIToken), EnvDNSAPIToken, altEnvName(EnvDNSAPIToken)},
@@ -114,6 +120,7 @@ func NewDNSProvider() (*DNSProvider, error) {
 	config.AuthKey = values[EnvAPIKey]
 	config.AuthToken = values[EnvDNSAPIToken]
 	config.ZoneToken = values[EnvZoneAPIToken]
+	config.BaseURL = env.GetOrFile(EnvBaseURL)
 
 	return NewDNSProviderConfig(config)
 }
@@ -148,6 +155,8 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 
 // Present creates a TXT record to fulfill the dns-01 challenge.
 func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
 	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
@@ -155,19 +164,19 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		return fmt.Errorf("cloudflare: could not find zone for domain %q: %w", domain, err)
 	}
 
-	zoneID, err := d.client.ZoneIDByName(authZone)
+	zoneID, err := d.client.ZoneIDByName(ctx, authZone)
 	if err != nil {
 		return fmt.Errorf("cloudflare: failed to find zone %s: %w", authZone, err)
 	}
 
-	dnsRecord := cloudflare.CreateDNSRecordParams{
+	dnsRecord := internal.Record{
 		Type:    "TXT",
 		Name:    dns01.UnFqdn(info.EffectiveFQDN),
-		Content: info.Value,
+		Content: `"` + info.Value + `"`,
 		TTL:     d.config.TTL,
 	}
 
-	response, err := d.client.CreateDNSRecord(context.Background(), zoneID, dnsRecord)
+	response, err := d.client.CreateDNSRecord(ctx, zoneID, dnsRecord)
 	if err != nil {
 		return fmt.Errorf("cloudflare: failed to create TXT record: %w", err)
 	}
@@ -183,6 +192,8 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 
 // CleanUp removes the TXT record matching the specified parameters.
 func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+	ctx := context.Background()
+
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 
 	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
@@ -190,7 +201,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 		return fmt.Errorf("cloudflare: could not find zone for domain %q: %w", domain, err)
 	}
 
-	zoneID, err := d.client.ZoneIDByName(authZone)
+	zoneID, err := d.client.ZoneIDByName(ctx, authZone)
 	if err != nil {
 		return fmt.Errorf("cloudflare: failed to find zone %s: %w", authZone, err)
 	}
@@ -199,13 +210,14 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	d.recordIDsMu.Lock()
 	recordID, ok := d.recordIDs[token]
 	d.recordIDsMu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("cloudflare: unknown record ID for '%s'", info.EffectiveFQDN)
 	}
 
-	err = d.client.DeleteDNSRecord(context.Background(), zoneID, recordID)
+	err = d.client.DeleteDNSRecord(ctx, zoneID, recordID)
 	if err != nil {
-		log.Printf("cloudflare: failed to delete TXT record: %w", err)
+		log.Printf("cloudflare: failed to delete TXT record: %v", err)
 	}
 
 	// Delete record ID from map

@@ -19,7 +19,7 @@ const defaultBaseURL = "https://api.ukfast.io/safedns/v1"
 
 const authorizationHeader = "Authorization"
 
-// Client the UKFast SafeDNS client.
+// Client the ANS SafeDNS client.
 type Client struct {
 	authToken string
 
@@ -48,6 +48,7 @@ func (c *Client) AddRecord(ctx context.Context, zone string, record Record) (*Ad
 	}
 
 	respData := &AddRecordResponse{}
+
 	err = c.do(req, respData)
 	if err != nil {
 		return nil, fmt.Errorf("add record: %w", err)
@@ -132,6 +133,7 @@ func parseError(req *http.Request, resp *http.Response) error {
 	raw, _ := io.ReadAll(resp.Body)
 
 	var errAPI APIError
+
 	err := json.Unmarshal(raw, &errAPI)
 	if err != nil {
 		return errutils.NewUnexpectedStatusCodeError(req, resp.StatusCode, raw)

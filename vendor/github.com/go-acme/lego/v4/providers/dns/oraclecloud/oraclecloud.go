@@ -11,22 +11,35 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
-	"github.com/oracle/oci-go-sdk/v65/common"
-	"github.com/oracle/oci-go-sdk/v65/dns"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
+	"github.com/nrdcg/oci-go-sdk/common/v1065"
+	"github.com/nrdcg/oci-go-sdk/common/v1065/auth"
+	"github.com/nrdcg/oci-go-sdk/dns/v1065"
 )
 
 // Environment variables names.
 const (
 	envNamespace = "OCI_"
 
-	EnvCompartmentOCID   = envNamespace + "COMPARTMENT_OCID"
+	EnvAuthType = envNamespace + "AUTH_TYPE"
+
+	EnvCompartmentOCID = envNamespace + "COMPARTMENT_OCID"
+	EnvRegion          = envNamespace + "REGION"
+
+	EnvProfile    = envNamespace + "PROFILE"
+	EnvConfigFile = envNamespace + "CONFIG_FILE"
+
 	envPrivKey           = envNamespace + "PRIVKEY"
 	EnvPrivKeyFile       = envPrivKey + "_FILE"
 	EnvPrivKeyPass       = envPrivKey + "_PASS"
 	EnvTenancyOCID       = envNamespace + "TENANCY_OCID"
 	EnvUserOCID          = envNamespace + "USER_OCID"
 	EnvPubKeyFingerprint = envNamespace + "PUBKEY_FINGERPRINT"
-	EnvRegion            = envNamespace + "REGION"
+
+	altEnvPrivateKey         = envNamespace + "PRIVATE_KEY"   // alias on OCI_PRIVKEY
+	altEnvPrivateKeyPath     = altEnvPrivateKey + "_PATH"     // alias on OCI_PRIVKEY_FILE
+	altEnvPrivateKeyPassword = altEnvPrivateKey + "_PASSWORD" // alias on OCI_PRIVKEY_PASS
+	altEnvFingerprint        = envNamespace + "FINGERPRINT"   // alias on OCI_PUBKEY_FINGERPRINT
 
 	EnvTTL                = envNamespace + "TTL"
 	EnvPropagationTimeout = envNamespace + "PROPAGATION_TIMEOUT"
@@ -34,12 +47,25 @@ const (
 	EnvHTTPTimeout        = envNamespace + "HTTP_TIMEOUT"
 )
 
+// https://github.com/oracle/oci-go-sdk/blob/7f425f74c74fd0c6a5acb74466c85eb5346e0092/common/client.go#L350
+// https://github.com/oracle/oci-go-sdk/blob/7f425f74c74fd0c6a5acb74466c85eb5346e0092/common/configuration.go#L174-L175
+const (
+	altEnvTFVarNamespace          = "TF_VAR_"
+	altEnvTFVarRegion             = altEnvTFVarNamespace + "region"               // alias on OCI_REGION
+	altEnvTFVarFingerprint        = altEnvTFVarNamespace + "fingerprint"          // alias on OCI_PUBKEY_FINGERPRINT
+	altEnvTFVarUserOCID           = altEnvTFVarNamespace + "user_ocid"            // alias on OCI_USER_OCID
+	altEnvTFVarTenancyOCID        = altEnvTFVarNamespace + "tenancy_ocid"         // alias on OCI_TENANCY_OCID
+	altEnvTFVarPrivateKeyPath     = altEnvTFVarNamespace + "private_key_path"     // alias on OCI_PRIVKEY_FILE
+	altEnvTFVarPrivateKeyPassword = altEnvTFVarNamespace + "private_key_password" // alias on OCI_PRIVKEY_PASS
+)
+
 var _ challenge.ProviderTimeout = (*DNSProvider)(nil)
 
 // Config is used to configure the creation of the DNSProvider.
 type Config struct {
-	CompartmentID      string
-	OCIConfigProvider  common.ConfigurationProvider
+	CompartmentID     string
+	OCIConfigProvider common.ConfigurationProvider
+
 	PropagationTimeout time.Duration
 	PollingInterval    time.Duration
 	TTL                int
@@ -66,14 +92,53 @@ type DNSProvider struct {
 
 // NewDNSProvider returns a DNSProvider instance configured for OracleCloud.
 func NewDNSProvider() (*DNSProvider, error) {
-	values, err := env.Get(envPrivKey, EnvTenancyOCID, EnvUserOCID, EnvPubKeyFingerprint, EnvRegion, EnvCompartmentOCID)
-	if err != nil {
-		return nil, fmt.Errorf("oraclecloud: %w", err)
-	}
-
 	config := NewDefaultConfig()
-	config.CompartmentID = values[EnvCompartmentOCID]
-	config.OCIConfigProvider = newConfigProvider(values)
+
+	switch env.GetOrFile(EnvAuthType) {
+	case string(common.InstancePrincipal):
+		values, err := env.Get(EnvCompartmentOCID)
+		if err != nil {
+			return nil, fmt.Errorf("oraclecloud: %w", err)
+		}
+
+		config.CompartmentID = values[EnvCompartmentOCID]
+
+		region := env.GetOneWithFallback(EnvRegion, "", env.ParseString, altEnvTFVarRegion)
+
+		configurationProvider, err := auth.InstancePrincipalConfigurationProviderForRegion(common.Region(region))
+		if err != nil {
+			return nil, fmt.Errorf("oraclecloud: %w", err)
+		}
+
+		config.OCIConfigProvider = configurationProvider
+
+	case string(common.UserPrincipal):
+		values, err := env.Get(EnvCompartmentOCID, EnvProfile)
+		if err != nil {
+			return nil, fmt.Errorf("oraclecloud: %w", err)
+		}
+
+		config.CompartmentID = values[EnvCompartmentOCID]
+
+		configFile := env.GetOrDefaultString(EnvConfigFile, "")
+
+		config.OCIConfigProvider = common.CustomProfileSessionTokenConfigProvider(configFile, values[EnvProfile])
+
+	default:
+		values, err := env.Get(EnvCompartmentOCID)
+		if err != nil {
+			return nil, fmt.Errorf("oraclecloud: %w", err)
+		}
+
+		config.CompartmentID = values[EnvCompartmentOCID]
+
+		ecp, err := newEnvironmentConfigurationProvider()
+		if err != nil {
+			return nil, fmt.Errorf("oraclecloud: %w", err)
+		}
+
+		config.OCIConfigProvider = ecp
+	}
 
 	return NewDNSProviderConfig(config)
 }
@@ -98,7 +163,7 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	}
 
 	if config.HTTPClient != nil {
-		client.HTTPClient = config.HTTPClient
+		client.HTTPClient = clientdebug.Wrap(config.HTTPClient)
 	}
 
 	return &DNSProvider{client: &client, config: config}, nil
@@ -168,7 +233,8 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	}
 
 	var deleteHash *string
-	for _, record := range domainRecords.RecordCollection.Items {
+
+	for _, record := range domainRecords.Items {
 		if record.Rdata != nil && *record.Rdata == `"`+info.Value+`"` {
 			deleteHash = record.RecordHash
 			break

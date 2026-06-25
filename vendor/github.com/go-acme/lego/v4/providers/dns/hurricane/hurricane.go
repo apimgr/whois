@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/go-acme/lego/v4/providers/dns/hurricane/internal"
+	"github.com/go-acme/lego/v4/providers/dns/internal/clientdebug"
 )
 
 // Environment variables names.
@@ -58,14 +58,15 @@ type DNSProvider struct {
 // NewDNSProvider returns a DNSProvider instance configured for Hurricane Electric.
 func NewDNSProvider() (*DNSProvider, error) {
 	config := NewDefaultConfig()
+
 	values, err := env.Get(EnvTokens)
 	if err != nil {
 		return nil, fmt.Errorf("hurricane: %w", err)
 	}
 
-	credentials, err := parseCredentials(values[EnvTokens])
+	credentials, err := env.ParsePairs(values[EnvTokens])
 	if err != nil {
-		return nil, fmt.Errorf("hurricane: %w", err)
+		return nil, fmt.Errorf("hurricane: credentials: %w", err)
 	}
 
 	config.Credentials = credentials
@@ -83,6 +84,12 @@ func NewDNSProviderConfig(config *Config) (*DNSProvider, error) {
 	}
 
 	client := internal.NewClient(config.Credentials)
+
+	if config.HTTPClient != nil {
+		client.HTTPClient = config.HTTPClient
+	}
+
+	client.HTTPClient = clientdebug.Wrap(client.HTTPClient)
 
 	return &DNSProvider{config: config, client: client}, nil
 }
@@ -121,20 +128,4 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
 // Returns the interval between each iteration.
 func (d *DNSProvider) Sequential() time.Duration {
 	return d.config.SequenceInterval
-}
-
-func parseCredentials(raw string) (map[string]string, error) {
-	credentials := make(map[string]string)
-
-	credStrings := strings.Split(strings.TrimSuffix(raw, ","), ",")
-	for _, credPair := range credStrings {
-		data := strings.Split(credPair, ":")
-		if len(data) != 2 {
-			return nil, fmt.Errorf("incorrect credential pair: %s", credPair)
-		}
-
-		credentials[strings.TrimSpace(data[0])] = strings.TrimSpace(data[1])
-	}
-
-	return credentials, nil
 }

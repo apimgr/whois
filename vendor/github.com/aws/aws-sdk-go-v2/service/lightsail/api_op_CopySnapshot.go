@@ -64,7 +64,7 @@ type CopySnapshotInput struct {
 	//   - Define this parameter only when copying an automatic snapshot as a manual
 	//   snapshot. For more information, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-keeping-automatic-snapshots
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-keeping-automatic-snapshots
 	RestoreDate *string
 
 	// The name of the source instance or disk from which the source automatic
@@ -75,7 +75,7 @@ type CopySnapshotInput struct {
 	//   - Define this parameter only when copying an automatic snapshot as a manual
 	//   snapshot. For more information, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-keeping-automatic-snapshots
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-keeping-automatic-snapshots
 	SourceResourceName *string
 
 	// The name of the source manual snapshot to copy.
@@ -98,7 +98,7 @@ type CopySnapshotInput struct {
 	//   - Define this parameter only when copying an automatic snapshot as a manual
 	//   snapshot. For more information, see the [Amazon Lightsail Developer Guide].
 	//
-	// [Amazon Lightsail Developer Guide]: https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-keeping-automatic-snapshots
+	// [Amazon Lightsail Developer Guide]: https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-keeping-automatic-snapshots
 	UseLatestRestorableAutoSnapshot *bool
 
 	noSmithyDocumentSerde
@@ -151,7 +151,7 @@ func (c *Client) addOperationCopySnapshotMiddlewares(stack *middleware.Stack, op
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -175,10 +175,10 @@ func (c *Client) addOperationCopySnapshotMiddlewares(stack *middleware.Stack, op
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
+	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpCopySnapshotValidationMiddleware(stack); err != nil {
@@ -202,16 +202,13 @@ func (c *Client) addOperationCopySnapshotMiddlewares(stack *middleware.Stack, op
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
+	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeEnd(stack); err != nil {
+	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
