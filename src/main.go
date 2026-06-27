@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,12 +18,19 @@ import (
 	"github.com/apimgr/whois/src/service"
 )
 
+// execCommand and execLookPath are vars so tests can replace them without
+// spawning real processes.
+var (
+	execCommand  = func(name string, args ...string) *exec.Cmd { return exec.Command(name, args...) }
+	execLookPath = exec.LookPath
+)
+
 // Build info - set via -ldflags at build time
 var (
 	Version      = "dev"
 	CommitID     = "unknown"
 	BuildDate    = "unknown"
-	OfficialSite = "https://github.com/apimgr/whois"
+	OfficialSite = ""
 )
 
 func main() {
@@ -32,9 +40,34 @@ func main() {
 // run parses args and executes the appropriate command.
 // It returns an exit code (0 = success, 1 = error).
 // Extracted from main() so that tests can call it directly.
+// knownSubcommands is the set of positional subcommands supported by the server binary
+// (binary-rules.md, service-rules.md). These are checked before flag parsing so that
+// both `caswhois serve` and `caswhois --version` work correctly.
+var knownSubcommands = map[string]bool{
+	"serve":     true,
+	"migrate":   true,
+	"client":    true,
+	"version":   true,
+	"install":   true,
+	"uninstall": true,
+	"start":     true,
+	"stop":      true,
+	"restart":   true,
+	"status":    true,
+	"update":    true,
+}
+
 func run(args []string) int {
 	// Get actual binary name (user may have renamed it)
 	binaryName := filepath.Base(os.Args[0])
+
+	// Positional subcommand routing (binary-rules.md PART 7, service-rules.md PART 23).
+	// Subcommands are checked before flag parsing so both `caswhois serve` and
+	// `caswhois --version` work. Only route when the first argument is a known
+	// subcommand (no leading dash).
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && knownSubcommands[args[0]] {
+		return runSubcommand(args[0], binaryName, args[1:])
+	}
 
 	// Define CLI flags using a FlagSet so tests can call run() multiple times.
 	fs := flag.NewFlagSet(binaryName, flag.ContinueOnError)
@@ -236,6 +269,164 @@ func run(args []string) int {
 	return 0
 }
 
+// runSubcommand dispatches a positional subcommand (serve, migrate, client, version,
+// install, uninstall, start, stop, restart, status, update). Flags following the
+// subcommand are passed in remainingArgs. Returns an exit code.
+func runSubcommand(subcmd, binaryName string, remainingArgs []string) int {
+	switch subcmd {
+	// "serve" is the default — strip the subcommand and re-enter run() with the
+	// remaining args so all server flags still work.
+	case "serve":
+		return run(remainingArgs)
+
+	// "version" prints the binary version string (same as --version).
+	case "version":
+		printVersion(binaryName, colorEnabled("auto"))
+		return 0
+
+	// "migrate" runs database schema migrations and exits.
+	case "migrate":
+		return runMigrate(remainingArgs)
+
+	// "client" launches the companion caswhois-cli binary.
+	case "client":
+		return launchClientBinary(remainingArgs)
+
+	// Service management subcommands (service-rules.md PART 23, 24).
+	// Each maps to the equivalent --service flag value.
+	case "install":
+		return runServiceSubcmd("install", remainingArgs)
+	case "uninstall":
+		return runServiceSubcmd("uninstall", remainingArgs)
+	case "start":
+		return runServiceSubcmd("start", remainingArgs)
+	case "stop":
+		return runServiceSubcmd("stop", remainingArgs)
+	case "restart":
+		return runServiceSubcmd("restart", remainingArgs)
+
+	// "status" shows server health (same as --status).
+	case "status":
+		return checkStatus("")
+
+	// "update" runs the self-update flow (same as --update).
+	case "update":
+		return runUpdateSubcmd(binaryName, remainingArgs)
+	}
+
+	fmt.Fprintf(os.Stderr, "Unknown subcommand: %s\n", subcmd)
+	fmt.Fprintf(os.Stderr, "Run '%s --help' for usage.\n", binaryName)
+	return 1
+}
+
+// runMigrate runs database schema migrations (migrate subcommand).
+func runMigrate(args []string) int {
+	// Parse optional --config flag for database location.
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	configDir := fs.String("config", "", "Config directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	cfg, err := loadConfig(*configDir, "production", "", "/", 0, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		return 1
+	}
+
+	database, err := initDatabase(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing database: %v\n", err)
+		return 1
+	}
+	defer database.Close()
+
+	fmt.Println("Database migrations applied successfully.")
+	return 0
+}
+
+// launchClientBinary execs the caswhois-cli binary from PATH (client subcommand).
+func launchClientBinary(args []string) int {
+	// Search PATH for caswhois-cli.
+	cliPath, err := findClientBinary()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: caswhois-cli not found in PATH: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Install caswhois-cli and ensure it is in your PATH.\n")
+		return 1
+	}
+
+	// Use os/exec to launch the client, inheriting stdin/stdout/stderr.
+	cmd := execCommand(cliPath, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		// ExitError carries the client's exit code.
+		if exitErr, ok := err.(interface{ ExitCode() int }); ok {
+			return exitErr.ExitCode()
+		}
+		return 1
+	}
+	return 0
+}
+
+// findClientBinary locates the caswhois-cli binary in PATH.
+func findClientBinary() (string, error) {
+	return execLookPath("caswhois-cli")
+}
+
+// runServiceSubcmd routes a service management subcommand to the service manager.
+func runServiceSubcmd(cmd string, _ []string) int {
+	sm, err := service.NewServiceManager("caswhois", "caswhois service", "WHOIS lookup service")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to create service manager: %v\n", err)
+		return 1
+	}
+	if err := sm.Execute(service.ServiceCommand(cmd)); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: service %s failed: %v\n", cmd, err)
+		return 1
+	}
+	return 0
+}
+
+// runUpdateSubcmd handles the `update` positional subcommand.
+// Without arguments it defaults to "check". Supports --check and --version flags
+// as well as the bare argument form (check|yes|branch).
+func runUpdateSubcmd(binaryName string, args []string) int {
+	// No arguments → check for updates.
+	if len(args) == 0 {
+		return handleUpdate("check", binaryName)
+	}
+
+	// Parse optional flags: --check, --version X.
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
+	checkOnly := fs.Bool("check", false, "Check for updates without installing")
+	targetVer := fs.String("version", "", "Install a specific version")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	remaining := fs.Args()
+
+	if *checkOnly {
+		return handleUpdate("check", binaryName)
+	}
+	if *targetVer != "" {
+		return handleUpdate("branch "+*targetVer, binaryName)
+	}
+
+	// Bare positional form: update check | update yes | update branch <channel>
+	if len(remaining) == 0 {
+		return handleUpdate("check", binaryName)
+	}
+
+	subcmd := remaining[0]
+	if subcmd == "branch" && len(remaining) > 1 {
+		return handleUpdate("branch "+remaining[1], binaryName)
+	}
+	return handleUpdate(subcmd, binaryName)
+}
+
 // colorEnabled returns whether color output is enabled, respecting PART 8 priority order:
 // 1. CLI --color flag  2. NO_COLOR env var  3. Auto-detect (TTY)
 // "yes"/"always" force color on regardless of NO_COLOR; "no"/"never" force off.
@@ -246,8 +437,8 @@ func colorEnabled(flag string) bool {
 	case "no", "never":
 		return false
 	}
-	// auto: respect NO_COLOR, then TTY
-	if os.Getenv("NO_COLOR") != "" {
+	// auto: respect NO_COLOR and TERM=dumb (PART 7), then TTY
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		return false
 	}
 	// Check if stdout is a TTY (simple heuristic — no extra deps)

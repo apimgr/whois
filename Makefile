@@ -27,9 +27,9 @@ LDFLAGS := -s -w \
 BINDIR := binaries
 RELDIR := releases
 
-# Go directories (persistent across builds, overridable via env)
-GODIR ?= $(HOME)/.local/share/go
-GOCACHE ?= $(HOME)/.local/share/go/build
+# Go directories (standard Go cache paths, overridable via env)
+GODIR ?= $(HOME)/go/pkg/mod
+GOCACHE ?= $(HOME)/.cache/go-build
 
 # Build targets
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
@@ -42,6 +42,7 @@ GO_DOCKER := docker run --rm \
 	-v $(GODIR):/go \
 	-w /build \
 	-e CGO_ENABLED=0 \
+	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
 
 .PHONY: build local release docker test dev clean
@@ -62,7 +63,7 @@ build: clean
 	# Build for local OS/ARCH
 	@echo "Building local binary..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
+		go build -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
 
 	# Build server for all platforms
 	@for platform in $(PLATFORMS); do \
@@ -72,7 +73,7 @@ build: clean
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-			go build -ldflags \"$(LDFLAGS)\" \
+			go build -trimpath -ldflags \"$(LDFLAGS)\" \
 			-o $$OUTPUT ./src" || exit 1; \
 	done
 
@@ -85,7 +86,7 @@ build: clean
 			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-				go build -ldflags \"$(LDFLAGS)\" \
+				go build -trimpath -ldflags \"$(LDFLAGS)\" \
 				-o $$OUTPUT ./src/client" || exit 1; \
 		done; \
 	fi
@@ -108,13 +109,13 @@ local: clean
 	# Build server binary
 	@echo "Building $(INTERNAL_NAME)..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
+		go build -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
 
 	# Build CLI binary (if exists)
 	@if [ -d "src/client" ]; then \
 		echo "Building $(INTERNAL_NAME)-cli..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME)-cli ./src/client"; \
+			go build -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME)-cli ./src/client"; \
 	fi
 
 	@echo "Local build complete: $(BINDIR)/"
@@ -200,6 +201,7 @@ test:
 		-v $(GODIR):/go \
 		-w /workspace \
 		-e CGO_ENABLED=0 \
+		-e GOFLAGS=-buildvcs=false \
 		casjaysdev/go:latest \
 		sh -c "go test -coverprofile=/tmp/coverage/coverage.out ./... && \
 		       go tool cover -func=/tmp/coverage/coverage.out | grep total | awk '{if (\$$3+0 < 80) exit 1}'"

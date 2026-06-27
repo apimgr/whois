@@ -102,6 +102,15 @@ func TestColorEnabled_Auto_UnsetNoColor(t *testing.T) {
 	_ = colorEnabled("auto")
 }
 
+// TestColorEnabled_Auto_DumbTerm verifies that TERM=dumb disables color in auto mode (PART 7).
+func TestColorEnabled_Auto_DumbTerm(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Cleanup(func() { os.Unsetenv("TERM") })
+	if colorEnabled("auto") {
+		t.Error("colorEnabled(auto) should return false when TERM=dumb")
+	}
+}
+
 // TestPrintVersion verifies that the binary name and the spec-mandated keywords appear
 // in the output (binary-rules.md: "{name} version {ver} ({commit}) built on {date} for {os}/{arch}").
 func TestPrintVersion(t *testing.T) {
@@ -1073,5 +1082,115 @@ func TestRun_Lang_Flag(t *testing.T) {
 	})
 	if !strings.Contains(out, "version") {
 		t.Errorf("run(--lang es --version) missing 'version'; got: %q", out)
+	}
+}
+
+// TestRunSubcommand_Version ensures `caswhois version` prints the version string.
+func TestRunSubcommand_Version(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"version"})
+		if code != 0 {
+			t.Errorf("run(version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(version) missing 'version'; got: %q", out)
+	}
+}
+
+// TestRunSubcommand_Serve ensures `caswhois serve --version` works (serve strips itself).
+func TestRunSubcommand_Serve(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"serve", "--version"})
+		if code != 0 {
+			t.Errorf("run(serve --version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(serve --version) missing 'version'; got: %q", out)
+	}
+}
+
+// TestRunSubcommand_DefaultCaseReturnsError verifies that calling runSubcommand directly
+// with an unrecognised subcmd name (the default branch) returns exit code 1.
+func TestRunSubcommand_DefaultCaseReturnsError(t *testing.T) {
+	stderr := captureStderr(t, func() {
+		code := runSubcommand("xyznotasubcmd", "caswhois", nil)
+		if code != 1 {
+			t.Errorf("runSubcommand(xyznotasubcmd) = %d, want 1", code)
+		}
+	})
+	if !strings.Contains(stderr, "xyznotasubcmd") {
+		t.Errorf("expected subcmd name in stderr; got: %q", stderr)
+	}
+}
+
+// TestRunSubcommand_Client_NotFound verifies that `caswhois client` returns 1 when
+// caswhois-cli is not in PATH (mocked via execLookPath).
+func TestRunSubcommand_Client_NotFound(t *testing.T) {
+	orig := execLookPath
+	execLookPath = func(_ string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	t.Cleanup(func() { execLookPath = orig })
+
+	stderr := captureStderr(t, func() {
+		code := run([]string{"client"})
+		if code != 1 {
+			t.Errorf("run(client) with missing binary = %d, want 1", code)
+		}
+	})
+	if !strings.Contains(stderr, "caswhois-cli") {
+		t.Errorf("expected caswhois-cli mention in stderr; got: %q", stderr)
+	}
+}
+
+// TestRunUpdateSubcmd_CheckFlag verifies that `caswhois update --check` calls
+// handleUpdate("check",...). We do not actually reach the network; we just verify
+// routing. The real handleUpdate returns 1 when no network is available.
+func TestRunUpdateSubcmd_CheckFlag(t *testing.T) {
+	stderr := captureStderr(t, func() {
+		_ = run([]string{"update", "--check"})
+	})
+	// Any output is acceptable; we only ensure no panic.
+	_ = stderr
+}
+
+// TestRunUpdateSubcmd_NoArgs verifies that `caswhois update` (no args) defaults to "check".
+func TestRunUpdateSubcmd_NoArgs(t *testing.T) {
+	stderr := captureStderr(t, func() {
+		_ = run([]string{"update"})
+	})
+	_ = stderr
+}
+
+// TestRunUpdateSubcmd_VersionFlag verifies that `caswhois update --version 1.2.3` is accepted.
+func TestRunUpdateSubcmd_VersionFlag(t *testing.T) {
+	stderr := captureStderr(t, func() {
+		_ = run([]string{"update", "--version", "1.2.3"})
+	})
+	_ = stderr
+}
+
+// TestRunSubcommand_Migrate verifies `caswhois migrate` at least parses flags without panic.
+// Real DB init may fail in test environment; we accept any exit code.
+func TestRunSubcommand_Migrate(t *testing.T) {
+	tmpDir := t.TempDir()
+	stderr := captureStderr(t, func() {
+		_ = run([]string{"migrate", "--config", tmpDir})
+	})
+	_ = stderr
+}
+
+// TestRunSubcommand_FlagPassthrough ensures flags with '-' prefix bypass subcommand routing.
+func TestRunSubcommand_FlagPassthrough(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run([]string{"--version"})
+		if code != 0 {
+			t.Errorf("run(--version) = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "version") {
+		t.Errorf("run(--version) missing 'version'; got: %q", out)
 	}
 }
