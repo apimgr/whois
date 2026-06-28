@@ -1,96 +1,42 @@
-version: '3.8'
+# caswhois - development
+# nginx proxy address - http://172.17.0.1:64580
+
+name: caswhois
+
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
 
 services:
   caswhois:
-    # Development: Build from local source
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        VERSION: dev
-        COMMIT_ID: dev
-        BUILD_DATE: ${BUILD_DATE:-unknown}
-        OFFICIAL_SITE: https://github.com/apimgr/whois
-    container_name: caswhois-dev
-    restart: unless-stopped
-    
-    # Random port 64xxx mapped to internal 80
-    ports:
-      - "64580:80"
-    
-    # Volumes for persistent data (logs live under /data/log per AI.md PART 4)
-    volumes:
-      - ./volumes/config:/config:z
-      - ./volumes/data:/data:z
-
-    # Development mode + debug logging (the binary reads flags, not MODE/DEBUG env)
-    command: ["--mode", "development", "--debug"]
-
-    # Environment variables
+    image: ghcr.io/apimgr/caswhois:devel
+    container_name: caswhois-app
+    hostname: ${BASE_HOST_NAME:-$HOSTNAME}
+    restart: always
+    pull_policy: always
+    logging: *default-logging
     environment:
-      # Timezone
-      TZ: America/New_York
-
-      # Optional: PostgreSQL
-      # DATABASE_TYPE: postgres
-      # DATABASE_HOST: postgres
-      # DATABASE_PORT: 5432
-      # DATABASE_NAME: caswhois
-      # DATABASE_USER: caswhois
-      # DATABASE_PASSWORD: dev_password
-      
-      # Optional: Redis/Valkey
-      # CACHE_TYPE: redis
-      # CACHE_HOST: redis
-      # CACHE_PORT: 6379
-      # CACHE_PASSWORD: dev_password
-    
-    # Health check
+      - MODE=development
+      - PORT=80
+      - DEBUG=true
+      - TZ=${TZ:-America/New_York}
+    volumes:
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
+    ports:
+      - '172.17.0.1:64580:80'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/server/healthz"]
-      interval: 30s
-      timeout: 10s
+      test: /usr/local/bin/caswhois --status
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
-    
-    # Network
+      start_period: 90s
     networks:
-      - caswhois-dev-network
-    
-    # Depend on optional services
-    depends_on:
-      - postgres
-      - redis
-
-  # PostgreSQL for development
-  postgres:
-    image: postgres:16-alpine
-    container_name: caswhois-postgres-dev
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: caswhois
-      POSTGRES_USER: caswhois
-      POSTGRES_PASSWORD: dev_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./rootfs/postgres:/var/lib/postgresql/data
-    networks:
-      - caswhois-dev-network
-
-  # Redis/Valkey for development
-  redis:
-    image: valkey/valkey:latest
-    container_name: caswhois-redis-dev
-    restart: unless-stopped
-    command: valkey-server --requirepass dev_password
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./rootfs/redis:/data
-    networks:
-      - caswhois-dev-network
+      - caswhois
 
 networks:
-  caswhois-dev-network:
-    driver: bridge
+  caswhois:
+    name: caswhois
+    external: false

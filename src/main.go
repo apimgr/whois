@@ -153,8 +153,7 @@ func run(args []string) int {
 
 	// Handle shell integration (completions / init)
 	if shellCmd != "" {
-		handleShell(shellCmd, binaryName, fs.Args())
-		return 0
+		return handleShell(shellCmd, binaryName, fs.Args())
 	}
 
 	// langFlag is consumed by the language layer after config load.
@@ -458,7 +457,7 @@ func printVersion(binaryName string, useColor bool) {
 }
 
 // handleShell prints shell completion scripts or init commands (PART 8)
-func handleShell(cmd, binaryName string, args []string) {
+func handleShell(cmd, binaryName string, args []string) int {
 	shell := ""
 	if len(args) > 0 {
 		shell = args[0]
@@ -473,17 +472,17 @@ func handleShell(cmd, binaryName string, args []string) {
 
 	switch cmd {
 	case "completions":
-		printShellCompletions(binaryName, shell)
+		return printShellCompletions(binaryName, shell)
 	case "init":
-		printShellInit(binaryName, shell)
+		return printShellInit(binaryName, shell)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown shell command: %s\n", cmd)
 		fmt.Fprintf(os.Stderr, "Usage: %s --shell {completions|init} [SHELL]\n", binaryName)
-		os.Exit(1)
+		return 1
 	}
 }
 
-func printShellCompletions(binaryName, shell string) {
+func printShellCompletions(binaryName, shell string) int {
 	switch shell {
 	case "bash":
 		fmt.Printf("# bash completions for %s\n", binaryName)
@@ -504,11 +503,12 @@ func printShellCompletions(binaryName, shell string) {
 		fmt.Printf("complete -c %s -l daemon -d 'Daemonize'\n", binaryName)
 	default:
 		fmt.Fprintf(os.Stderr, "Unsupported shell: %s (supported: bash, zsh, fish)\n", shell)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
-func printShellInit(binaryName, shell string) {
+func printShellInit(binaryName, shell string) int {
 	switch shell {
 	case "bash":
 		fmt.Printf("source <(%s --shell completions bash)\n", binaryName)
@@ -518,8 +518,9 @@ func printShellInit(binaryName, shell string) {
 		fmt.Printf("%s --shell completions fish | source\n", binaryName)
 	default:
 		fmt.Fprintf(os.Stderr, "Unsupported shell: %s (supported: bash, zsh, fish)\n", shell)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func printHelp(binaryName string) {

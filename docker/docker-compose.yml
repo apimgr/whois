@@ -1,87 +1,66 @@
-version: '3.8'
+# caswhois - WHOIS lookup and reverse WHOIS service
+# nginx proxy address - http://172.17.0.1:64580
+
+name: caswhois
+
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
 
 services:
   caswhois:
-    # Production: Pull from registry
     image: ghcr.io/apimgr/caswhois:latest
-    container_name: caswhois
-    restart: unless-stopped
-    
-    # Random port 64xxx mapped to internal 80
-    ports:
-      - "64580:80"
-    
-    # Volumes for persistent data (logs live under /data/log per AI.md PART 4)
-    volumes:
-      - ./volumes/config:/config:z
-      - ./volumes/data:/data:z
-
-    # Environment variables
+    container_name: caswhois-app
+    hostname: ${BASE_HOST_NAME:-$HOSTNAME}
+    restart: always
+    pull_policy: always
+    logging: *default-logging
     environment:
-      # Timezone (override as needed)
-      TZ: America/New_York
-
-      # Optional: Database connection (for cluster mode)
-      # DATABASE_TYPE: postgres
-      # DATABASE_HOST: postgres
-      # DATABASE_PORT: 5432
-      # DATABASE_NAME: caswhois
-      # DATABASE_USER: caswhois
-      # DATABASE_PASSWORD: your_password_here
-      
-      # Optional: Redis/Valkey for caching (cluster mode)
-      # CACHE_TYPE: redis
-      # CACHE_HOST: redis
-      # CACHE_PORT: 6379
-      # CACHE_PASSWORD: your_password_here
-    
-    # Health check (matches the binary's --status check; route is /server/healthz)
+      - MODE=production
+      - PORT=80
+      - DEBUG=false
+      - TZ=${TZ:-America/New_York}
+      - CACHE_URL=valkey://caswhois-cache:6379
+      # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
+      # - DATABASE_DRIVER=libsql
+      # - DATABASE_URL=libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
+    volumes:
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
+    ports:
+      - '172.17.0.1:64580:80'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/server/healthz"]
-      interval: 30s
-      timeout: 10s
+      test: /usr/local/bin/caswhois --status
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
-    
-    # Resource limits
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-    
-    # Network
+      start_period: 90s
+    depends_on:
+      caswhois-cache:
+        condition: service_healthy
     networks:
-      - caswhois-network
+      - caswhois
 
-  # Optional: PostgreSQL for cluster mode
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: caswhois-postgres
-  #   restart: unless-stopped
-  #   environment:
-  #     POSTGRES_DB: caswhois
-  #     POSTGRES_USER: caswhois
-  #     POSTGRES_PASSWORD: your_password_here
-  #   volumes:
-  #     - ./rootfs/postgres:/var/lib/postgresql/data
-  #   networks:
-  #     - caswhois-network
-
-  # Optional: Redis/Valkey for caching (cluster mode)
-  # redis:
-  #   image: valkey/valkey:latest
-  #   container_name: caswhois-redis
-  #   restart: unless-stopped
-  #   command: valkey-server --requirepass your_password_here
-  #   volumes:
-  #     - ./rootfs/redis:/data
-  #   networks:
-  #     - caswhois-network
+  caswhois-cache:
+    image: valkey/valkey:alpine
+    pull_policy: always
+    container_name: caswhois-cache
+    restart: always
+    logging: *default-logging
+    volumes:
+      - './volumes/data/db/valkey/caswhois:/data:z'
+    healthcheck:
+      test: valkey-cli ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - caswhois
 
 networks:
-  caswhois-network:
-    driver: bridge
+  caswhois:
+    name: caswhois
+    external: false

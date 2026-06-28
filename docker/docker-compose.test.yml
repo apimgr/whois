@@ -1,48 +1,27 @@
-version: '3.8'
+name: caswhois-test
 
 services:
   caswhois:
-    # Testing: Build from source
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        VERSION: test
-        COMMIT_ID: test
-        BUILD_DATE: ${BUILD_DATE:-unknown}
-        OFFICIAL_SITE: https://github.com/apimgr/whois
+    image: ghcr.io/apimgr/caswhois:latest
+    pull_policy: always
     container_name: caswhois-test
-    
-    # Random test port
+    restart: "no"
+    environment:
+      - MODE=development
+      - DEBUG=true
+      - TZ=America/New_York
     ports:
       - "64581:80"
-    
-    # No persistent volumes (ephemeral)
-    tmpfs:
-      - /config
-      - /data
-
-    # Development mode + debug (the binary reads flags, not MODE/DEBUG env)
-    command: ["--mode", "development", "--debug"]
-
-    # Environment variables (the binary reads DATABASE_DIR/DATABASE_URL/DATABASE_DRIVER)
-    environment:
-      TZ: America/New_York
-      # Ephemeral SQLite database under the tmpfs-backed /data
-      DATABASE_DIR: /data/db
-
-    # Health check
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/server/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    
-    # Network
+    volumes:
+      # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
+      # This file MUST be copied to a temp directory before running
+      # AI: NEVER run this from the project directory
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
     networks:
-      - caswhois-test-network
+      - caswhois-test
 
 networks:
-  caswhois-test-network:
-    driver: bridge
+  caswhois-test:
+    name: caswhois-test
+    external: false

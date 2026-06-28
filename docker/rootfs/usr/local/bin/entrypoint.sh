@@ -1,28 +1,53 @@
-#!/bin/bash
-# Container entrypoint script for caswhois
-# This script runs BEFORE the main binary starts
+#!/usr/bin/env bash
+set -eo pipefail
 
-set -e
+# =============================================================================
+# Container Entrypoint Script - MINIMAL
+# Only: set env, start services, start binary, handle signals
+# Binary handles: directories, permissions, user/group, Tor, etc.
+# =============================================================================
 
-# Configure timezone
+APP_NAME="caswhois"
+APP_BIN="/usr/local/bin/${APP_NAME}"
+
+# Export environment defaults (binary reads these)
 export TZ="${TZ:-America/New_York}"
-if [ -f /usr/share/zoneinfo/$TZ ]; then
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime || true
-    echo $TZ > /etc/timezone || true
-fi
+export CONFIG_DIR="${CONFIG_DIR:-/config/${APP_NAME}}"
+export DATA_DIR="${DATA_DIR:-/data/${APP_NAME}}"
 
-# Display startup info
-echo "=========================================="
-echo "caswhois Container Starting"
-echo "=========================================="
-echo "Timezone: $TZ"
-echo "Port: ${PORT:-80}"
-echo "=========================================="
+# Track background PIDs for cleanup
+declare -a PIDS=()
 
-# Note: Tor startup is controlled by the caswhois binary itself
-# The binary detects if a tor binary exists and starts it if needed
-# See AI.md PART 31 for Tor Hidden Service implementation
+log() { echo "[entrypoint] $(date '+%Y-%m-%dT%H:%M:%S%z') $*"; }
 
-# Start the application
-# Pass all arguments to the binary
-exec /usr/local/bin/caswhois "$@"
+# Signal handling for graceful shutdown
+cleanup() {
+    log "Shutdown signal received..."
+    for ((i=${#PIDS[@]}-1; i>=0; i--)); do
+        kill -TERM "${PIDS[i]}" 2>/dev/null || true
+    done
+    wait
+    exit 0
+}
+trap cleanup SIGTERM SIGINT SIGQUIT
+
+# =============================================================================
+# Start services (add supervisord, etc. here if needed)
+# =============================================================================
+# Example: Start supervisord for multi-service containers
+# if [ -f /etc/supervisord.conf ]; then
+#     /usr/bin/supervisord -c /etc/supervisord.conf &
+#     PIDS+=($!)
+# fi
+
+# =============================================================================
+# Start main application
+# =============================================================================
+log "Starting ${APP_NAME}..."
+
+# Build flags from environment
+FLAGS="--address ${ADDRESS:-0.0.0.0} --port ${PORT:-80}"
+[ "${DEBUG:-false}" = "true" ] && FLAGS="$FLAGS --debug"
+
+# Start binary (binary handles ALL setup: dirs, perms, user/group, Tor, etc.)
+exec $APP_BIN $FLAGS "$@"
