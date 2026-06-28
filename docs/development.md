@@ -4,18 +4,17 @@
 
 ### Prerequisites
 
-- **Docker** (required - NEVER build on host)
+- **Docker** (required — NEVER build on host)
 - **Git** (for version control)
 - **Make** (for build automation)
-- **Text editor** (VS Code, Vim, etc.)
 
-**Important:** All Go builds MUST use Docker. Never install Go locally or run `go build` on the host machine.
+**Important:** All Go builds MUST use Docker (`casjaysdev/go:latest`). Never install Go locally or run `go build`/`go test`/`go run` on the host machine.
 
 ### Clone Repository
 
 ```bash
 git clone https://github.com/apimgr/whois.git
-cd caswhois
+cd whois
 ```
 
 ### Project Structure
@@ -25,47 +24,54 @@ caswhois/
 ├── .github/workflows/    # CI/CD workflows
 ├── .claude/rules/        # AI assistant rules
 ├── docker/               # Docker configuration
-│   ├── Dockerfile        # Standard image
-│   └── docker-compose.*.yml
-├── docs/                 # ReadTheDocs documentation
+│   ├── Dockerfile        # Production image (Alpine, :latest)
+│   ├── docker-compose.yml      # Production compose (HUMAN USE ONLY)
+│   ├── docker-compose.dev.yml  # Development compose (HUMAN USE ONLY)
+│   ├── docker-compose.test.yml # Test compose (AI/AUTOMATED ONLY)
+│   └── rootfs/           # Build-time container filesystem overlay
+├── docs/                 # MkDocs documentation
 ├── src/                  # Go source code
-│   ├── main.go          # Server entry point
-│   ├── client/          # CLI client
-│   ├── config/          # Configuration
-│   ├── server/          # HTTP server
-│   ├── db/              # Database
-│   ├── security/        # Authentication & crypto
+│   ├── main.go           # Server entry point
+│   ├── client/           # CLI client (caswhois-cli)
+│   ├── config/           # Configuration
+│   ├── server/           # HTTP server
+│   ├── db/               # Database
+│   ├── security/         # Authentication and crypto
 │   └── ...
-├── tests/               # Test files
-├── scripts/             # Utility scripts
-├── AI.md                # Complete specification (55k+ lines)
-├── IDEA.md              # Project-specific details
-├── README.md            # Project overview
-├── Makefile             # Build automation
-└── go.mod               # Go dependencies
+├── tests/                # Integration test scripts
+│   ├── run_tests.sh      # Main test runner
+│   ├── docker.sh         # Docker-based tests
+│   └── incus.sh          # Incus/VM-based tests
+├── AI.md                 # Complete specification
+├── IDEA.md               # Project-specific details
+├── README.md             # Project overview
+├── Makefile              # Build automation
+└── go.mod                # Go dependencies
 ```
 
 ## Building
 
-### Development Build
+All builds run inside `casjaysdev/go:latest` via Makefile targets. Never run `go build` directly.
 
-Quick build for testing (no version info):
+### Quick Dev Build
+
+Fast build with no version info, output to a temp directory:
 
 ```bash
 make dev
 ```
 
-Output: `binaries/caswhois` (local platform only)
+Output: `/tmp/apimgr/caswhois-XXXXXX/caswhois` (random temp dir, printed on completion)
 
 ### Local Platform Build
 
-Build for local platform with version info:
+Build for the current platform with full version info:
 
 ```bash
 make local
 ```
 
-Output: `binaries/caswhois-{os}-{arch}`
+Output: `binaries/caswhois`
 
 ### Full Release Build
 
@@ -76,6 +82,7 @@ make build
 ```
 
 Output: `binaries/caswhois-{os}-{arch}` for:
+
 - linux/amd64, linux/arm64
 - darwin/amd64, darwin/arm64
 - windows/amd64, windows/arm64 (.exe)
@@ -83,38 +90,49 @@ Output: `binaries/caswhois-{os}-{arch}` for:
 
 ### Docker Image
 
+Build the production container image locally (current arch):
+
 ```bash
 make docker
 ```
 
-Builds both standard (Alpine) and AIO (all-in-one) images.
+Builds `ghcr.io/apimgr/caswhois:{version}` using the multi-stage `docker/Dockerfile`.
+Multi-arch push to the registry is handled by the CI workflow on release.
 
 ## Testing
 
 ### Run Tests
 
-**Always use containers for testing:**
+Always use the Makefile — tests run inside Docker:
 
 ```bash
 make test
 ```
 
-This runs tests in a Docker container with:
-- CGO_ENABLED=0
-- Coverage measurement
-- Race detection
+Runs `go test ./...` with coverage measurement inside `casjaysdev/go:latest`. Coverage output
+goes to `/tmp/apimgr/caswhois-XXXXXX/coverage.out` (never in the project tree).
 
 ### Test Structure
 
 ```
+src/
+└── *_test.go             # Unit tests (co-located with packages)
+
 tests/
-├── run_tests.sh       # Main test runner (auto-detects environment)
-├── docker.sh          # Docker-based tests
-├── incus.sh           # Incus-based tests (full OS testing)
-└── integration/       # Integration tests
+├── run_tests.sh          # Main test runner (orchestrates all scripts)
+├── docker.sh             # Docker-based integration tests
+└── incus.sh              # Incus/VM-based tests (service install, systemd)
 ```
 
-### Writing Tests
+Unit tests cover package logic, pure functions, validation, parsing, config loading,
+and handler logic via `net/http/httptest`. Integration tests run a real server and
+make HTTP requests against it.
+
+### Test Coverage
+
+Coverage gate: ≥80%. `make test` exits non-zero if coverage falls below threshold.
+
+### Writing Unit Tests
 
 ```go
 package whois_test
@@ -127,69 +145,73 @@ import (
 func TestParseDomain(t *testing.T) {
     domain := "example.com"
     result, err := whois.ParseDomain(domain)
-    
     if err != nil {
         t.Fatalf("ParseDomain failed: %v", err)
     }
-    
     if result.Domain != domain {
-        t.Errorf("Expected %s, got %s", domain, result.Domain)
+        t.Errorf("expected %s, got %s", domain, result.Domain)
     }
 }
 ```
 
-### Test Coverage
-
-Coverage is automatically measured during `make test`:
-
-```bash
-# View coverage report
-make test
-# Output: PASS coverage: 82.5% of statements
-```
-
-Target: >80% coverage
-
 ## Running the Server
 
-### Development Mode
+**Never run the binary directly on the host.** Use Docker or Incus.
+
+### Using Docker Compose (Development)
+
+Copy compose file to a temp directory first — never run from the project directory:
 
 ```bash
-# Using Docker Compose
-docker compose -f docker/docker-compose.dev.yml up
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/caswhois-XXXXXX")
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
+cp docker/docker-compose.dev.yml "$TEMP_DIR/docker-compose.yml"
+cd "$TEMP_DIR" && docker compose up
+```
 
-# Using binaries (in container)
+The server listens on `http://172.17.0.1:64580` (Docker bridge). Access it via:
+
+```bash
+curl -LSsf http://172.17.0.1:64580/server/healthz
+```
+
+### Using Docker Run
+
+```bash
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/caswhois-XXXXXX")
+mkdir -p "$TEMP_DIR/config" "$TEMP_DIR/data"
+
 docker run --rm -it \
-  -v $(pwd)/binaries:/app \
-  -v /tmp/caswhois-dev:/config \
-  -p 64580:64580 \
-  alpine:latest \
-  /app/caswhois --mode development --config /config
+  -v "$TEMP_DIR/config:/config:z" \
+  -v "$TEMP_DIR/data:/data:z" \
+  -p 172.17.0.1:64580:80 \
+  ghcr.io/apimgr/caswhois:latest
 ```
 
-### Debug Mode
+### Environment Variables
 
-```bash
-caswhois --debug --mode development
-```
-
-Enables:
-- Verbose logging
-- Debug endpoints (`/debug/pprof/`)
-- Stack traces in errors
-- Request/response logging
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODE` | `development` | `production` or `development` |
+| `DEBUG` | `false` | Enable debug endpoints |
+| `TZ` | `America/New_York` | Timezone |
+| `PORT` | `80` | Listen port (inside container) |
+| `CONFIG_DIR` | `/config/caswhois` | Config directory |
+| `DATA_DIR` | `/data/caswhois` | Data directory |
+| `DATABASE_DIR` | `/data/db/sqlite` | SQLite directory |
 
 ## Code Style
 
 ### Go Code Standards
 
-Follow these conventions:
-
-1. **Format code:** `gofmt` (automatic in CI)
-2. **Naming:** camelCase for unexported, PascalCase for exported
-3. **Comments:** Document all exported functions
-4. **Error handling:** Always check errors, wrap with context
-5. **No naked returns:** Always explicit `return`
+1. **Format:** `gofmt` (enforced in CI)
+2. **Naming:** camelCase for unexported, PascalCase for exported; intent-revealing names (`GetUserByID` not `Get`)
+3. **Comments:** Above the code, never inline; every exported symbol documented
+4. **Error handling:** Always check errors; wrap with context: `fmt.Errorf("finding user: %w", err)`
+5. **SQL:** Parameterized queries only — never string concatenation
+6. **CGO:** Always `CGO_ENABLED=0` — no CGO permitted
 
 ### Example Function
 
@@ -200,34 +222,28 @@ func HashPassword(password string) (string, error) {
     if password == "" {
         return "", errors.New("password cannot be empty")
     }
-    
-    // Generate salt
+
     salt := make([]byte, SaltLen)
     if _, err := rand.Read(salt); err != nil {
         return "", fmt.Errorf("generate salt: %w", err)
     }
-    
-    // Hash with Argon2id
+
     hash := argon2.IDKey([]byte(password), salt, Argon2Time, Argon2Memory, Argon2Threads, Argon2KeyLen)
-    
-    // Return PHC format
     return formatPHC(salt, hash), nil
 }
 ```
 
 ### Code Review Checklist
 
-- [ ] CGO_ENABLED=0 enforced
-- [ ] No bcrypt usage (use Argon2id)
+- [ ] `CGO_ENABLED=0` enforced
+- [ ] No bcrypt — use Argon2id
 - [ ] No hardcoded secrets
 - [ ] Errors properly wrapped
-- [ ] Tests added/updated
+- [ ] Tests added and updated
 - [ ] Documentation updated
-- [ ] Linter passes
+- [ ] Linter passes (`make lint`)
 
 ## Database Migrations
-
-### Migration Files
 
 Migrations are embedded in the binary:
 
@@ -236,120 +252,30 @@ Migrations are embedded in the binary:
 var migrations embed.FS
 ```
 
-### Create Migration
-
-1. Create file: `src/db/migrations/001_create_tables.sql`
-2. Write migration:
+Create a new migration file: `src/db/migrations/001_create_tables.sql`
 
 ```sql
 -- Migration 001: Create initial tables
--- Date: 2025-02-05
 
 CREATE TABLE IF NOT EXISTS admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    email TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    username    TEXT NOT NULL UNIQUE,
+    email       TEXT NOT NULL UNIQUE,
+    password    TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_admins_username ON admins(username);
 CREATE INDEX idx_admins_email ON admins(email);
 ```
 
-3. Migrations run automatically on server start
-
-### Rollback
-
-Migrations do NOT support automatic rollback. Create a new migration to reverse changes:
-
-```sql
--- Migration 002: Rollback migration 001
-DROP TABLE IF EXISTS admins;
-```
-
-## Configuration
-
-### Development Config
-
-Create `config/dev.yml`:
-
-```yaml
-server:
-  port: 64580
-  address: 127.0.0.1
-  mode: development
-  admin_path: admin
-
-database:
-  type: sqlite
-  path: /data/dev.db
-
-logging:
-  level: debug
-  format: text
-  output: stdout
-
-ssl:
-  enabled: false
-
-email:
-  enabled: false
-```
-
-### Environment Variables
-
-```bash
-export CASWHOIS_SERVER_MODE=development
-export CASWHOIS_SERVER_PORT=8080
-export CASWHOIS_DATABASE_PATH=/tmp/dev.db
-export CASWHOIS_LOGGING_LEVEL=debug
-```
+Migrations run automatically on server start. Rollback by creating a new forward migration.
 
 ## Debugging
 
-### Using Delve (Go Debugger)
-
-```bash
-# In Docker container
-docker run --rm -it \
-  -v $(pwd):/app \
-  -p 64580:64580 \
-  -p 2345:2345 \
-  golang:alpine \
-  sh -c "cd /app && go install github.com/go-delve/delve/cmd/dlv@latest && dlv debug --headless --listen=:2345 --api-version=2 ./src"
-```
-
-Connect from VS Code:
-
-```json
-{
-  "type": "go",
-  "request": "attach",
-  "mode": "remote",
-  "remotePath": "/app",
-  "port": 2345,
-  "host": "localhost"
-}
-```
-
-### Logging
-
-Add debug logging:
-
-```go
-import "log/slog"
-
-slog.Debug("Processing request",
-    "method", r.Method,
-    "path", r.URL.Path,
-    "user_agent", r.UserAgent(),
-)
-```
-
 ### Profiling
 
-Enable profiling in development mode:
+Enable in development mode (`DEBUG=true`). Access endpoints:
 
 ```
 /debug/pprof/          # Index
@@ -358,86 +284,90 @@ Enable profiling in development mode:
 /debug/pprof/profile   # CPU profile
 ```
 
-Analyze with `go tool pprof`:
+Analyze:
 
 ```bash
-go tool pprof http://localhost:64580/debug/pprof/heap
+go tool pprof http://172.17.0.1:64580/debug/pprof/heap
+```
+
+### Delve Debugger
+
+Run inside `casjaysdev/go:latest`:
+
+```bash
+docker run --rm -it \
+  -v $PWD:/app \
+  -w /app \
+  -p 172.17.0.1:2345:2345 \
+  -e CGO_ENABLED=0 \
+  casjaysdev/go:latest \
+  sh -c "go install github.com/go-delve/delve/cmd/dlv@latest && dlv debug --headless --listen=:2345 --api-version=2 ./src"
+```
+
+Connect from VS Code (`launch.json`):
+
+```json
+{
+  "type": "go",
+  "request": "attach",
+  "mode": "remote",
+  "remotePath": "/app",
+  "port": 2345,
+  "host": "172.17.0.1"
+}
+```
+
+### Structured Logging
+
+```go
+import "log/slog"
+
+slog.Debug("processing request",
+    "method", r.Method,
+    "path", r.URL.Path,
+    "user_agent", r.UserAgent(),
+)
 ```
 
 ## Contributing
 
 ### Workflow
 
-1. **Fork repository**
-2. **Create feature branch:** `git checkout -b feature/my-feature`
-3. **Make changes** (follow spec in AI.md)
-4. **Test:** `make test`
-5. **Commit:** Clear, descriptive messages
-6. **Push:** `git push origin feature/my-feature`
-7. **Create pull request**
-
-### Commit Messages
-
-Format:
-
-```
-type(scope): short description
-
-Longer description if needed.
-
-Fixes #123
-```
-
-Types:
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation
-- `test`: Tests
-- `refactor`: Code refactoring
-- `chore`: Build/tooling
-
-Example:
-
-```
-feat(whois): add ASN lookup support
-
-Implements ASN WHOIS lookup with automatic server detection.
-Supports AS prefix and bare number formats.
-
-Fixes #45
-```
+1. Fork repository
+2. Create feature branch: `git checkout -b feature/my-feature`
+3. Make changes following the spec in `AI.md`
+4. Test: `make test` (must pass, ≥80% coverage)
+5. Lint: `make lint`
+6. Commit with descriptive message
+7. Push and open pull request
 
 ### Pull Request Guidelines
 
-- **Title:** Clear, descriptive
-- **Description:** What, why, how
-- **Tests:** All tests pass
-- **Coverage:** No decrease in coverage
-- **Documentation:** Updated if needed
-- **Breaking changes:** Clearly marked
-- **Spec compliance:** Follows AI.md exactly
+- Title: clear and descriptive
+- Description: what, why, how
+- All tests pass
+- No coverage decrease
+- Documentation updated
+- Breaking changes clearly marked
+- Spec compliance: follows `AI.md` exactly
 
 ## Continuous Integration
 
-### GitHub Actions
-
 Four workflows run automatically:
 
-1. **Release** (tags): Build all platforms, create release
-2. **Beta** (beta branch): Pre-release builds
-3. **Daily** (main/master + schedule): Nightly builds
-4. **Docker** (all branches + tags): Multi-arch images
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | Push/PR | Build and test all platforms |
+| `release.yml` | Version tag (`v*`, `*.*.*`) | Release builds, checksums, GitHub release |
+| `docker.yml` | All branches + tags | Multi-arch container images to GHCR |
+| `security.yml` | Push/PR | Secret scan, dependency audit, license check |
 
 ### Local CI Testing
 
 Test workflows locally with `act`:
 
 ```bash
-# Install act
-curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
-
-# Run release workflow
-act push -W .github/workflows/release.yml
+act push -W .github/workflows/ci.yml
 ```
 
 ## Documentation
@@ -445,135 +375,60 @@ act push -W .github/workflows/release.yml
 ### Building Docs Locally
 
 ```bash
-# Install dependencies
 pip install -r docs/requirements.txt
-
-# Serve docs
 mkdocs serve
-
 # Visit http://localhost:8000
 ```
 
-### Writing Documentation
-
-- Use Markdown
-- Follow MkDocs Material conventions
-- Include code examples
-- Keep language clear and concise
-- Test all examples
-
 ### Updating API Docs
 
-When adding/changing endpoints:
+When adding or changing endpoints:
 
 1. Update `docs/api.md`
-2. Update OpenAPI spec (auto-generated)
-3. Update GraphQL schema
-4. Add examples
-
-## Performance Optimization
-
-### Profiling
-
-```bash
-# CPU profile (30 seconds)
-curl http://localhost:64580/debug/pprof/profile?seconds=30 > cpu.prof
-go tool pprof cpu.prof
-
-# Memory profile
-curl http://localhost:64580/debug/pprof/heap > mem.prof
-go tool pprof mem.prof
-```
-
-### Benchmarks
-
-```go
-func BenchmarkHashPassword(b *testing.B) {
-    password := "testpassword123"
-    
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        security.HashPassword(password)
-    }
-}
-```
-
-Run benchmarks:
-
-```bash
-go test -bench=. -benchmem ./src/security
-```
-
-## Common Issues
-
-### "Port already in use"
-
-```bash
-# Find process using port
-lsof -i :64580
-
-# Kill process
-kill -9 <PID>
-```
-
-### "Permission denied"
-
-Ensure Docker has proper permissions:
-
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### "Build fails"
-
-1. Clean build cache: `make clean`
-2. Update dependencies: `go mod tidy` (in Docker)
-3. Check Go version matches CI
-
-### "Tests fail in CI but pass locally"
-
-- Check timezone issues (use UTC)
-- Check file system differences
-- Check environment variables
+2. Update Swagger annotations in handler source
+3. Add request/response examples
 
 ## Useful Commands
 
 ```bash
-# Clean all build artifacts
-make clean
-
-# Run linter
-make lint
-
-# Generate mocks
-make mocks
-
-# Update dependencies
-make deps
-
-# Format code
-make fmt
-
-# Security scan
-make security
+make dev       # Quick build to temp dir
+make local     # Build current platform to binaries/
+make build     # Cross-platform build (all 8 targets)
+make test      # Run tests with coverage gate
+make lint      # Run linters (staticcheck, golangci-lint)
+make docker    # Build production Docker image
+make clean     # Remove binaries/ and releases/
 ```
 
 ## Resources
 
 - **Specification:** `AI.md` (complete implementation spec)
-- **Project Details:** `IDEA.md` (project-specific features)
-- **API Docs:** `/openapi` (interactive Swagger)
-- **GraphQL:** `/graphql` (interactive playground)
+- **Project details:** `IDEA.md` (project-specific features)
+- **API docs:** `/server/docs/swagger` (interactive Swagger)
 - **Metrics:** `/metrics` (Prometheus format)
 
-## Getting Help
+## Common Issues
 
-- **Read the spec:** AI.md has 55k+ lines covering everything
-- **Check existing code:** Look for similar implementations
-- **Ask questions:** Create GitHub issue or discussion
-- **Review PRs:** See how others implement features
+### Port already in use
+
+```bash
+lsof -i :64580
+kill $PID
+```
+
+### Build fails
+
+```bash
+make clean
+make build
+```
+
+### Tests fail in CI but pass locally
+
+- Verify you ran tests inside Docker (`make test`), not on the host
+- Check for timezone issues (container uses `TZ=America/New_York`)
+- Check for missing environment variables
 
 ## License
 
-MIT License - see LICENSE.md for details.
+MIT License — see `LICENSE.md` for details.

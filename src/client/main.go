@@ -31,6 +31,7 @@ func main() {
 // run parses args and drives the CLI, returning an exit code.
 func run(args []string) int {
 	var (
+		flagHelp    bool
 		flagServer  string
 		flagToken   string
 		flagOutput  string
@@ -47,6 +48,8 @@ func run(args []string) int {
 	fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
+	fs.BoolVar(&flagHelp, "help", false, "Show help message")
+	fs.BoolVar(&flagHelp, "h", false, "Show help message")
 	fs.StringVar(&flagServer, "server", "", "Server base URL")
 	fs.StringVar(&flagToken, "token", "", "API token")
 	fs.StringVar(&flagOutput, "output", "", "Output format: json/text/raw (default: text)")
@@ -66,6 +69,11 @@ func run(args []string) int {
 
 	if err := fs.Parse(args); err != nil {
 		return 1
+	}
+
+	if flagHelp {
+		showHelp()
+		return 0
 	}
 
 	if flagVersion {

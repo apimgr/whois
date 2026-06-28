@@ -208,7 +208,8 @@ func TestHandleUpdate_HelpNoPanic(t *testing.T) {
 	// handleUpdate "help" just prints and returns (no os.Exit)
 	// We can't call it directly because it's defined in the same package.
 	// Test via the individual helper functions instead.
-	_ = "test" // keep buf used
+	// keep buf used
+	_ = "test"
 
 	w.Close()
 	os.Stdout = oldStdout

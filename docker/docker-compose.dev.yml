@@ -11,7 +11,7 @@ x-logging: &default-logging
 
 services:
   caswhois:
-    image: ghcr.io/apimgr/caswhois:devel
+    image: ghcr.io/apimgr/caswhois:latest
     container_name: caswhois-app
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
