@@ -16,6 +16,22 @@ import (
 	"github.com/apimgr/whois/src/update"
 )
 
+// okMark returns ✓ when color/emoji output is enabled, or "+" when NO_COLOR is set.
+func okMark() string {
+	if os.Getenv("NO_COLOR") != "" {
+		return "+"
+	}
+	return "✓"
+}
+
+// failMark returns ✗ when color/emoji output is enabled, or "x" when NO_COLOR is set.
+func failMark() string {
+	if os.Getenv("NO_COLOR") != "" {
+		return "x"
+	}
+	return "✗"
+}
+
 // checkStatus queries the running server's health endpoint
 // Returns exit code: 0 = healthy, 1 = unhealthy/error
 func checkStatus(configDir string) int {
@@ -62,13 +78,13 @@ func checkStatus(configDir string) int {
 
 	// Check status
 	if health.Status == "healthy" {
-		fmt.Printf("✓ Server is healthy\n")
+		fmt.Printf("%s Server is healthy\n", okMark())
 		fmt.Printf("  Version: %s\n", health.Version)
 		fmt.Printf("  Uptime:  %s\n", health.Uptime)
 		fmt.Printf("  Mode:    %s\n", health.Mode)
 		return 0
 	} else {
-		fmt.Printf("✗ Server is unhealthy\n")
+		fmt.Printf("%s Server is unhealthy\n", failMark())
 		fmt.Printf("  Status: %s\n", health.Status)
 		return 1
 	}
@@ -163,7 +179,7 @@ func handleMaintenance(cmd, configDir, dataDir string) int {
 			fmt.Fprintf(os.Stderr, "Error: Backup failed: %v\n", err)
 			return 1
 		}
-		fmt.Println("✓ Backup completed successfully")
+		fmt.Printf("%s Backup completed successfully\n", okMark())
 
 	case "restore":
 		if len(args) < 2 {
@@ -176,7 +192,7 @@ func handleMaintenance(cmd, configDir, dataDir string) int {
 			fmt.Fprintf(os.Stderr, "Error: Restore failed: %v\n", err)
 			return 1
 		}
-		fmt.Println("✓ Restore completed successfully")
+		fmt.Printf("%s Restore completed successfully\n", okMark())
 
 	case "mode":
 		// --maintenance mode {production|development} — change server mode (requires token or root)
@@ -266,7 +282,7 @@ func handleUpdate(cmd, binaryName string) int {
 			fmt.Fprintf(os.Stderr, "Error: Update failed: %v\n", err)
 			return 1
 		}
-		fmt.Println("✓ Update completed successfully")
+		fmt.Printf("%s Update completed successfully\n", okMark())
 		fmt.Println("  Restart the service to apply the update")
 
 	case "branch":
@@ -280,7 +296,7 @@ func handleUpdate(cmd, binaryName string) int {
 			fmt.Fprintf(os.Stderr, "Error: Channel switch failed: %v\n", err)
 			return 1
 		}
-		fmt.Printf("✓ Switched to %s channel\n", channel)
+		fmt.Printf("%s Switched to %s channel\n", okMark(), channel)
 
 	case "help":
 		fmt.Println("Update Commands (PART 23):")
@@ -352,7 +368,7 @@ func performBackup(configDir, dataDir string) error {
 		}
 	}
 
-	fmt.Printf("✓ Backup created: %s\n", opts.OutputFile)
+	fmt.Printf("%s Backup created: %s\n", okMark(), opts.OutputFile)
 	return nil
 }
 
@@ -405,7 +421,7 @@ func checkForUpdates(binaryName string) error {
 	}
 
 	if !info.Available {
-		fmt.Printf("✓ You are running the latest version: %s\n", info.CurrentVersion)
+		fmt.Printf("%s You are running the latest version: %s\n", okMark(), info.CurrentVersion)
 		return nil
 	}
 

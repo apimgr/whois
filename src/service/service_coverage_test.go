@@ -143,7 +143,13 @@ func TestDetectServiceManagerImpl_RCSvcname(t *testing.T) {
 // TestDaemonize_ForkPath confirms the fork path: a child is spawned (TestMain
 // exits it immediately via _DAEMON_CHILD guard), osExitFn is called with 0 in
 // the parent, and the function returns nil.
+// Skipped in containers because the test binary's ppid is 1 there, which
+// causes Daemonize() to return early without calling osExitFn.
 func TestDaemonize_ForkPath(t *testing.T) {
+	if os.Getppid() == 1 || IsContainer() {
+		t.Skip("Daemonize fork path requires non-container environment (ppid != 1)")
+	}
+
 	exitCode := -1
 	orig := osExitFn
 	osExitFn = func(code int) { exitCode = code }

@@ -171,7 +171,7 @@ func TestUninstallRCD_RemovesEnableLine(t *testing.T) {
 	}
 
 	// Build an rc.conf that contains the service enable line plus extra content.
-	rcContent := fmt.Sprintf("hostname=\"testhost\"\ntestrcdsvc_enable=\"YES\"\nsendmail_enable=\"NONE\"\n")
+	rcContent := "hostname=\"testhost\"\ntestrcdsvc_enable=\"YES\"\nsendmail_enable=\"NONE\"\n"
 
 	// We cannot override /etc/rc.conf — test the parsing logic by calling the
 	// private lines-filter path directly via uninstallRCD and having a real

@@ -394,7 +394,7 @@ func (cm *CertManager) RenewCertificate() error {
 		PrivateKey:  keyPEM,
 	}
 
-	resource, err := cm.acmeClient.Certificate.Renew(existing, true, false, "")
+	resource, err := cm.acmeClient.Certificate.RenewWithOptions(existing, &certificate.RenewOptions{Bundle: true})
 	if err != nil {
 		return fmt.Errorf("failed to renew certificate: %w", err)
 	}

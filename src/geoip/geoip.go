@@ -194,7 +194,7 @@ func (m *GeoIPManager) loadDatabases(cfg DatabaseConfig) error {
 		if _, err := os.Stat(countryPath); err == nil {
 			db, err := maxminddb.Open(countryPath)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("Country: %w", err))
+				errors = append(errors, fmt.Errorf("country: %w", err))
 			} else {
 				m.countryDB = db
 				log.Println("[GeoIP] Loaded Country database")
@@ -208,7 +208,7 @@ func (m *GeoIPManager) loadDatabases(cfg DatabaseConfig) error {
 		if _, err := os.Stat(cityPath); err == nil {
 			db, err := maxminddb.Open(cityPath)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("City: %w", err))
+				errors = append(errors, fmt.Errorf("city: %w", err))
 			} else {
 				m.cityDB = db
 				log.Println("[GeoIP] Loaded City database")

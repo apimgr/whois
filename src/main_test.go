@@ -10,23 +10,6 @@ import (
 	"github.com/apimgr/whois/src/config"
 )
 
-// captureStderrStr captures stderr output from fn and returns it as a string.
-func captureStderrStr(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	old := os.Stderr
-	os.Stderr = w
-	fn()
-	w.Close()
-	os.Stderr = old
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
-}
-
 // captureStdout redirects os.Stdout to an in-memory pipe, runs fn, then
 // restores stdout and returns everything that was written.
 func captureStdout(t *testing.T, fn func()) string {

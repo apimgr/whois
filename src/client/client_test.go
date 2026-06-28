@@ -708,7 +708,7 @@ func TestRun_OutputFlag(t *testing.T) {
 		t.Errorf("run --output json = %d, want 0", code)
 	}
 	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(buf.String()), &parsed); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Errorf("--output json did not produce valid JSON: %v\nOutput: %s", err, buf.String())
 	}
 }

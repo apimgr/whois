@@ -26,8 +26,6 @@ func (sm *ServiceManager) start() error {
 		if _, err := os.Stat(plistPath); err == nil {
 			return exec.Command("launchctl", "start", "io.github.apimgr."+sm.Name).Run()
 		}
-		home, _ := os.UserHomeDir()
-		plistPath = home + "/Library/LaunchAgents/io.github.apimgr." + sm.Name + ".plist"
 		return exec.Command("launchctl", "start", "io.github.apimgr."+sm.Name).Run()
 	case "runit":
 		return exec.Command("sv", "start", sm.Name).Run()
