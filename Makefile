@@ -1,20 +1,25 @@
 # Frozen project identity (set at creation from IDEA.md - never changes even if git remote changes)
 INTERNAL_NAME := caswhois
-PROJECTORG    := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename $$(dirname $$(pwd)))
+PROJECTORG    := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
 # Infer PROJECTNAME from git remote or directory path (NEVER hardcode)
 PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
 
 # Version: env var > release.txt > default
-VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
+VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 
 # Build info - use TZ env var or system timezone
 # Format: "December 4, 2025 at 13:05:13"
 BUILD_DATE := $(shell date +"%B %-d, %Y at %H:%M:%S")
-COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 
-# Official site (empty if none - users must use --server flag)
-OFFICIALSITE ?=
+# Official site URL (OPTIONAL - never guess or assume)
+# Sources (in order of precedence):
+#   1. File: site.txt in project root (single line, URL only)
+#   2. Environment variable: OFFICIALSITE=https://example.com
+#   3. Empty (self-hosted projects - users must use --server flag)
+# NEVER infer from project name, domain, or any other source
+OFFICIALSITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}")
 
 # Linker flags to embed build info
 LDFLAGS := -s -w \
@@ -27,9 +32,11 @@ LDFLAGS := -s -w \
 BINDIR := binaries
 RELDIR := releases
 
-# Go directories (standard Go cache paths, overridable via env)
-GODIR ?= $(HOME)/go/pkg/mod
-GOCACHE ?= $(HOME)/.cache/go-build
+# Go directories (persistent across builds)
+# GO_CACHE maps host module cache to casjaysdev/go image's GOPATH/pkg/mod
+# GO_BUILD maps to casjaysdev/go image's build cache
+GO_CACHE ?= $(HOME)/go/pkg/mod
+GO_BUILD ?= $(HOME)/.cache/go-build
 
 # Build targets
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
@@ -37,10 +44,11 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 win
 # Docker - Set REGISTRY based on your platform (ghcr.io, registry.gitlab.com, git.example.com)
 REGISTRY ?= ghcr.io/$(PROJECTORG)/$(INTERNAL_NAME)
 GO_DOCKER := docker run --rm \
-	-v $(PWD):/build \
-	-v $(GOCACHE):/root/.cache/go-build \
-	-v $(GODIR):/go \
-	-w /build \
+	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	-v $(PWD):/app \
+	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
+	-v $(GO_BUILD):/usr/local/share/go/cache \
+	-w /app \
 	-e CGO_ENABLED=0 \
 	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
@@ -51,9 +59,8 @@ GO_DOCKER := docker run --rm \
 # BUILD - Build all platforms + local binary (via Docker with cached modules)
 # =============================================================================
 build: clean
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building version $(VERSION)..."
-	@mkdir -p $(GOCACHE) $(GODIR)
 
 	# Tidy and download modules
 	@echo "Tidying and downloading Go modules..."
@@ -63,7 +70,7 @@ build: clean
 	# Build for local OS/ARCH
 	@echo "Building local binary..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
+		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
 
 	# Build server for all platforms
 	@for platform in $(PLATFORMS); do \
@@ -73,7 +80,7 @@ build: clean
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-			go build -trimpath -ldflags \"$(LDFLAGS)\" \
+			go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
 			-o $$OUTPUT ./src" || exit 1; \
 	done
 
@@ -86,7 +93,7 @@ build: clean
 			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-				go build -trimpath -ldflags \"$(LDFLAGS)\" \
+				go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
 				-o $$OUTPUT ./src/client" || exit 1; \
 		done; \
 	fi
@@ -97,9 +104,8 @@ build: clean
 # LOCAL - Build local binaries only (fast development builds)
 # =============================================================================
 local: clean
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building local binaries version $(VERSION)..."
-	@mkdir -p $(GOCACHE) $(GODIR)
 
 	# Tidy and download modules
 	@echo "Tidying and downloading Go modules..."
@@ -109,13 +115,13 @@ local: clean
 	# Build server binary
 	@echo "Building $(INTERNAL_NAME)..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
+		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME) ./src"
 
 	# Build CLI binary (if exists)
 	@if [ -d "src/client" ]; then \
 		echo "Building $(INTERNAL_NAME)-cli..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-			go build -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME)-cli ./src/client"; \
+			go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(INTERNAL_NAME)-cli ./src/client"; \
 	fi
 
 	@echo "Local build complete: $(BINDIR)/"
@@ -190,22 +196,18 @@ docker:
 # =============================================================================
 test:
 	@echo "Running tests with coverage..."
-	@mkdir -p $(GOCACHE) $(GODIR)
-	@$(GO_DOCKER) go mod download
-	@mkdir -p "/tmp/$(PROJECTORG)"
-	$(eval COVDIR := $(shell mktemp -d "/tmp/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX"))
-	@docker run --rm \
-		-v $(PWD):/workspace \
-		-v $(COVDIR):/tmp/coverage \
-		-v $(GOCACHE):/root/.cache/go-build \
-		-v $(GODIR):/go \
-		-w /workspace \
-		-e CGO_ENABLED=0 \
-		-e GOFLAGS=-buildvcs=false \
-		casjaysdev/go:latest \
-		sh -c "go test -coverprofile=/tmp/coverage/coverage.out ./... && \
-		       go tool cover -func=/tmp/coverage/coverage.out | grep total | awk '{if (\$$3+0 < 80) exit 1}'"
-	@echo "Tests complete - coverage >= 80% ✓"
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
+	@$(GO_DOCKER) sh -c " \
+		mkdir -p \"/tmp/$(PROJECTORG)\" && \
+		COVDIR=\$$(mktemp -d \"/tmp/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX\") && \
+		go mod download && \
+		go test -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
+		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
+		echo \"Coverage: \$$COVERAGE%\" && \
+		if [ \$$(echo \"\$$COVERAGE < 80\" | bc -l) -eq 1 ]; then \
+			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 80%\"; exit 1; \
+		fi && \
+		echo \"Tests complete - coverage >= 80% ✓\""
 
 # =============================================================================
 # DEV - Quick build for local development/testing (to random temp dir)
@@ -213,20 +215,18 @@ test:
 # Fast: local platform only, no ldflags, random temp dir for isolation
 # Builds server + CLI (if they exist)
 dev:
-	@mkdir -p $(GOCACHE) $(GODIR)
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) go mod tidy
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
 		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(INTERNAL_NAME)-XXXXXX") && \
 		echo "Quick dev build to $$BUILD_DIR..." && \
-		$(GO_DOCKER) go build -o /build/.tmp-server ./src && \
-		mv .tmp-server $$BUILD_DIR/$(INTERNAL_NAME) && \
+		$(GO_DOCKER) go build -buildvcs=false -o $$BUILD_DIR/$(INTERNAL_NAME) ./src && \
 		echo "Built: $$BUILD_DIR/$(INTERNAL_NAME)" && \
 		if [ -d "src/client" ]; then \
-			$(GO_DOCKER) go build -o /build/.tmp-cli ./src/client && \
-			mv .tmp-cli $$BUILD_DIR/$(INTERNAL_NAME)-cli && \
+			$(GO_DOCKER) go build -buildvcs=false -o $$BUILD_DIR/$(INTERNAL_NAME)-cli ./src/client && \
 			echo "Built: $$BUILD_DIR/$(INTERNAL_NAME)-cli"; \
 		fi && \
-		echo "Test:  docker run --rm -v $$BUILD_DIR:/app alpine:latest /app/$(INTERNAL_NAME) --help"
+		echo "Test:  docker run --rm --name $(INTERNAL_NAME)-test -v $$BUILD_DIR:/app alpine:latest /app/$(INTERNAL_NAME) --help"
 
 # =============================================================================
 # CLEAN - Remove build artifacts
