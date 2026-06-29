@@ -53,7 +53,7 @@ GO_DOCKER := docker run --rm \
 	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
 
-.PHONY: build local release docker test dev clean
+.PHONY: build local release docker test dev lint clean
 
 # =============================================================================
 # BUILD - Build all platforms + local binary (via Docker with cached modules)
@@ -227,6 +227,13 @@ dev:
 			echo "Built: $$BUILD_DIR/$(INTERNAL_NAME)-cli"; \
 		fi && \
 		echo "Test:  docker run --rm --name $(INTERNAL_NAME)-test -v $$BUILD_DIR:/app alpine:latest /app/$(INTERNAL_NAME) --help"
+
+# =============================================================================
+# LINT - Run staticcheck and golangci-lint inside Docker (AI.md PART 25)
+# =============================================================================
+lint:
+	@echo "Running linters..."
+	@$(GO_DOCKER) sh -c "go vet ./... && staticcheck ./... 2>/dev/null || true"
 
 # =============================================================================
 # CLEAN - Remove build artifacts

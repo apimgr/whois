@@ -54,7 +54,6 @@ var knownSubcommands = map[string]bool{
 	"stop":      true,
 	"restart":   true,
 	"status":    true,
-	"update":    true,
 }
 
 func run(args []string) int {
@@ -308,9 +307,6 @@ func runSubcommand(subcmd, binaryName string, remainingArgs []string) int {
 	case "status":
 		return checkStatus("")
 
-	// "update" runs the self-update flow (same as --update).
-	case "update":
-		return runUpdateSubcmd(binaryName, remainingArgs)
 	}
 
 	fmt.Fprintf(os.Stderr, "Unknown subcommand: %s\n", subcmd)
@@ -388,43 +384,6 @@ func runServiceSubcmd(cmd string, _ []string) int {
 	return 0
 }
 
-// runUpdateSubcmd handles the `update` positional subcommand.
-// Without arguments it defaults to "check". Supports --check and --version flags
-// as well as the bare argument form (check|yes|branch).
-func runUpdateSubcmd(binaryName string, args []string) int {
-	// No arguments → check for updates.
-	if len(args) == 0 {
-		return handleUpdate("check", binaryName)
-	}
-
-	// Parse optional flags: --check, --version X.
-	fs := flag.NewFlagSet("update", flag.ContinueOnError)
-	checkOnly := fs.Bool("check", false, "Check for updates without installing")
-	targetVer := fs.String("version", "", "Install a specific version")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-
-	remaining := fs.Args()
-
-	if *checkOnly {
-		return handleUpdate("check", binaryName)
-	}
-	if *targetVer != "" {
-		return handleUpdate("branch "+*targetVer, binaryName)
-	}
-
-	// Bare positional form: update check | update yes | update branch <channel>
-	if len(remaining) == 0 {
-		return handleUpdate("check", binaryName)
-	}
-
-	subcmd := remaining[0]
-	if subcmd == "branch" && len(remaining) > 1 {
-		return handleUpdate("branch "+remaining[1], binaryName)
-	}
-	return handleUpdate(subcmd, binaryName)
-}
 
 // colorEnabled returns whether color output is enabled, respecting PART 8 priority order:
 // 1. CLI --color flag  2. NO_COLOR env var  3. Auto-detect (TTY)

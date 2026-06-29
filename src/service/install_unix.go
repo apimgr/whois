@@ -8,27 +8,74 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"strconv"
 	"strings"
 )
+
+// reservedIDs contains UIDs/GIDs used by well-known services across distros.
+// These are never used even if they appear available on the current system.
+// AI.md PART 23.
+var reservedIDs = map[int]bool{
+	65534: true,
+	// systemd-*, docker, polkitd, tss and other common system services (980-999)
+	999: true, 998: true, 997: true, 996: true, 995: true,
+	994: true, 993: true, 992: true, 991: true, 990: true,
+	989: true, 988: true, 987: true, 986: true, 985: true,
+	984: true, 983: true, 982: true, 981: true, 980: true,
+	// Common SSH/mail/IMAP services (101-110) and legacy DB servers (170-179)
+	101: true, 102: true, 103: true, 104: true, 105: true,
+	106: true, 107: true, 108: true, 109: true, 110: true,
+	170: true, 171: true, 172: true, 173: true, 174: true,
+	175: true, 176: true, 177: true, 178: true, 179: true,
+}
+
+// findAvailableSystemID finds an available UID/GID in the safe range 200-899.
+// The returned value is usable for both UID and GID (they are always set to the
+// same number per AI.md PART 23). AI.md PART 23.
+func findAvailableSystemID() (int, error) {
+	for id := 899; id >= 200; id-- {
+		if reservedIDs[id] {
+			continue
+		}
+		idStr := strconv.Itoa(id)
+		if _, err := user.LookupId(idStr); err == nil {
+			continue
+		}
+		if _, err := user.LookupGroupId(idStr); err == nil {
+			continue
+		}
+		return id, nil
+	}
+	return 0, fmt.Errorf("no available UID/GID in safe range 200-899")
+}
 
 // ensureServiceUser creates the dedicated system group and user the server
 // drops to after binding a privileged port (AI.md PART 23). The account has no
 // login shell and no home directory. It is idempotent: an existing account is
 // left untouched. Tool selection adapts to the distro (useradd/groupadd on
-// glibc systems, adduser/addgroup on BusyBox/Alpine).
+// glibc systems, adduser/addgroup on BusyBox/Alpine). UID and GID are chosen
+// from the safe range 200-899, avoiding well-known service IDs (AI.md PART 23).
 func (sm *ServiceManager) ensureServiceUser() error {
 	if _, err := user.Lookup(sm.Name); err == nil {
 		return nil
 	}
 
-	// Create the group first so the user can be placed in it.
+	id, err := findAvailableSystemID()
+	if err != nil {
+		return fmt.Errorf("finding available UID/GID: %w", err)
+	}
+	idStr := strconv.Itoa(id)
+
+	// Create the group first with the chosen GID.
 	if _, err := user.LookupGroup(sm.Name); err != nil {
 		if groupadd, lookErr := exec.LookPath("groupadd"); lookErr == nil {
-			if out, runErr := exec.Command(groupadd, "--system", sm.Name).CombinedOutput(); runErr != nil {
+			args := []string{"--system", "--gid", idStr, sm.Name}
+			if out, runErr := exec.Command(groupadd, args...).CombinedOutput(); runErr != nil {
 				return fmt.Errorf("groupadd %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
 			}
 		} else if addgroup, lookErr := exec.LookPath("addgroup"); lookErr == nil {
-			if out, runErr := exec.Command(addgroup, "-S", sm.Name).CombinedOutput(); runErr != nil {
+			args := []string{"-S", "-g", idStr, sm.Name}
+			if out, runErr := exec.Command(addgroup, args...).CombinedOutput(); runErr != nil {
 				return fmt.Errorf("addgroup %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
 			}
 		} else {
@@ -36,16 +83,21 @@ func (sm *ServiceManager) ensureServiceUser() error {
 		}
 	}
 
-	// Create the system user as a member of the group with no shell/home.
+	// Create the system user with the matching UID, same primary group, no shell/home.
 	if useradd, lookErr := exec.LookPath("useradd"); lookErr == nil {
-		args := []string{"--system", "--gid", sm.Name, "--no-create-home", "--shell", "/sbin/nologin", sm.Name}
+		args := []string{
+			"--system", "--uid", idStr, "--gid", sm.Name,
+			"--no-create-home", "--shell", "/sbin/nologin",
+			"--comment", sm.Name + " service account",
+			sm.Name,
+		}
 		if out, runErr := exec.Command(useradd, args...).CombinedOutput(); runErr != nil {
 			return fmt.Errorf("useradd %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
 		}
 		return nil
 	}
 	if adduser, lookErr := exec.LookPath("adduser"); lookErr == nil {
-		args := []string{"-S", "-D", "-H", "-s", "/sbin/nologin", "-G", sm.Name, sm.Name}
+		args := []string{"-S", "-D", "-H", "-u", idStr, "-s", "/sbin/nologin", "-G", sm.Name, sm.Name}
 		if out, runErr := exec.Command(adduser, args...).CombinedOutput(); runErr != nil {
 			return fmt.Errorf("adduser %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
 		}
@@ -113,10 +165,14 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
+User=%s
+Group=%s
 ExecStart=%s
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
+PIDFile=/var/run/apimgr/%s.pid
 StandardOutput=journal
 StandardError=journal
 
@@ -128,10 +184,11 @@ ReadWritePaths=/etc/apimgr/%s
 ReadWritePaths=/var/lib/apimgr/%s
 ReadWritePaths=/var/cache/apimgr/%s
 ReadWritePaths=/var/log/apimgr/%s
+ReadWritePaths=/var/run/apimgr
 
 [Install]
 WantedBy=multi-user.target
-`, sm.DisplayName, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name)
+`, sm.DisplayName, sm.Name, sm.Name, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name)
 
 	if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing service file: %w", err)

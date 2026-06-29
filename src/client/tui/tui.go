@@ -47,8 +47,8 @@ type lookupDoneMsg struct {
 	err    error
 }
 
-// Model is the bubbletea model for the TUI
-type Model struct {
+// TUIModel is the bubbletea model for the TUI
+type TUIModel struct {
 	client  *lookup.Client
 	input   textinput.Model
 	result  string
@@ -59,26 +59,26 @@ type Model struct {
 }
 
 // New creates a new TUI model bound to the given lookup client
-func New(client *lookup.Client) Model {
+func New(client *lookup.Client) TUIModel {
 	ti := textinput.New()
 	ti.Placeholder = "example.com, 8.8.8.8, AS15169…"
 	ti.Focus()
 	ti.CharLimit = 253
 	ti.Width = 40
 
-	return Model{
+	return TUIModel{
 		client: client,
 		input:  ti,
 	}
 }
 
 // Init focuses the input on startup
-func (m Model) Init() tea.Cmd {
+func (m TUIModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
 // Update handles messages and keypresses
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m TUIModel) Update(msg tea.Msg) (TUIModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -129,7 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the full-screen TUI
-func (m Model) View() string {
+func (m TUIModel) View() string {
 	title := styleTitle.Render("caswhois")
 
 	queryLabel := styleLabel.Render("Query: ")
@@ -165,7 +165,7 @@ func (m Model) View() string {
 }
 
 // doLookup performs the WHOIS lookup in a goroutine and returns the result as a Cmd
-func (m Model) doLookup(query string) tea.Cmd {
+func (m TUIModel) doLookup(query string) tea.Cmd {
 	return func() tea.Msg {
 		result, err := m.client.Lookup(query)
 		return lookupDoneMsg{result: result, err: err}

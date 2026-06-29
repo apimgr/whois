@@ -60,14 +60,16 @@ type CountryResult struct {
 	Code string `json:"code" maxminddb:"country_code"`
 }
 
-// CityResult contains city/location information
+// CityResult contains city/location information from sapics/ip-location-db (AI.md PART 19).
 type CityResult struct {
-	City       string  `json:"city,omitempty" maxminddb:"city"`
-	Region     string  `json:"region,omitempty" maxminddb:"region"`
-	PostalCode string  `json:"postal_code,omitempty" maxminddb:"postal_code"`
-	Latitude   float64 `json:"latitude,omitempty" maxminddb:"latitude"`
-	Longitude  float64 `json:"longitude,omitempty" maxminddb:"longitude"`
-	Timezone   string  `json:"timezone,omitempty" maxminddb:"timezone"`
+	City        string  `json:"city,omitempty" maxminddb:"city"`
+	State1      string  `json:"state1,omitempty" maxminddb:"state1"`
+	State2      string  `json:"state2,omitempty" maxminddb:"state2"`
+	CountryCode string  `json:"country_code,omitempty" maxminddb:"country_code"`
+	Postcode    string  `json:"postcode,omitempty" maxminddb:"postcode"`
+	Latitude    float64 `json:"latitude,omitempty" maxminddb:"latitude"`
+	Longitude   float64 `json:"longitude,omitempty" maxminddb:"longitude"`
+	Timezone    string  `json:"timezone,omitempty" maxminddb:"timezone"`
 }
 
 // WHOISResult contains WHOIS/registrant information

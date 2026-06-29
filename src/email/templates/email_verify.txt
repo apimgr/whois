@@ -1,0 +1,15 @@
+Subject: {{t .Lang "email.verify.subject"}}
+
+{{t .Lang "email.verify.greeting" .Name}},
+
+{{t .Lang "email.verify.body"}}
+
+{{t .Lang "email.verify.link_label"}}:
+{{.VerifyURL}}
+
+{{t .Lang "email.verify.expiry_notice"}}
+
+{{t .Lang "email.verify.ignore_notice"}}
+
+{{t .Lang "email.common.signature"}}
+{{.SiteName}}

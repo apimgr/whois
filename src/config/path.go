@@ -72,7 +72,8 @@ func validatePath(p string) error {
 	segments := strings.Split(strings.Trim(p, "/"), "/")
 	for _, seg := range segments {
 		if seg == "" {
-			continue // Skip empty (from //)
+			// Skip empty (from //)
+		continue
 		}
 		if err := validatePathSegment(seg); err != nil {
 			return err

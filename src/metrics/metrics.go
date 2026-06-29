@@ -39,10 +39,11 @@ type Collector struct {
 	CacheSize               *prometheus.GaugeVec
 
 	// Scheduler metrics
-	SchedulerTasksTotal     *prometheus.CounterVec
-	SchedulerTaskDuration   *prometheus.HistogramVec
-	SchedulerTasksActive    prometheus.Gauge
-	SchedulerTaskFailures   *prometheus.CounterVec
+	SchedulerTasksTotal         *prometheus.CounterVec
+	SchedulerTaskDuration       *prometheus.HistogramVec
+	SchedulerTasksRunning       *prometheus.GaugeVec
+	SchedulerLastRunTimestamp   *prometheus.GaugeVec
+	SchedulerTaskFailures       *prometheus.CounterVec
 
 	// Authentication metrics
 	AuthAttemptsTotal       *prometheus.CounterVec
@@ -258,7 +259,7 @@ func New(namespace string, cfg MetricsConfig) *Collector {
 			Name:      "scheduler_tasks_total",
 			Help:      "Total scheduler tasks executed",
 		},
-		[]string{"task_id", "status"},
+		[]string{"task", "status"},
 	)
 
 	c.SchedulerTaskDuration = promauto.NewHistogramVec(
@@ -266,17 +267,27 @@ func New(namespace string, cfg MetricsConfig) *Collector {
 			Namespace: namespace,
 			Name:      "scheduler_task_duration_seconds",
 			Help:      "Scheduler task execution duration",
-			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 30, 60, 120, 300},
+			Buckets:   []float64{0.1, 0.5, 1, 5, 10, 30, 60, 300, 600},
 		},
-		[]string{"task_id"},
+		[]string{"task"},
 	)
 
-	c.SchedulerTasksActive = promauto.NewGauge(
+	c.SchedulerTasksRunning = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: namespace,
-			Name:      "scheduler_tasks_active",
-			Help:      "Number of scheduler tasks currently running",
+			Name:      "scheduler_tasks_running",
+			Help:      "Currently running task instances",
 		},
+		[]string{"task"},
+	)
+
+	c.SchedulerLastRunTimestamp = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "scheduler_last_run_timestamp",
+			Help:      "Unix timestamp of last task execution",
+		},
+		[]string{"task"},
 	)
 
 	c.SchedulerTaskFailures = promauto.NewCounterVec(
@@ -285,7 +296,7 @@ func New(namespace string, cfg MetricsConfig) *Collector {
 			Name:      "scheduler_task_failures_total",
 			Help:      "Total scheduler task failures",
 		},
-		[]string{"task_id", "error_type"},
+		[]string{"task", "error_type"},
 	)
 
 	// Authentication metrics

@@ -25,6 +25,7 @@ maintainer_email:  casjay@yahoo.com
 **In scope:**
 
 - WHOIS lookup for domains, IPv4, IPv6, and ASNs — auto-detect query type
+- Dual-protocol data retrieval: RDAP (preferred) with WHOIS fallback
 - Proxied queries to upstream WHOIS servers (IANA, RIRs, TLD-specific)
 - In-memory cache for hot queries (TTL: domain 24h, IP/ASN 7d, failure 5m) — fast path only
 - Persistent WHOIS record database — every successful lookup is stored permanently in SQLite; builds a free, comprehensive, self-hosted WHOIS dataset over time
@@ -38,10 +39,38 @@ maintainer_email:  casjay@yahoo.com
 - Argon2id-encrypted backup and restore
 - In-place self-update via GitHub releases
 - Service manager integration (systemd, OpenRC, runit, s6, launchd, SCM)
-- Built-in scheduler for ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update, tor_health, whois_records_refresh (re-queries stale records older than configurable threshold, default 30d)
+- Built-in scheduler for ssl_renewal, geoip_update, token_cleanup, log_rotation, backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update, tor_health, whois_records_refresh (re-queries stale records older than configurable threshold, default 30d), rdap_bootstrap_update (weekly refresh of IANA RDAP bootstrap files)
 - TLS via Let's Encrypt (HTTP-01, TLS-ALPN-01, DNS-01)
 - CLI client (caswhois-cli) with TUI, setup wizard, auto-update
 - Shell completions (bash, zsh, fish, powershell)
+
+**RDAP support (RFC 7480-7485):**
+
+- RDAP is the preferred data source — structured JSON over HTTPS, easier to parse than freeform WHOIS text
+- Use IANA bootstrap files to discover RDAP endpoints for domains, IPs, and ASNs
+- Prefer unauthenticated RDAP endpoints — if an endpoint requires OAuth or returns 401/403, skip it and fall back to WHOIS
+- Query strategy: RDAP first → WHOIS fallback → error
+- No OAuth/token storage for RDAP endpoints — the service only uses publicly accessible RDAP data
+
+**Standardized data model (WHAT must be captured):**
+
+Both RDAP and WHOIS responses must be normalized into a unified structure. The API response and database storage use the same fields regardless of which protocol returned the data.
+
+Required fields for all query types:
+- Query string, query type (domain/ipv4/ipv6/asn), data source (rdap/whois)
+- Registrant: name, org, email, country
+- Registrar name
+- Dates: created, updated, expiry
+- Nameservers (list), status codes (list)
+- Raw response preserved (WHOIS text and/or RDAP JSON)
+- Timestamps: first_seen, last_seen, last_updated
+
+Additional fields for IP/ASN queries:
+- Network: name, CIDR range, allocation type
+- ASN: number, name
+- RIR (ARIN, RIPE, APNIC, LACNIC, AFRINIC)
+
+Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details defined in src/whois/.
 
 **Non-goals:**
 
@@ -105,7 +134,7 @@ maintainer_email:  casjay@yahoo.com
 - **scheduler_history**: id, task_id → scheduler_tasks, started_at, finished_at, status, error, duration_ms
 - **backups**: id, filename, filepath, size_bytes, type, created_at, checksum, notes
 - **api_tokens**: id, token_hash (SHA-256), token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, revoked_reason
-- **whois_records**: id, query, query_type, registrant_name, registrant_org, registrant_email, registrant_country, registrar, created_date, expiry_date, nameservers (JSON array), status (JSON array), whois_server, raw_whois (full text), first_seen, last_seen, last_updated — permanent record; upserted (last_seen + raw updated) on every successful lookup; indexed on all registrant fields + expiry_date; never auto-deleted (operators can configure max_age for pruning old stale records; default: keep forever); forms the free, open, self-hosted WHOIS dataset
+- **whois_records**: id, query, query_type, source (`rdap`|`whois`), registrant_name, registrant_org, registrant_email, registrant_country, registrar, created_date, updated_date, expiry_date, nameservers (JSON array), status (JSON array), whois_server, rdap_server, raw_whois (full text, nullable), raw_rdap (JSON, nullable), network_name, network_range, network_type, asn_number, asn_name, rir, first_seen, last_seen, last_updated — permanent record; upserted (last_seen + raw updated) on every successful lookup; indexed on all registrant fields + expiry_date + network_range + asn_number; never auto-deleted (operators can configure max_age for pruning old stale records; default: keep forever); forms the free, open, self-hosted WHOIS/RDAP dataset
 
 **Sensitivity classification:**
 
@@ -113,8 +142,8 @@ maintainer_email:  casjay@yahoo.com
 |------|-------------|-------|
 | server.token (server.yml) | HIGH | Operator secret; SHA-256 compared; never logged raw |
 | api_token hashes (DB) | HIGH | Stored as SHA-256 only; prefix for identification |
-| WHOIS results (in-memory cache) | LOW | Publicly available data; no PII beyond what WHOIS exposes |
-| whois_records (persistent DB) | LOW | Publicly available data aggregated from upstream WHOIS; intended to be an open dataset |
+| WHOIS/RDAP results (in-memory cache) | LOW | Publicly available data; no PII beyond what WHOIS/RDAP exposes |
+| whois_records (persistent DB) | LOW | Publicly available data aggregated from upstream RDAP/WHOIS; intended to be an open dataset |
 | audit_log.actor_ip | MEDIUM | IP addresses are PII in some jurisdictions; not exposed via API |
 | rate_limits | LOW | Counters only; no content |
 | backup password (server.yml) | HIGH | Argon2id KDF; never stored plain |
@@ -131,10 +160,12 @@ maintainer_email:  casjay@yahoo.com
 - WHOIS query strings (validated against allowed character set and length before dispatch)
 - Bulk lookup payloads (max batch size enforced; each query validated individually)
 
-**External services (upstream WHOIS servers):**
+**External services (upstream RDAP/WHOIS servers):**
 
 | Server | Trust level | Failure mode |
 |--------|-------------|-------------|
+| RDAP bootstrap (IANA JSON files) | Trusted; fetched weekly via scheduler | Retain existing bootstrap on failure; log warning |
+| RDAP endpoints (RIRs, TLD registries) | Prefer unauthenticated; accept results as-is | Fall back to WHOIS on RDAP failure or auth-required response |
 | whois.iana.org (root) | Accept results as-is; no authentication | Return cached data if available; log error and return degraded response |
 | ARIN, RIPE, APNIC, LACNIC, AFRINIC (RIRs) | Accept results as-is | Same as above |
 | TLD-specific servers (queried by IANA referral) | Accept results as-is | Return raw response; parse best-effort |
@@ -191,7 +222,7 @@ maintainer_email:  casjay@yahoo.com
 - **Bearer token only; no sessions**: PART 1 requires no session cookies, no user accounts. This is by design — the threat model for a WHOIS service does not benefit from user sessions; it only adds attack surface.
 - **server.token stored plaintext in server.yml**: The token is a secret known to the operator; the file is assumed to be accessible only to the operator (root-owned or 600 permissions). Hash-only storage in the DB is the actual protection; the server.yml is the operator's own config file.
 - **Anonymous GET allowed on all public endpoints**: WHOIS data is publicly available. Blocking anonymous access adds friction with no security value. Rate limiting is the appropriate abuse control.
-- **Upstream WHOIS result accepted without cryptographic verification**: Upstream WHOIS protocol (RFC 3912) has no signing mechanism. Results are proxied as-is; cache invalidation on TTL expiry is the integrity mechanism.
+- **Upstream RDAP/WHOIS results accepted without cryptographic verification**: Neither RDAP nor WHOIS protocols have signing mechanisms. Results are proxied as-is; cache invalidation on TTL expiry is the integrity mechanism. RDAP is preferred because it returns structured JSON (easier to parse reliably), not because it is more trustworthy.
 - **Port chosen randomly (64000–64999) on first run**: Avoids well-known port conflicts; not a security measure. Operators behind a reverse proxy map to port 80 inside the container.
 - **Parameterized queries always; no raw SQL string building**: Enforced in all database access. Violation of this rule is a bug.
 - **Argon2id for backup encryption key derivation**: bcrypt and PBKDF2 are explicitly forbidden. Argon2id (winner of the Password Hashing Competition) is required.

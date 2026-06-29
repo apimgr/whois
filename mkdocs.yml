@@ -70,3 +70,4 @@ nav:
     - Integrations: integrations.md
   - Development:
     - Contributing: development.md
+  - Changelog: changelog.md

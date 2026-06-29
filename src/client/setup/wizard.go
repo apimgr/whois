@@ -33,8 +33,8 @@ var (
 	styleHint  = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
 )
 
-// Model is the bubbletea wizard model
-type Model struct {
+// WizardModel is the bubbletea wizard model
+type WizardModel struct {
 	step    step
 	urlIn   textinput.Model
 	tokenIn textinput.Model
@@ -43,7 +43,7 @@ type Model struct {
 }
 
 // New creates a new wizard model with the provided initial config
-func New(cfg *config.CLIConfig) Model {
+func New(cfg *config.CLIConfig) WizardModel {
 	urlIn := textinput.New()
 	urlIn.Placeholder = "http://localhost:64580"
 	urlIn.Focus()
@@ -59,7 +59,7 @@ func New(cfg *config.CLIConfig) Model {
 		urlIn.SetValue(cfg.Server)
 	}
 
-	return Model{
+	return WizardModel{
 		step:    stepURL,
 		urlIn:   urlIn,
 		tokenIn: tokenIn,
@@ -68,12 +68,12 @@ func New(cfg *config.CLIConfig) Model {
 }
 
 // Init starts the blink cursor
-func (m Model) Init() tea.Cmd {
+func (m WizardModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
 // Update handles messages
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m WizardModel) Update(msg tea.Msg) (WizardModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -107,7 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleEnter advances the wizard on Enter key press
-func (m Model) handleEnter() (tea.Model, tea.Cmd) {
+func (m WizardModel) handleEnter() (WizardModel, tea.Cmd) {
 	switch m.step {
 	case stepURL:
 		serverURL := strings.TrimSpace(m.urlIn.Value())
@@ -129,7 +129,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 // testConnection pings /server/healthz in a goroutine
-func (m Model) testConnection(serverURL string) tea.Cmd {
+func (m WizardModel) testConnection(serverURL string) tea.Cmd {
 	return func() tea.Msg {
 		client := lookup.New(serverURL, "", "")
 		err := client.HealthCheck()
@@ -138,7 +138,7 @@ func (m Model) testConnection(serverURL string) tea.Cmd {
 }
 
 // View renders the wizard
-func (m Model) View() string {
+func (m WizardModel) View() string {
 	var sb strings.Builder
 	sb.WriteString(styleTitle.Render("caswhois-cli setup") + "\n\n")
 
@@ -179,18 +179,18 @@ func Run(cfg *config.CLIConfig) (*config.CLIConfig, error) {
 		return nil, err
 	}
 
-	finalModel, ok := final.(Model)
+	finalWizardModel, ok := final.(WizardModel)
 	if !ok {
 		return nil, fmt.Errorf("unexpected model type from wizard")
 	}
 
-	if finalModel.step != stepDone {
+	if finalWizardModel.step != stepDone {
 		return nil, fmt.Errorf("setup cancelled")
 	}
 
-	if err := config.Save(finalModel.cfg); err != nil {
+	if err := config.Save(finalWizardModel.cfg); err != nil {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 
-	return finalModel.cfg, nil
+	return finalWizardModel.cfg, nil
 }

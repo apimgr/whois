@@ -40,8 +40,8 @@ ARG COMMIT_ID
 # and are visible on multiarch pulls. LABEL applies only to per-platform layers.
 # See dockerfile_conventions.md → OCI Annotations.
 
-# Install required packages
-# NOTE: Tor binary installed but NOT configured here - binary handles all Tor setup (see PART 31)
+# Install required packages.
+# NOTE: Tor binary installed but NOT configured here — binary handles all Tor setup (see PART 31).
 RUN apk add --no-cache \
     git \
     curl \
@@ -51,11 +51,14 @@ RUN apk add --no-cache \
     ca-certificates \
     tzdata
 
-# NO directory creation — binary handles ALL setup based on env vars
-# This allows users to override CONFIG_DIR, DATA_DIR, etc.
-# Docker volume mounts auto-create mount points
+# Create non-root service user and group (AI.md PART 26 — drop root inside container).
+RUN addgroup -S caswhois && adduser -S -G caswhois caswhois
 
-# Copy binary from builder stage (multi-stage build)
+# NO directory creation — binary handles ALL setup based on env vars.
+# This allows users to override CONFIG_DIR, DATA_DIR, etc.
+# Docker volume mounts auto-create mount points.
+
+# Copy binary from builder stage (multi-stage build).
 COPY --from=builder /app/binary/caswhois /usr/local/bin/caswhois
 
 # Copy BUILD-TIME overlay (entrypoint.sh) from docker/rootfs/ into image
@@ -65,17 +68,18 @@ COPY docker/rootfs/ /
 # Copy Dockerfile to image (for reference and backup)
 COPY docker/Dockerfile /root/Dockerfile
 
-# Make all binaries/scripts in /usr/local/bin executable (755)
+# Make all binaries/scripts in /usr/local/bin executable (755).
 RUN chmod 755 /usr/local/bin/*
 
-# Set environment
-# Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31)
-# DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer)
-ENV MODE=development \
+# Set environment.
+# Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31).
+# DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer).
+ENV MODE=production \
     TZ=America/New_York \
     DATABASE_DIR=/data/db/sqlite
 
-# Expose internal port (always 80)
+# Expose internal port (always 80).
+# The binary drops to the caswhois user after binding port 80 (AI.md PART 23 + PART 26).
 EXPOSE 80
 
 # Stop signal for graceful shutdown

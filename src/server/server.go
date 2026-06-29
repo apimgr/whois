@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/subtle"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -24,9 +25,11 @@ import (
 	"github.com/apimgr/whois/src/ratelimit"
 	runtimeinfo "github.com/apimgr/whois/src/runtime"
 	"github.com/apimgr/whois/src/scheduler"
+	casssl "github.com/apimgr/whois/src/ssl"
 	castor "github.com/apimgr/whois/src/tor"
 	"github.com/apimgr/whois/src/whois"
 	"github.com/apimgr/whois/src/whois/records"
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -294,6 +297,52 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to bind %s: %w", addr, err)
 	}
+
+	// When SSL is enabled, wrap the listener with TLS (AI.md PART 15).
+	// TLS 1.2 is the minimum version; 1.3 is preferred.
+	if s.config.TLS.Enabled {
+		fqdn := s.config.TLS.Domain
+		if fqdn == "" {
+			fqdn = s.config.FQDN
+		}
+		certMgr := casssl.NewCertManager(s.config.ConfigDir, fqdn)
+		if loadErr := certMgr.LoadCertificate(); loadErr != nil {
+			log.Printf("WARN: TLS cert not found (%v); requesting from Let's Encrypt", loadErr)
+			if reqErr := certMgr.RequestNewCertificate(); reqErr != nil {
+				listener.Close()
+				return fmt.Errorf("TLS certificate unavailable: %w", reqErr)
+			}
+		}
+		minTLS := uint16(tls.VersionTLS12)
+		if s.config.TLS.MinVersion == "1.3" {
+			minTLS = tls.VersionTLS13
+		}
+		tlsCfg := &tls.Config{
+			GetCertificate: certMgr.GetCertificate,
+			MinVersion:     minTLS,
+		}
+		listener = tls.NewListener(listener, tlsCfg)
+
+		// Start HTTP→HTTPS redirect server on port 80 (AI.md PART 15).
+		redirectMux := http.NewServeMux()
+		redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			target := "https://" + r.Host + r.URL.RequestURI()
+			http.Redirect(w, r, target, http.StatusMovedPermanently)
+		})
+		redirectSrv := &http.Server{
+			Addr:         s.config.Address + ":80",
+			Handler:      redirectMux,
+			ReadTimeout:  readTimeout,
+			WriteTimeout: writeTimeout,
+		}
+		go func() {
+			log.Printf("HTTP→HTTPS redirect listening on %s:80", s.config.Address)
+			if listenErr := redirectSrv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
+				log.Printf("WARN: HTTP redirect server error: %v", listenErr)
+			}
+		}()
+	}
+
 	if err := dropPrivileges(s.config.User, s.config.Group); err != nil {
 		listener.Close()
 		return fmt.Errorf("failed to drop privileges: %w", err)
@@ -357,6 +406,22 @@ func (s *Server) Start() error {
 		}
 	}()
 
+	// SIGHUP reloads configuration without restarting (AI.md PART 23).
+	reloadSig := make(chan os.Signal, 1)
+	signal.Notify(reloadSig, syscall.SIGHUP)
+	go func() {
+		for range reloadSig {
+			log.Printf("Received SIGHUP, reloading configuration...")
+			newCfg, err := config.LoadServerConfig(s.config.ConfigDir)
+			if err != nil {
+				log.Printf("ERROR: config reload failed: %v", err)
+				continue
+			}
+			s.config = newCfg
+			log.Printf("Configuration reloaded successfully")
+		}
+	}()
+
 	// Wait for shutdown signal or server error
 	select {
 	case err := <-serverErrors:
@@ -397,91 +462,93 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// setupRoutes configures HTTP routes
+// setupRoutes configures HTTP routes using chi (PART 13 — every web page has a corresponding API endpoint).
 func (s *Server) setupRoutes() http.Handler {
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
 
-	// Metrics endpoint (PART 20) - INTERNAL ONLY, token-protected
+	// Metrics endpoint (PART 20) — internal only, token-protected
 	if s.metrics != nil && s.config.Metrics.Enabled {
 		endpoint := s.config.Metrics.Endpoint
 		if endpoint == "" {
 			endpoint = "/metrics"
 		}
-		mux.Handle(endpoint, s.handleMetrics())
+		r.Handle(endpoint, s.handleMetrics())
 		log.Printf("[Metrics] Endpoint enabled at %s", endpoint)
 	}
 
 	// Health check endpoints (PART 13)
-	mux.HandleFunc("/server/healthz", s.handleHealth)
-	mux.HandleFunc("/api/v1/server/healthz", s.handleHealth)
-	// Root alias when enabled
-	mux.HandleFunc("/healthz", s.handleHealth)
+	r.Get("/server/healthz", s.handleHealth)
+	r.Get("/api/v1/server/healthz", s.handleHealth)
+	// Root alias for load-balancer probes
+	r.Get("/healthz", s.handleHealth)
 
 	// Static assets — CSS, JS (embedded at compile time, served under /static/)
-	mux.Handle("/static/", staticFileServer())
+	r.Handle("/static/*", staticFileServer())
 
-	// SEO & Security files (PART 14, PART 16) - REQUIRED
-	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxt)
-	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
-	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
+	// SEO & Security files (PART 14, PART 16) — required
+	r.Get("/.well-known/security.txt", s.handleSecurityTxt)
+	r.Get("/sitemap.xml", s.handleSitemap)
+	r.Get("/robots.txt", s.handleRobotsTxt)
 
 	// PWA support (PART 16) — manifest, service worker, offline fallback
-	mux.HandleFunc("/manifest.json", s.handleManifest)
-	mux.HandleFunc("/sw.js", s.handleServiceWorker)
-	mux.HandleFunc("/offline.html", s.handleOfflinePage)
-
-	// Public web interface — exact root only (Go 1.22+ /{$} syntax)
-	mux.HandleFunc("/{$}", s.handlePublicWHOISPage)
-
-	// Catch-all 404 for all unmatched paths (must be last)
-	mux.HandleFunc("/", s.handleNotFound)
+	r.Get("/manifest.json", s.handleManifest)
+	r.Get("/sw.js", s.handleServiceWorker)
+	r.Get("/offline.html", s.handleOfflinePage)
 
 	// Public content pages
-	mux.HandleFunc("/server/about", s.handleAboutPage)
-	mux.HandleFunc("/about", s.handleAboutPage)
-	mux.HandleFunc("/server/docs", s.handleDocsPage)
-	mux.HandleFunc("/docs", s.handleDocsPage)
+	r.Get("/server/about", s.handleAboutPage)
+	r.Get("/about", s.handleAboutPage)
+	r.Get("/server/docs", s.handleDocsPage)
+	r.Get("/docs", s.handleDocsPage)
 
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
-	mux.HandleFunc("/whois", s.handleWHOISPage)
+	r.Get("/whois", s.handleWHOISPage)
 
 	// Owner/registrant search — web and API (public, rate-limited)
-	mux.HandleFunc("/whois/search", s.handleWHOISOwnerSearch)
-	mux.HandleFunc("/api/v1/whois/search", s.handleWHOISOwnerSearch)
+	r.Get("/whois/search", s.handleWHOISOwnerSearch)
+	r.Get("/api/v1/whois/search", s.handleWHOISOwnerSearch)
 
-	// API v1 - WHOIS lookups (public, rate-limited)
-	mux.HandleFunc("/api/v1/whois/", s.handleWHOIS)
-	mux.HandleFunc("/api/v1/whois/domain/", s.handleWHOISDomainLookup)
-	mux.HandleFunc("/api/v1/whois/ip/", s.handleWHOISIPLookup)
-	mux.HandleFunc("/api/v1/whois/asn/", s.handleWHOISASNLookup)
-	mux.HandleFunc("/api/v1/whois/validate/", s.handleWHOISValidate)
+	// API v1 — specific typed lookups (registered before generic wildcard)
+	r.Get("/api/v1/whois/domain/*", s.handleWHOISDomainLookup)
+	r.Get("/api/v1/whois/ip/*", s.handleWHOISIPLookup)
+	r.Get("/api/v1/whois/asn/*", s.handleWHOISASNLookup)
+	r.Get("/api/v1/whois/validate/*", s.handleWHOISValidate)
 
-	// API v1 - Bulk lookup (requires server token)
-	mux.HandleFunc("/api/v1/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
+	// API v1 — generic WHOIS lookup (catch-all, after specific routes)
+	r.Get("/api/v1/whois/*", s.handleWHOIS)
+
+	// API v1 — Bulk lookup (requires server token)
+	r.Post("/api/v1/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
 
 	// Autodiscover endpoint (PART 32) — non-versioned, public
-	mux.HandleFunc("/api/autodiscover", s.handleAutodiscover)
+	r.Get("/api/autodiscover", s.handleAutodiscover)
 
 	// CLI binary download (PART 32) — public by default; streams prebuilt binaries
-	mux.HandleFunc("/cli/binaries/", s.handleCLIBinaryDownload)
+	r.Get("/cli/binaries/*", s.handleCLIBinaryDownload)
 
 	// Locale JSON files (PART 30) — served for JS consumers; content from embedded i18n files
-	mux.HandleFunc("/locales/", s.handleLocaleJSON)
+	r.Get("/locales/*", s.handleLocaleJSON)
 
-	// API v1 - Utility (public)
-	mux.HandleFunc("/api/v1/whois-servers", s.handleWhoisServers)
-	mux.HandleFunc("/api/v1/server/stats", s.handleStats)
+	// API v1 — utility (public)
+	r.Get("/api/v1/whois-servers", s.handleWhoisServers)
+	r.Get("/api/v1/server/stats", s.handleStats)
 
-	// API v1 - Server operations (requires server token)
-	mux.HandleFunc("/api/v1/server/schedulers", s.requireToken(s.handleSchedulerStatus))
-	mux.HandleFunc("/api/v1/server/schedulers/run", s.requireToken(s.handleSchedulerRun))
-	mux.HandleFunc("/api/v1/server/backups", s.requireToken(s.handleBackupStatus))
-	mux.HandleFunc("/api/v1/server/backups/run", s.requireToken(s.handleBackupRun))
+	// API v1 — server operations (requires server token)
+	r.Get("/api/v1/server/schedulers", s.requireToken(s.handleSchedulerStatus))
+	r.Post("/api/v1/server/schedulers/run", s.requireToken(s.handleSchedulerRun))
+	r.Get("/api/v1/server/backups", s.requireToken(s.handleBackupStatus))
+	r.Post("/api/v1/server/backups/run", s.requireToken(s.handleBackupRun))
 
 	// Debug endpoints (PART 6) — registered only when --debug / DEBUG=true
-	s.registerDebugRoutes(mux)
+	s.registerDebugRoutes(r)
 
-	return mux
+	// Public web interface — root only; must come after all other routes
+	r.Get("/", s.handlePublicWHOISPage)
+
+	// Catch-all 404 for all unmatched paths
+	r.NotFound(s.handleNotFound)
+
+	return r
 }
 
 // setupMiddleware configures middleware chain
@@ -498,8 +565,8 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	handler = s.LoggingMiddleware(handler)
 	// 6. Authentication.
 	handler = AuthMiddleware(handler)
-	// 5. Rate limiting.
-	handler = RateLimitMiddleware(s.ratelimit)(handler)
+	// 5. Rate limiting — use configured read limit as the global default for the middleware header.
+	handler = RateLimitMiddleware(s.ratelimit, s.config.RateLimit.Read.Requests, s.config.RateLimit.Read.Window)(handler)
 	// 4. Request-language detection.
 	handler = LanguageMiddleware(handler)
 	// 3. Security response headers.

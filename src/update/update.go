@@ -237,15 +237,51 @@ func getLatestRelease(channel UpdateChannel) (*Release, error) {
 	return &release, nil
 }
 
-// isNewer compares version strings
+// isNewer returns true when latest is a higher semver than current.
+// Strips the leading 'v' prefix before comparing, then compares numeric
+// major/minor/patch segments so "1.10.0" > "1.9.0" works correctly.
 func isNewer(latest, current string) bool {
-	// Remove 'v' prefix if present
 	latest = strings.TrimPrefix(latest, "v")
 	current = strings.TrimPrefix(current, "v")
+	if latest == current {
+		return false
+	}
+	return semverGreater(latest, current)
+}
 
-	// Simple string comparison (works for semantic versioning)
-	// In production, use github.com/hashicorp/go-version or similar
-	return latest != current && latest > current
+// semverGreater returns true when a is numerically greater than b.
+// Non-numeric segments fall back to lexicographic comparison so the function
+// is safe to call on any tag-like string.
+func semverGreater(a, b string) bool {
+	aParts := strings.SplitN(a, ".", 3)
+	bParts := strings.SplitN(b, ".", 3)
+	for len(aParts) < 3 {
+		aParts = append(aParts, "0")
+	}
+	for len(bParts) < 3 {
+		bParts = append(bParts, "0")
+	}
+	for i := 0; i < 3; i++ {
+		av := parseVersionSegment(aParts[i])
+		bv := parseVersionSegment(bParts[i])
+		if av != bv {
+			return av > bv
+		}
+	}
+	return false
+}
+
+// parseVersionSegment converts a version segment string to an integer.
+// Returns -1 for non-numeric segments so they sort below any valid number.
+func parseVersionSegment(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return -1
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }
 
 // getBinaryName returns the platform-specific binary name

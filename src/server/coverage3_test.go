@@ -21,6 +21,7 @@ import (
 	castor "github.com/apimgr/whois/src/tor"
 	"github.com/apimgr/whois/src/whois/parser"
 	"github.com/apimgr/whois/src/whois/records"
+	"github.com/go-chi/chi/v5"
 )
 
 // --- debug.go: registerDebugRoutes ---
@@ -29,13 +30,13 @@ import (
 // debug mode is disabled, so /debug/config hits the catch-all (404).
 func TestRegisterDebugRoutesDisabled(t *testing.T) {
 	s := newTestServer(t)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleNotFound)
-	s.registerDebugRoutes(mux)
+	r := chi.NewRouter()
+	r.NotFound(s.handleNotFound)
+	s.registerDebugRoutes(r)
 
 	req := httptest.NewRequest(http.MethodGet, "/debug/config", nil)
 	rr := httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
+	r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("debug route when disabled: status = %d, want 404", rr.Code)
@@ -48,8 +49,8 @@ func TestRegisterDebugRoutesEnabled(t *testing.T) {
 	s := newTestServer(t)
 	s.config.Debug = true
 
-	mux := http.NewServeMux()
-	s.registerDebugRoutes(mux)
+	r := chi.NewRouter()
+	s.registerDebugRoutes(r)
 
 	debugRoutes := []string{
 		"/debug/config",
@@ -65,7 +66,7 @@ func TestRegisterDebugRoutesEnabled(t *testing.T) {
 		t.Run(route, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, route, nil)
 			rr := httptest.NewRecorder()
-			mux.ServeHTTP(rr, req)
+			r.ServeHTTP(rr, req)
 			if rr.Code != http.StatusOK {
 				t.Errorf("debug route %q: status = %d, want 200", route, rr.Code)
 			}

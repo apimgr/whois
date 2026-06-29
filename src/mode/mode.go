@@ -2,17 +2,17 @@
 package mode
 
 // Mode represents the application operating mode.
-type Mode string
+type AppMode string
 
 const (
 	// Production is the default mode — minimal logging, strict security.
-	Production Mode = "production"
+	Production AppMode = "production"
 	// Development enables verbose logging, relaxed CORS, debug endpoints.
-	Development Mode = "development"
+	Development AppMode = "development"
 )
 
 // IsValid returns true if m is a recognized mode.
-func IsValid(m Mode) bool {
+func IsValid(m AppMode) bool {
 	switch m {
 	case Production, Development:
 		return true
@@ -21,6 +21,6 @@ func IsValid(m Mode) bool {
 }
 
 // String returns the string representation of the mode.
-func (m Mode) String() string {
+func (m AppMode) String() string {
 	return string(m)
 }

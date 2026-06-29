@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -77,17 +78,17 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 		// Referrer policy
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
-		// Content Security Policy
-		csp := "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+		// Content Security Policy — no unsafe-inline; nonces must be added per-request for inline scripts.
+		csp := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
 		w.Header().Set("Content-Security-Policy", csp)
 
 		next.ServeHTTP(w, r)
 	})
 }
 
-// RateLimitMiddleware implements rate limiting per IP
-// MUST be FOURTH in middleware chain
-func RateLimitMiddleware(limiter *ratelimit.Limiter) func(http.Handler) http.Handler {
+// RateLimitMiddleware implements rate limiting per IP with config-sourced limits.
+// MUST be FOURTH in middleware chain.
+func RateLimitMiddleware(limiter *ratelimit.Limiter, limit, window int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if limiter == nil {
@@ -97,9 +98,9 @@ func RateLimitMiddleware(limiter *ratelimit.Limiter) func(http.Handler) http.Han
 
 			key := limiter.GetKey(r)
 			if !limiter.Allow(key) {
-				w.Header().Set("X-RateLimit-Limit", "60")
-				w.Header().Set("X-RateLimit-Window", "60")
-				w.Header().Set("Retry-After", "60")
+				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+				w.Header().Set("X-RateLimit-Window", fmt.Sprintf("%d", window))
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", window))
 				SendError(w, ErrRateLimited, MsgRateLimited)
 				log.Printf("Rate limit exceeded for %s", key)
 				return

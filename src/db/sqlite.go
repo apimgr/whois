@@ -113,8 +113,8 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 
 		// Scheduler task definitions and state (see PART 18)
 		`CREATE TABLE IF NOT EXISTS scheduler_tasks (
-			id          TEXT PRIMARY KEY,
-			name        TEXT NOT NULL,
+			task_id     TEXT PRIMARY KEY,
+			task_name   TEXT NOT NULL,
 			enabled     INTEGER NOT NULL DEFAULT 1,
 			schedule    TEXT NOT NULL,
 			last_run    INTEGER,
@@ -134,7 +134,7 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 			status      TEXT NOT NULL,
 			error       TEXT,
 			duration_ms INTEGER,
-			FOREIGN KEY (task_id) REFERENCES scheduler_tasks(id) ON DELETE CASCADE
+			FOREIGN KEY (task_id) REFERENCES scheduler_tasks(task_id) ON DELETE CASCADE
 		)`,
 
 		// Backup file metadata (see PART 21)

@@ -39,7 +39,7 @@ type LogsConfig struct {
 // DefaultLogsConfig returns the spec-default logging configuration.
 func DefaultLogsConfig() LogsConfig {
 	return LogsConfig{
-		Level: "warn",
+		Level: "info",
 		Access: LogFileConfig{
 			Enabled:  true,
 			Filename: "access.log",
@@ -515,14 +515,15 @@ func Default() *ServerConfig {
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:     true,
-			Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},
-			Write:       RateLimitEndpointConfig{Requests: 10, Window: 60},
-			Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
-			GlobalBurst: 240,
+			Read:        RateLimitEndpointConfig{Requests: 100, Window: 60},
+			Write:       RateLimitEndpointConfig{Requests: 20, Window: 60},
+			Health:      RateLimitEndpointConfig{Requests: 60, Window: 60},
+			GlobalBurst: 10,
 		},
 		GeoIP: GeoIPConfig{
 			Enabled:        true,
-			Dir:            "",    // Applied at runtime: {data_dir}/security/geoip (AI.md PART 4)
+			// Applied at runtime: {data_dir}/security/geoip (AI.md PART 4)
+			Dir:            "",
 			DenyCountries:  []string{},
 			AllowCountries: []string{},
 			Databases: GeoIPDatabasesConfig{
@@ -537,16 +538,22 @@ func Default() *ServerConfig {
 			Endpoint:       "/metrics",
 			IncludeSystem:  true,
 			IncludeRuntime: true,
-			Token:          "", // No token by default — restrict by firewall
+			// No token by default — restrict by firewall
+			Token:          "",
 		},
 		Backup: BackupConfig{
-			Dir: "", // Applied at runtime: {data_dir}/backups (AI.md PART 4)
+			// Applied at runtime: {data_dir}/backups (AI.md PART 4)
+			Dir: "",
 			Encryption: BackupEncryptionConfig{Enabled: false},
 			Retention: BackupRetentionConfig{
-				MaxBackups:  1, // Keep 1 daily full backup (default per spec)
-				KeepWeekly:  0, // 0 = disabled
-				KeepMonthly: 0, // 0 = disabled
-				KeepYearly:  0, // 0 = disabled
+				// Keep 1 daily full backup (default per spec)
+				MaxBackups:  1,
+				// 0 = disabled
+				KeepWeekly:  0,
+				// 0 = disabled
+				KeepMonthly: 0,
+				// 0 = disabled
+				KeepYearly:  0,
 			},
 		},
 		Compliance: ComplianceConfig{Enabled: false},
@@ -569,15 +576,18 @@ func Default() *ServerConfig {
 		Notifications: NotificationsConfig{
 			Email: EmailNotificationsConfig{
 				SMTP: SMTPConfig{
-					Host:     "",   // empty = auto-detect on startup
+					// empty = auto-detect on startup
+					Host:     "",
 					Port:     587,
 					Username: "",
 					Password: "",
 					TLS:      "auto",
 				},
 				From: EmailFromConfig{
-					Name:  "",  // default: branding title
-					Email: "", // default: no-reply@{fqdn}
+					// default: branding title
+					Name:  "",
+					// default: no-reply@{fqdn}
+					Email: "",
 				},
 			},
 		},
@@ -592,7 +602,8 @@ func Default() *ServerConfig {
 			CatchUpWindow: "1h",
 		},
 		Debug:               false,
-		ServerToken:         "", // auto-generated on first run
+		// auto-generated on first run
+		ServerToken:         "",
 	}
 }
 
@@ -630,13 +641,23 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	// The web: sibling section is merged into cfg.Web after unmarshaling.
 	cfgDefault := Default()
 	cf := ConfigFile{Server: *cfgDefault}
-	cf.Web.CORS = "*" // default CORS
+	// default CORS
+	cf.Web.CORS = "*"
 	if err := yaml.Unmarshal(data, &cf); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 	cfg := &cf.Server
 	// Propagate web: section into ServerConfig so handlers can access cfg.Web.
 	cfg.Web = cf.Web
+
+	// Allow MODE env var to override server.mode (AI.md PART 6).
+	if m := os.Getenv("MODE"); m != "" {
+		cfg.Mode = m
+	}
+	// Allow DEBUG env var to set debug mode (AI.md PART 6).
+	if dbg := os.Getenv("DEBUG"); dbg == "1" || dbg == "true" || dbg == "yes" {
+		cfg.Debug = true
+	}
 
 	// Set config dir if not specified
 	if cfg.ConfigDir == "" {
@@ -858,7 +879,11 @@ func hasSubstring(s, substr string) bool {
 // Save writes the configuration to server.yml
 // IsDebug returns true when debug mode is active (--debug flag or DEBUG env var).
 func (c *ServerConfig) IsDebug() bool {
-	return c.Debug
+	if c.Debug {
+		return true
+	}
+	dbg := os.Getenv("DEBUG")
+	return dbg == "1" || dbg == "true" || dbg == "yes"
 }
 
 // IsProduction returns true when the server is running in production mode.

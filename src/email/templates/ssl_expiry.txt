@@ -1,0 +1,15 @@
+Subject: {{t .Lang "email.ssl_expiry.subject" .DaysRemaining}}
+
+{{t .Lang "email.ssl_expiry.greeting"}},
+
+{{t .Lang "email.ssl_expiry.body" .Domain .DaysRemaining .ExpiryDate}}
+
+{{if le .DaysRemaining 7}}
+{{t .Lang "email.ssl_expiry.urgent_notice"}}
+{{end}}
+
+{{t .Lang "email.ssl_expiry.renew_label"}}:
+  {{.RenewURL}}
+
+{{t .Lang "email.common.signature"}}
+{{.SiteName}}

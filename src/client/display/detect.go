@@ -2,12 +2,12 @@ package display
 
 import "os"
 
-// Mode represents the display mode
-type Mode int
+// DisplayMode represents the display mode
+type DisplayMode int
 
 const (
 	// ModeCLI is used when a command is provided or output is piped/redirected
-	ModeCLI Mode = iota
+	ModeCLI DisplayMode = iota
 	// ModeTUI is used when running interactively with no command args
 	ModeTUI
 	// ModePlain is used for non-TTY environments (scripts, cron, pipes)
@@ -27,7 +27,7 @@ func defaultIsTTY() bool {
 }
 
 // Detect returns the appropriate display mode based on terminal state and whether a command was given
-func Detect(hasCommand bool) Mode {
+func Detect(hasCommand bool) DisplayMode {
 	if !isTTYFunc() {
 		return ModePlain
 	}

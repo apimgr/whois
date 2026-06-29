@@ -36,7 +36,8 @@ func downloadDatabase(ctx context.Context, url, filepath string) error {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath) // Clean up if we fail
+	// Clean up if we fail
+	defer os.Remove(tmpPath)
 
 	// Copy response body to temp file
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {

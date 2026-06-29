@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/apimgr/whois/src/client/config"
@@ -19,9 +20,10 @@ import (
 
 // Build info — set via -ldflags at build time
 var (
-	Version   = "dev"
-	CommitID  = "unknown"
-	BuildDate = "unknown"
+	Version      = "dev"
+	CommitID     = "unknown"
+	BuildDate    = "unknown"
+	OfficialSite = ""
 )
 
 func main() {
@@ -132,13 +134,11 @@ func run(args []string) int {
 
 	// Handle --update before any server interaction
 	if flagUpdate != "" {
-		runUpdateCommand(flagUpdate, cfg)
-		return 0
+		return runUpdateCommand(flagUpdate, cfg)
 	}
 
 	if flagStatus {
-		runStatusCheck(cfg)
-		return 0
+		return runStatusCheck(cfg)
 	}
 
 	remaining := fs.Args()
@@ -171,7 +171,7 @@ func run(args []string) int {
 			showHelp()
 			return 0
 		}
-		runCLICommand(remaining, cfg)
+		return runCLICommand(remaining, cfg)
 	}
 	return 0
 }
@@ -195,8 +195,8 @@ func resolveColor(flagColor string) bool {
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
-// runUpdateCommand handles --update check/yes/branch=<name>
-func runUpdateCommand(cmd string, cfg *config.CLIConfig) {
+// runUpdateCommand handles --update check/yes/branch=<name> and returns an exit code.
+func runUpdateCommand(cmd string, cfg *config.CLIConfig) int {
 	channel := update.ChannelStable
 	if cfg.UpdateChannel != "" {
 		channel = update.UpdateChannel(cfg.UpdateChannel)
@@ -207,7 +207,7 @@ func runUpdateCommand(cmd string, cfg *config.CLIConfig) {
 		info, err := update.CheckForUpdates(Version, channel)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error checking for updates: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		if info.Available {
 			fmt.Printf("Update available: %s → %s\n", info.CurrentVersion, info.LatestVersion)
@@ -220,7 +220,7 @@ func runUpdateCommand(cmd string, cfg *config.CLIConfig) {
 		fmt.Printf("Checking for updates (channel: %s)…\n", channel)
 		if err := update.PerformUpdate(Version, channel); err != nil {
 			fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("Update complete.")
 
@@ -228,19 +228,20 @@ func runUpdateCommand(cmd string, cfg *config.CLIConfig) {
 		branch := strings.TrimPrefix(cmd, "branch=")
 		if branch == "" {
 			fmt.Fprintln(os.Stderr, "Error: branch name required (e.g. --update branch=beta)")
-			os.Exit(1)
+			return 1
 		}
 		cfg.UpdateChannel = branch
 		if err := config.Save(cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("Update channel set to %q\n", branch)
 
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown update command %q. Use: check, yes, branch=<name>\n", cmd)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // applyEnvOverrides applies CASWHOIS_* environment variables as lowest-priority defaults
@@ -262,22 +263,23 @@ func applyEnvOverrides(cfg *config.CLIConfig) {
 	}
 }
 
-// runStatusCheck calls /server/healthz and exits 0 on success, 1 on failure
-func runStatusCheck(cfg *config.CLIConfig) {
+// runStatusCheck calls /server/healthz and returns 0 on success, 1 on failure.
+func runStatusCheck(cfg *config.CLIConfig) int {
 	if cfg.Server == "" {
 		fmt.Fprintln(os.Stderr, "Error: no server configured")
-		os.Exit(1)
+		return 1
 	}
 	client := lookup.New(cfg.Server, cfg.Token, Version)
 	if err := client.HealthCheck(); err != nil {
 		fmt.Fprintf(os.Stderr, "unhealthy: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	fmt.Println("healthy")
+	return 0
 }
 
-// runCLICommand dispatches a CLI command from non-flag arguments
-func runCLICommand(args []string, cfg *config.CLIConfig) {
+// runCLICommand dispatches a CLI command from non-flag arguments and returns an exit code.
+func runCLICommand(args []string, cfg *config.CLIConfig) int {
 	client := lookup.New(cfg.Server, cfg.Token, Version)
 
 	command := args[0]
@@ -287,58 +289,59 @@ func runCLICommand(args []string, cfg *config.CLIConfig) {
 	case "domain":
 		if len(rest) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: domain required")
-			os.Exit(1)
+			return 1
 		}
 		result, err := client.Domain(rest[0])
-		printResult(result, err, cfg.Format)
+		return printResult(result, err, cfg.Format)
 
 	case "ip":
 		if len(rest) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: IP address required")
-			os.Exit(1)
+			return 1
 		}
 		result, err := client.IP(rest[0])
-		printResult(result, err, cfg.Format)
+		return printResult(result, err, cfg.Format)
 
 	case "asn":
 		if len(rest) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: ASN required")
-			os.Exit(1)
+			return 1
 		}
 		result, err := client.ASN(rest[0])
-		printResult(result, err, cfg.Format)
+		return printResult(result, err, cfg.Format)
 
 	case "validate":
 		if len(rest) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: query required")
-			os.Exit(1)
+			return 1
 		}
 		msg, err := client.Validate(rest[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println(msg)
+		return 0
 
 	case "lookup":
 		if len(rest) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: query required")
-			os.Exit(1)
+			return 1
 		}
 		result, err := client.Lookup(rest[0])
-		printResult(result, err, cfg.Format)
+		return printResult(result, err, cfg.Format)
 
 	default:
 		result, err := client.Lookup(command)
-		printResult(result, err, cfg.Format)
+		return printResult(result, err, cfg.Format)
 	}
 }
 
-// printResult outputs a lookup result in the requested format
-func printResult(result *lookup.Result, err error, format string) {
+// printResult outputs a lookup result in the requested format and returns an exit code.
+func printResult(result *lookup.Result, err error, format string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	switch strings.ToLower(format) {
@@ -346,7 +349,7 @@ func printResult(result *lookup.Result, err error, format string) {
 		data, jsonErr := json.MarshalIndent(result, "", "  ")
 		if jsonErr != nil {
 			fmt.Fprintf(os.Stderr, "Error marshalling JSON: %v\n", jsonErr)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println(string(data))
 
@@ -360,13 +363,13 @@ func printResult(result *lookup.Result, err error, format string) {
 		fmt.Printf("Timestamp: %s\n\n", result.Timestamp)
 		fmt.Println(result.Raw)
 	}
+	return 0
 }
 
 func showVersion() {
 	binaryName := filepath.Base(os.Args[0])
-	fmt.Printf("%s version %s\n", binaryName, Version)
-	fmt.Printf("Commit: %s\n", CommitID)
-	fmt.Printf("Built: %s\n", BuildDate)
+	fmt.Printf("%s version %s (%s) built on %s for %s/%s\n",
+		binaryName, Version, CommitID, BuildDate, runtime.GOOS, runtime.GOARCH)
 }
 
 func showHelp() {
