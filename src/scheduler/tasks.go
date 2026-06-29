@@ -191,7 +191,23 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register whois_records_refresh: %w", err)
 	}
 
-	log.Printf("INFO: Registered %d built-in scheduler tasks", 11)
+	// rdap_bootstrap_update — Weekly Sunday at 04:00 (after GeoIP update)
+	if err := s.Register(&Task{
+		ID:       "rdap_bootstrap_update",
+		Name:     "RDAP Bootstrap Update",
+		Schedule: "0 4 * * 0",
+		Enabled:  true,
+		Handler:  s.taskRDAPBootstrapUpdate,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 5,
+			RetryDelay: 1 * time.Hour,
+			Backoff:    "exponential",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register rdap_bootstrap_update: %w", err)
+	}
+
+	log.Printf("INFO: Registered %d built-in scheduler tasks", 12)
 	return nil
 }
 
@@ -323,4 +339,14 @@ func (s *Scheduler) taskWhoisRecordsRefresh(ctx context.Context) error {
 	}
 	log.Printf("INFO: whois_records_refresh: refreshed %d stale records", len(queries))
 	return nil
+}
+
+// taskRDAPBootstrapUpdate fetches the latest IANA RDAP bootstrap files via the
+// RDAPBootstrapHook. When no hook is set the task is a no-op.
+func (s *Scheduler) taskRDAPBootstrapUpdate(ctx context.Context) error {
+	if s.RDAPBootstrapHook == nil {
+		log.Printf("INFO: rdap_bootstrap_update skipped (no RDAP bootstrap hook registered)")
+		return nil
+	}
+	return s.RDAPBootstrapHook(ctx)
 }

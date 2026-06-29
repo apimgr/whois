@@ -52,6 +52,8 @@ type Server struct {
 	startTime time.Time
 	// stats holds atomic runtime counters surfaced via /server/stats.
 	stats serverStats
+	// lookupService handles RDAP-first lookups with WHOIS fallback
+	lookupService *whois.LookupService
 }
 
 // New creates a new Server instance.
@@ -150,18 +152,27 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		}()
 	}
 
+	// Initialize WHOIS/RDAP lookup service (AI.md IDEA.md — RDAP support).
+	lookupSvc := whois.NewLookupService(cfg.DataDir, memCache)
+	if err := lookupSvc.LoadBootstrap(); err != nil {
+		log.Printf("INFO: RDAP bootstrap not available: %v — will use WHOIS only until bootstrap is fetched", err)
+	} else if lookupSvc.HasRDAPData() {
+		log.Println("[WHOIS] RDAP bootstrap loaded — using RDAP-first strategy")
+	}
+
 	srv := &Server{
-		config:    cfg,
-		info:      runtimeinfo.Detect(),
-		cache:     memCache,
-		ratelimit: rateLimiter,
-		database:  database,
-		scheduler: sched,
-		geoip:     geoipMgr,
-		email:     emailMgr,
-		metrics:   metricsCollector,
-		logger:    lgr,
-		startTime: time.Now(),
+		config:        cfg,
+		info:          runtimeinfo.Detect(),
+		cache:         memCache,
+		ratelimit:     rateLimiter,
+		database:      database,
+		scheduler:     sched,
+		geoip:         geoipMgr,
+		email:         emailMgr,
+		metrics:       metricsCollector,
+		logger:        lgr,
+		startTime:     time.Now(),
+		lookupService: lookupSvc,
 	}
 
 	// Register built-in tasks if scheduler initialized.
@@ -219,6 +230,11 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 				}
 				return nil
 			}
+		}
+
+		// Wire RDAP bootstrap update hook (IDEA.md — RDAP support).
+		sched.RDAPBootstrapHook = func(ctx context.Context) error {
+			return srv.lookupService.UpdateBootstrap(ctx)
 		}
 
 		if err := sched.RegisterBuiltInTasks(); err != nil {

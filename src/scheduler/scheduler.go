@@ -33,6 +33,8 @@ type Scheduler struct {
 	TorHealthHook      func(context.Context) error
 	// WhoisRefreshHook re-queries the supplied stale queries and upserts fresh records.
 	WhoisRefreshHook   func(context.Context, []string) error
+	// RDAPBootstrapHook fetches latest IANA RDAP bootstrap files.
+	RDAPBootstrapHook  func(context.Context) error
 }
 
 // Task represents a scheduled task
