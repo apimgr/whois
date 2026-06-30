@@ -73,7 +73,7 @@ func (m WizardModel) Init() tea.Cmd {
 }
 
 // Update handles messages
-func (m WizardModel) Update(msg tea.Msg) (WizardModel, tea.Cmd) {
+func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -107,7 +107,7 @@ func (m WizardModel) Update(msg tea.Msg) (WizardModel, tea.Cmd) {
 }
 
 // handleEnter advances the wizard on Enter key press
-func (m WizardModel) handleEnter() (WizardModel, tea.Cmd) {
+func (m WizardModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepURL:
 		serverURL := strings.TrimSpace(m.urlIn.Value())

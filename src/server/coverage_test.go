@@ -377,7 +377,7 @@ func TestRateLimitMiddlewareNilLimiter(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
-	h := RateLimitMiddleware(nil)(next)
+	h := RateLimitMiddleware(nil, 0, 0)(next)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)

@@ -106,7 +106,7 @@ func TestUpdate_Enter_EmptyURL_NoOp(t *testing.T) {
 	m := New(newTestCfg())
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	result, cmd := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepURL {
 		t.Error("empty URL enter should stay on stepURL")
 	}
@@ -120,7 +120,7 @@ func TestUpdate_Enter_WithURL_AdvancesToTest(t *testing.T) {
 	m.urlIn.SetValue("http://localhost:64580")
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	result, cmd := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepTest {
 		t.Errorf("step = %d, want stepTest (%d)", updated.step, stepTest)
 	}
@@ -135,7 +135,7 @@ func TestUpdate_Enter_TokenStep_AdvancesToDone(t *testing.T) {
 	m.tokenIn.SetValue("tok_abc123")
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	result, cmd := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepDone {
 		t.Errorf("step = %d, want stepDone (%d)", updated.step, stepDone)
 	}
@@ -152,7 +152,7 @@ func TestUpdate_TestDoneMsg_Success(t *testing.T) {
 	m.step = stepTest
 	msg := testDoneMsg{err: nil}
 	result, _ := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepToken {
 		t.Errorf("step = %d, want stepToken (%d)", updated.step, stepToken)
 	}
@@ -163,7 +163,7 @@ func TestUpdate_TestDoneMsg_Failure(t *testing.T) {
 	m.step = stepTest
 	msg := testDoneMsg{err: &testError{"connection refused"}}
 	result, _ := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepURL {
 		t.Errorf("step = %d, want stepURL (%d) on failure", updated.step, stepURL)
 	}
@@ -193,7 +193,7 @@ func TestUpdate_NonKeyNonDone_StepURL(t *testing.T) {
 	m.step = stepURL
 	type customMsg struct{}
 	result, _ := m.Update(customMsg{})
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepURL {
 		t.Errorf("unhandled msg on stepURL should stay stepURL, got %d", updated.step)
 	}
@@ -205,7 +205,7 @@ func TestUpdate_NonKeyNonDone_StepToken(t *testing.T) {
 	m.step = stepToken
 	type customMsg struct{}
 	result, _ := m.Update(customMsg{})
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepToken {
 		t.Errorf("unhandled msg on stepToken should stay stepToken, got %d", updated.step)
 	}
@@ -218,7 +218,7 @@ func TestUpdate_NonKeyNonDone_StepTest(t *testing.T) {
 	m.cfg.Server = "http://localhost:64580"
 	type customMsg struct{}
 	result, _ := m.Update(customMsg{})
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepTest {
 		t.Errorf("unhandled msg on stepTest should stay stepTest, got %d", updated.step)
 	}
@@ -253,7 +253,7 @@ func TestHandleEnter_StepDone_IsNoOp(t *testing.T) {
 	m := New(newTestCfg())
 	m.step = stepDone
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepDone {
 		t.Errorf("handleEnter on stepDone should stay stepDone, got %d", updated.step)
 	}
@@ -269,7 +269,7 @@ func TestUpdate_Enter_TokenStep_BlankToken(t *testing.T) {
 	m.tokenIn.SetValue("")
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	result, _ := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(WizardModel)
 	if updated.step != stepDone {
 		t.Errorf("blank token should still advance to stepDone, got %d", updated.step)
 	}

@@ -89,7 +89,7 @@ func TestUpdate_WindowSize(t *testing.T) {
 	m := New(newTestClient())
 	msg := tea.WindowSizeMsg{Width: 100, Height: 40}
 	result, _ := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(TUIModel)
 	if updated.width != 100 {
 		t.Errorf("width = %d, want 100", updated.width)
 	}
@@ -127,7 +127,7 @@ func TestUpdate_Esc_WithInput_ClearsInput(t *testing.T) {
 	if cmd != nil {
 		t.Error("Esc with input should not quit")
 	}
-	updated := result.(Model)
+	updated := result.(TUIModel)
 	if updated.result != "" {
 		t.Error("result should be cleared")
 	}
@@ -140,7 +140,7 @@ func TestUpdate_Enter_EmptyQuery(t *testing.T) {
 	m := New(newTestClient())
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	result, cmd := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(TUIModel)
 	if updated.loading {
 		t.Error("should not be loading on empty query")
 	}
@@ -165,7 +165,7 @@ func TestUpdate_Enter_WithQuery(t *testing.T) {
 	m.input.SetValue("example.com")
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	result, cmd := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(TUIModel)
 	if !updated.loading {
 		t.Error("should be loading after enter with query")
 	}
@@ -180,7 +180,7 @@ func TestUpdate_LookupDoneMsg_WithResult(t *testing.T) {
 	r := &lookup.Result{Query: "example.com", Type: "domain"}
 	msg := lookupDoneMsg{result: r, err: nil}
 	result, _ := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(TUIModel)
 	if updated.loading {
 		t.Error("should not be loading after result")
 	}
@@ -194,7 +194,7 @@ func TestUpdate_LookupDoneMsg_WithError(t *testing.T) {
 	m.loading = true
 	msg := lookupDoneMsg{result: nil, err: errors.New("not found")}
 	result, _ := m.Update(msg)
-	updated := result.(Model)
+	updated := result.(TUIModel)
 	if updated.loading {
 		t.Error("should not be loading after error")
 	}

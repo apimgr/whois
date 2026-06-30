@@ -186,7 +186,7 @@ func TestRateLimitMiddlewareExceeded(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	h := RateLimitMiddleware(limiter)(next)
+	h := RateLimitMiddleware(limiter, 1, 60)(next)
 
 	// First request: within limit.
 	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
@@ -223,7 +223,7 @@ func TestRateLimitMiddlewareIndependentIPs(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := RateLimitMiddleware(limiter)(next)
+	h := RateLimitMiddleware(limiter, 1, 60)(next)
 
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req1.RemoteAddr = "192.168.1.1:1000"

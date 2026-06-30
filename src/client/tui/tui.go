@@ -78,7 +78,7 @@ func (m TUIModel) Init() tea.Cmd {
 }
 
 // Update handles messages and keypresses
-func (m TUIModel) Update(msg tea.Msg) (TUIModel, tea.Cmd) {
+func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

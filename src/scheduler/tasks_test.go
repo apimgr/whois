@@ -78,15 +78,15 @@ func newTasksScheduler(t *testing.T) *Scheduler {
 	return s
 }
 
-// TestRegisterBuiltInTasks verifies all 11 built-in tasks are registered without error.
+// TestRegisterBuiltInTasks verifies all 12 built-in tasks are registered without error.
 func TestRegisterBuiltInTasks(t *testing.T) {
 	s := newTasksScheduler(t)
 	if err := s.RegisterBuiltInTasks(); err != nil {
 		t.Fatalf("RegisterBuiltInTasks: %v", err)
 	}
 	tasks := s.GetTasks()
-	if len(tasks) != 11 {
-		t.Errorf("got %d tasks, want 11", len(tasks))
+	if len(tasks) != 12 {
+		t.Errorf("got %d tasks, want 12", len(tasks))
 	}
 }
 
@@ -108,6 +108,7 @@ func TestRegisterBuiltInTasks_IDs(t *testing.T) {
 		"healthcheck_self",
 		"tor_health",
 		"whois_records_refresh",
+		"rdap_bootstrap_update",
 	}
 	for _, id := range requiredIDs {
 		if _, err := s.GetTask(id); err != nil {

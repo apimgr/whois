@@ -32,7 +32,7 @@ func TestIsValid_Development(t *testing.T) {
 func TestIsValid_Invalid(t *testing.T) {
 	cases := []string{"", "staging", "test", "PRODUCTION", "Production"}
 	for _, c := range cases {
-		if IsValid(Mode(c)) {
+		if IsValid(AppMode(c)) {
 			t.Errorf("IsValid(%q) = true, want false", c)
 		}
 	}
@@ -41,12 +41,12 @@ func TestIsValid_Invalid(t *testing.T) {
 // TestMode_String verifies String() returns the underlying string value.
 func TestMode_String(t *testing.T) {
 	cases := []struct {
-		mode Mode
+		mode AppMode
 		want string
 	}{
 		{Production, "production"},
 		{Development, "development"},
-		{Mode("custom"), "custom"},
+		{AppMode("custom"), "custom"},
 	}
 	for _, tc := range cases {
 		got := tc.mode.String()

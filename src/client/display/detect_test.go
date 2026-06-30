@@ -6,8 +6,8 @@ import "testing"
 func TestModeConstants(t *testing.T) {
 	cases := []struct {
 		name string
-		got  Mode
-		want Mode
+		got  DisplayMode
+		want DisplayMode
 	}{
 		{"ModeCLI", ModeCLI, 0},
 		{"ModeTUI", ModeTUI, 1},
@@ -29,7 +29,7 @@ func TestDetect(t *testing.T) {
 		name       string
 		isTTY      bool
 		hasCommand bool
-		want       Mode
+		want       DisplayMode
 	}{
 		{"non-TTY no command → plain", false, false, ModePlain},
 		{"non-TTY has command → plain", false, true, ModePlain},
