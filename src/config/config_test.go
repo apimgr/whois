@@ -471,8 +471,8 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	if cfg.UpdateChannel != "stable" {
 		t.Errorf("cfg.UpdateChannel = %q, want %q (default)", cfg.UpdateChannel, "stable")
 	}
-	if cfg.RateLimit.Read.Requests != 120 {
-		t.Errorf("cfg.RateLimit.Read.Requests = %d, want 120 (default)", cfg.RateLimit.Read.Requests)
+	if cfg.RateLimit.Read.Requests != 100 {
+		t.Errorf("cfg.RateLimit.Read.Requests = %d, want 100 (default)", cfg.RateLimit.Read.Requests)
 	}
 }
 

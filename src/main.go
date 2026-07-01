@@ -54,6 +54,7 @@ var knownSubcommands = map[string]bool{
 	"stop":      true,
 	"restart":   true,
 	"status":    true,
+	"update":    true,
 }
 
 func run(args []string) int {
@@ -307,6 +308,9 @@ func runSubcommand(subcmd, binaryName string, remainingArgs []string) int {
 	case "status":
 		return checkStatus("")
 
+	// "update" checks for or applies updates (same as --update).
+	case "update":
+		return runUpdateSubcmd(binaryName, remainingArgs)
 	}
 
 	fmt.Fprintf(os.Stderr, "Unknown subcommand: %s\n", subcmd)
@@ -384,6 +388,27 @@ func runServiceSubcmd(cmd string, _ []string) int {
 	return 0
 }
 
+// runUpdateSubcmd handles the "update" positional subcommand by parsing flags
+// and routing to handleUpdate. Supports: check, yes, branch=NAME, --version X.
+func runUpdateSubcmd(binaryName string, args []string) int {
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	versionPin := fs.String("version", "", "Pin to specific version")
+	checkOnly := fs.Bool("check", false, "Check for updates without installing")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	// Default command is "check" if no positional arg and no flags provided.
+	cmd := "check"
+	if fs.NArg() > 0 {
+		cmd = fs.Arg(0)
+	} else if *checkOnly {
+		cmd = "check"
+	} else if *versionPin != "" {
+		cmd = "version=" + *versionPin
+	}
+	return handleUpdate(cmd, binaryName)
+}
 
 // colorEnabled returns whether color output is enabled, respecting PART 8 priority order:
 // 1. CLI --color flag  2. NO_COLOR env var  3. Auto-detect (TTY)

@@ -358,9 +358,12 @@ func TestRunCLICommand_Validate(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runCLICommand([]string{"validate", "example.com"}, cfg)
+	code := runCLICommand([]string{"validate", "example.com"}, cfg)
 	w.Close()
 	os.Stdout = oldOut
+	if code != 0 {
+		t.Errorf("validate returned exit code %d, want 0", code)
+	}
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
@@ -395,13 +398,16 @@ func TestRunCLICommand_Lookup(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runCLICommand([]string{"lookup", "example.com"}, cfg)
+	code := runCLICommand([]string{"lookup", "example.com"}, cfg)
 	w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	out := buf.String()
+	if code != 0 {
+		t.Errorf("lookup returned exit code %d, want 0", code)
+	}
 	if !strings.Contains(out, "example.com") {
 		t.Errorf("lookup output = %q, want it to contain %q", out, "example.com")
 	}
@@ -432,13 +438,16 @@ func TestRunCLICommand_Domain(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runCLICommand([]string{"domain", "github.com"}, cfg)
+	code := runCLICommand([]string{"domain", "github.com"}, cfg)
 	w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	out := buf.String()
+	if code != 0 {
+		t.Errorf("domain returned exit code %d, want 0", code)
+	}
 	if !strings.Contains(out, "GITHUB.COM") {
 		t.Errorf("domain output = %q, want it to contain %q", out, "GITHUB.COM")
 	}
@@ -469,13 +478,16 @@ func TestRunCLICommand_IP(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runCLICommand([]string{"ip", "8.8.8.8"}, cfg)
+	code := runCLICommand([]string{"ip", "8.8.8.8"}, cfg)
 	w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	out := buf.String()
+	if code != 0 {
+		t.Errorf("ip returned exit code %d, want 0", code)
+	}
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Errorf("ip command json output is not valid JSON: %v\nOutput: %s", err, out)
@@ -507,13 +519,16 @@ func TestRunCLICommand_ASN(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runCLICommand([]string{"asn", "AS15169"}, cfg)
+	code := runCLICommand([]string{"asn", "AS15169"}, cfg)
 	w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	out := buf.String()
+	if code != 0 {
+		t.Errorf("asn returned exit code %d, want 0", code)
+	}
 	if !strings.Contains(out, "AS15169") {
 		t.Errorf("asn output = %q, want it to contain %q", out, "AS15169")
 	}
@@ -545,13 +560,16 @@ func TestRunCLICommand_DefaultLookup(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runCLICommand([]string{"auto.example.com"}, cfg)
+	code := runCLICommand([]string{"auto.example.com"}, cfg)
 	w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	out := buf.String()
+	if code != 0 {
+		t.Errorf("default lookup returned exit code %d, want 0", code)
+	}
 	if !strings.Contains(out, "auto raw") {
 		t.Errorf("default lookup output = %q, want it to contain %q", out, "auto raw")
 	}
@@ -566,8 +584,7 @@ func TestRunCLICommand_DefaultLookup(t *testing.T) {
 // parent process is not killed.
 func TestPrintResult_Error_ExitCode(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "1" {
-		printResult(nil, fmt.Errorf("injected error"), "text")
-		return
+		os.Exit(printResult(nil, fmt.Errorf("injected error"), "text"))
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestPrintResult_Error_ExitCode")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=1")
@@ -1069,8 +1086,7 @@ func TestRun_EnvServerOverride(t *testing.T) {
 // no server is configured.
 func TestRunStatusCheck_EmptyServer(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunStatusCheck_EmptyServer" {
-		runStatusCheck(&config.CLIConfig{Server: ""})
-		return
+		os.Exit(runStatusCheck(&config.CLIConfig{Server: ""}))
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunStatusCheck_EmptyServer", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunStatusCheck_EmptyServer")
@@ -1091,8 +1107,7 @@ func TestRunStatusCheck_EmptyServer(t *testing.T) {
 // causes os.Exit(1).
 func TestRunUpdateCommand_DefaultUnknown(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunUpdateCommand_DefaultUnknown" {
-		runUpdateCommand("badcmd", &config.CLIConfig{})
-		return
+		os.Exit(runUpdateCommand("badcmd", &config.CLIConfig{}))
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunUpdateCommand_DefaultUnknown", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunUpdateCommand_DefaultUnknown")
@@ -1108,8 +1123,7 @@ func TestRunUpdateCommand_DefaultUnknown(t *testing.T) {
 // TestRunUpdateCommand_BranchEmpty verifies that branch= with no name causes os.Exit(1).
 func TestRunUpdateCommand_BranchEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunUpdateCommand_BranchEmpty" {
-		runUpdateCommand("branch=", &config.CLIConfig{})
-		return
+		os.Exit(runUpdateCommand("branch=", &config.CLIConfig{}))
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunUpdateCommand_BranchEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunUpdateCommand_BranchEmpty")
@@ -1129,8 +1143,8 @@ func TestRunUpdateCommand_BranchEmpty(t *testing.T) {
 // TestRunCLICommand_DomainEmpty verifies that "domain" with no args causes os.Exit(1).
 func TestRunCLICommand_DomainEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_DomainEmpty" {
-		runCLICommand([]string{"domain"}, &config.CLIConfig{Server: "http://localhost:9999"})
-		return
+		os.Exit(runCLICommand([]string{"domain"}, &config.CLIConfig{Server: "http://localhost:9999"}))
+		
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_DomainEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_DomainEmpty")
@@ -1146,8 +1160,8 @@ func TestRunCLICommand_DomainEmpty(t *testing.T) {
 // TestRunCLICommand_IPEmpty verifies that "ip" with no args causes os.Exit(1).
 func TestRunCLICommand_IPEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_IPEmpty" {
-		runCLICommand([]string{"ip"}, &config.CLIConfig{Server: "http://localhost:9999"})
-		return
+		os.Exit(runCLICommand([]string{"ip"}, &config.CLIConfig{Server: "http://localhost:9999"}))
+		
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_IPEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_IPEmpty")
@@ -1163,8 +1177,8 @@ func TestRunCLICommand_IPEmpty(t *testing.T) {
 // TestRunCLICommand_ASNEmpty verifies that "asn" with no args causes os.Exit(1).
 func TestRunCLICommand_ASNEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_ASNEmpty" {
-		runCLICommand([]string{"asn"}, &config.CLIConfig{Server: "http://localhost:9999"})
-		return
+		os.Exit(runCLICommand([]string{"asn"}, &config.CLIConfig{Server: "http://localhost:9999"}))
+		
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_ASNEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_ASNEmpty")
@@ -1180,8 +1194,8 @@ func TestRunCLICommand_ASNEmpty(t *testing.T) {
 // TestRunCLICommand_ValidateEmpty verifies that "validate" with no args causes os.Exit(1).
 func TestRunCLICommand_ValidateEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_ValidateEmpty" {
-		runCLICommand([]string{"validate"}, &config.CLIConfig{Server: "http://localhost:9999"})
-		return
+		os.Exit(runCLICommand([]string{"validate"}, &config.CLIConfig{Server: "http://localhost:9999"}))
+		
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_ValidateEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_ValidateEmpty")
@@ -1197,8 +1211,8 @@ func TestRunCLICommand_ValidateEmpty(t *testing.T) {
 // TestRunCLICommand_LookupEmpty verifies that "lookup" with no args causes os.Exit(1).
 func TestRunCLICommand_LookupEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_LookupEmpty" {
-		runCLICommand([]string{"lookup"}, &config.CLIConfig{Server: "http://localhost:9999"})
-		return
+		os.Exit(runCLICommand([]string{"lookup"}, &config.CLIConfig{Server: "http://localhost:9999"}))
+		
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_LookupEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_LookupEmpty")
