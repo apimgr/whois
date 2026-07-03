@@ -28,33 +28,25 @@ Completed:
 - `handleWellKnownNotFound` - 404 for unknown entries
 - `wellKnownMethodCheck` - GET/HEAD enforcement (405 for others)
 
-## [ ] Implement Swagger/OpenAPI endpoints (AI.md PART 14)
+## [x] Implement Swagger/OpenAPI endpoints (AI.md PART 14)
 
-Required routes:
-- `/server/docs/swagger` - Swagger UI (HTML, interactive REST explorer)
-- `/api/swagger` - OpenAPI JSON spec (unversioned alias, direct serve not redirect)
-- `/api/v1/server/swagger` - OpenAPI JSON spec (versioned)
-
-Implementation:
-- Generate OpenAPI 3.0 spec from handler annotations or manual spec
-- Embed Swagger UI assets in binary
-- Serve JSON spec at `/api/swagger` and `/api/v1/server/swagger`
-- Serve Swagger UI at `/server/docs/swagger`
+Completed:
+- `src/server/swagger.go` — OpenAPI 3.0.3 spec generation and Swagger UI handler
+- `/server/docs/swagger` — Swagger UI with dark theme (CDN with SRI hashes)
+- `/api/swagger` — OpenAPI JSON spec (unversioned)
+- `/api/v1/server/swagger` — OpenAPI JSON spec (versioned)
+- `src/server/swagger_test.go` — unit tests for spec generation and handlers
 
 Read: AI.md PART 14
 
-## [ ] Implement GraphQL endpoints (AI.md PART 14)
+## [x] Implement GraphQL endpoints (AI.md PART 14)
 
-Required routes:
-- `/server/docs/graphql` - GraphiQL UI (HTML, interactive explorer)
-- `/api/graphql` - GraphQL POST endpoint (unversioned alias)
-- `/api/v1/server/graphql` - GraphQL POST endpoint (versioned)
-
-Implementation:
-- Define GraphQL schema matching REST API
-- Implement resolvers for whois queries
-- Embed GraphiQL UI assets
-- Serve GraphQL at `/api/graphql` and `/api/v1/server/graphql`
-- Serve GraphiQL at `/server/docs/graphql`
+Completed:
+- `src/server/graphql.go` — GraphQL POST handler with introspection support
+- `/server/docs/graphql` — GraphiQL UI with dark theme (CDN with SRI hashes)
+- `/api/graphql` — GraphQL POST endpoint (unversioned)
+- `/api/v1/server/graphql` — GraphQL POST endpoint (versioned)
+- Resolvers: health, stats, whois queries
+- `src/server/graphql_test.go` — unit tests for all query types
 
 Read: AI.md PART 14

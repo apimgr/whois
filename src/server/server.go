@@ -530,6 +530,16 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/server/docs", s.handleDocsPage)
 	r.Get("/docs", s.handleDocsPage)
 
+	// Swagger/OpenAPI endpoints (AI.md PART 14)
+	r.Get("/server/docs/swagger", s.handleSwaggerUI)
+	r.Get("/api/swagger", s.handleSwaggerJSON)
+	r.Get("/api/v1/server/swagger", s.handleSwaggerJSON)
+
+	// GraphQL endpoints (AI.md PART 14)
+	r.Get("/server/docs/graphql", s.handleGraphiQL)
+	r.Post("/api/graphql", s.handleGraphQL)
+	r.Post("/api/v1/server/graphql", s.handleGraphQL)
+
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
 	r.Get("/whois", s.handleWHOISPage)
 
