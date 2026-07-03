@@ -502,9 +502,22 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Handle("/static/*", staticFileServer())
 
 	// SEO & Security files (PART 14, PART 16) — required
-	r.Get("/.well-known/security.txt", s.handleSecurityTxt)
 	r.Get("/sitemap.xml", s.handleSitemap)
 	r.Get("/robots.txt", s.handleRobotsTxt)
+
+	// Well-known namespace (AI.md PART 14) — strict allowlist with method enforcement
+	// Only GET/HEAD allowed; unknown entries return 404; no directory listing.
+	r.Route("/.well-known", func(wk chi.Router) {
+		wk.Use(wellKnownMethodCheck)
+		wk.Get("/security.txt", s.handleSecurityTxt)
+		wk.Get("/llms.txt", s.handleLLMsTxt)
+		// Catch-all for unsupported well-known entries — returns 404
+		wk.Get("/*", s.handleWellKnownNotFound)
+		// Directory listing disabled — /.well-known/ itself returns 404
+		wk.Get("/", s.handleWellKnownNotFound)
+	})
+	// Also serve llms.txt at root per spec
+	r.Get("/llms.txt", s.handleLLMsTxt)
 
 	// PWA support (PART 16) — manifest, service worker, offline fallback
 	r.Get("/manifest.json", s.handleManifest)
@@ -770,6 +783,90 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, content)
+}
+
+// handleLLMsTxt serves llms.txt for AI agent discovery (AI.md PART 14).
+// Required for ALL projects. Tells AI agents what the application does and
+// what API endpoints are available.
+func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
+	baseURL := fmt.Sprintf("http://localhost:%d", s.config.Port)
+	if s.config.FQDN != "" {
+		baseURL = "https://" + s.config.FQDN
+	}
+
+	// Security contact
+	securityContact := "security@" + s.config.FQDN
+	if s.config.FQDN == "" {
+		securityContact = "security@localhost"
+	}
+
+	// Rate limit info
+	rateLimit := s.config.RateLimit.Read.Requests
+	if rateLimit == 0 {
+		rateLimit = 100
+	}
+
+	content := fmt.Sprintf(`# caswhois
+> WHOIS lookup service with domain, IP, and ASN queries
+
+## API
+Base URL: %s/api/v1
+Authentication: Bearer token (optional for public endpoints)
+Rate limit: %d requests/minute
+
+## Endpoints
+- GET /api/v1/server/healthz - Health check (no auth)
+- GET /api/v1/whois/{query} - Auto-detect lookup (domain/IP/ASN)
+- GET /api/v1/whois/domain/{domain} - Domain WHOIS lookup
+- GET /api/v1/whois/ip/{ip} - IP WHOIS lookup
+- GET /api/v1/whois/asn/{asn} - ASN WHOIS lookup
+- GET /api/v1/whois/validate/{query} - Validate query without lookup
+- GET /api/v1/whois/search?q={owner} - Search by owner/registrant
+- POST /api/v1/whois/bulk - Bulk lookup (requires token)
+
+## Capabilities
+- Domain WHOIS lookups with parsed fields
+- IP address geolocation and WHOIS
+- ASN ownership information
+- RDAP protocol support
+- Bulk lookups for authenticated users
+- Rate limiting and caching
+
+## Output Formats
+- JSON (Accept: application/json)
+- Plain text (Accept: text/plain)
+
+## Contact
+API issues: %s
+Security: %s
+`, baseURL, rateLimit, securityContact, securityContact)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, content)
+}
+
+// handleWellKnownNotFound returns 404 for unknown /.well-known/* entries.
+// Per AI.md PART 14: unsupported well-known entries MUST return 404.
+func (s *Server) handleWellKnownNotFound(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	fmt.Fprint(w, "404 Not Found\n")
+}
+
+// wellKnownMethodCheck is middleware that enforces GET/HEAD only for /.well-known/*.
+// Per AI.md PART 14: other methods MUST return 405 Method Not Allowed.
+func wellKnownMethodCheck(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			fmt.Fprint(w, "405 Method Not Allowed\n")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 

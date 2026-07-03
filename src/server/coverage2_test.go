@@ -133,6 +133,114 @@ func TestHandleRobotsTxtWithFQDN(t *testing.T) {
 	}
 }
 
+// TestHandleLLMsTxt verifies /llms.txt returns text/plain with expected content.
+func TestHandleLLMsTxt(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleLLMsTxt(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	ct := rr.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/plain") {
+		t.Errorf("Content-Type = %q, want text/plain", ct)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "# caswhois") {
+		t.Error("llms.txt missing project name header")
+	}
+	if !strings.Contains(body, "## API") {
+		t.Error("llms.txt missing API section")
+	}
+	if !strings.Contains(body, "## Endpoints") {
+		t.Error("llms.txt missing Endpoints section")
+	}
+}
+
+// TestHandleLLMsTxtWithFQDN verifies llms.txt uses configured FQDN.
+func TestHandleLLMsTxtWithFQDN(t *testing.T) {
+	s := newTestServer(t)
+	s.config.FQDN = "whois.example.com"
+	req := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleLLMsTxt(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "whois.example.com") {
+		t.Error("llms.txt should contain the configured FQDN")
+	}
+}
+
+// TestHandleWellKnownNotFound verifies unknown well-known entries return 404.
+func TestHandleWellKnownNotFound(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/unknown-entry", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleWellKnownNotFound(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rr.Code)
+	}
+}
+
+// TestWellKnownMethodCheckRejectsPost verifies POST to well-known returns 405.
+func TestWellKnownMethodCheckRejectsPost(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := wellKnownMethodCheck(inner)
+
+	req := httptest.NewRequest(http.MethodPost, "/.well-known/security.txt", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST status = %d, want 405", rr.Code)
+	}
+	allow := rr.Header().Get("Allow")
+	if !strings.Contains(allow, "GET") || !strings.Contains(allow, "HEAD") {
+		t.Errorf("Allow header = %q, want GET and HEAD", allow)
+	}
+}
+
+// TestWellKnownMethodCheckAllowsGet verifies GET passes through.
+func TestWellKnownMethodCheckAllowsGet(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "ok")
+	})
+	handler := wellKnownMethodCheck(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/security.txt", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GET status = %d, want 200", rr.Code)
+	}
+}
+
+// TestWellKnownMethodCheckAllowsHead verifies HEAD passes through.
+func TestWellKnownMethodCheckAllowsHead(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := wellKnownMethodCheck(inner)
+
+	req := httptest.NewRequest(http.MethodHead, "/.well-known/security.txt", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HEAD status = %d, want 200", rr.Code)
+	}
+}
+
 // TestParseDurationDefault covers empty, valid, and invalid duration inputs.
 func TestParseDurationDefault(t *testing.T) {
 	fallback := 30 * time.Second
