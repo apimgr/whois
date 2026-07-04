@@ -492,11 +492,16 @@ func (s *Server) setupRoutes() http.Handler {
 		log.Printf("[Metrics] Endpoint enabled at %s", endpoint)
 	}
 
+	// API base path from config (AI.md PART 14 — never hardcode v1)
+	apiBase := s.config.APIBasePath()
+
 	// Health check endpoints (PART 13)
 	r.Get("/server/healthz", s.handleHealth)
-	r.Get("/api/v1/server/healthz", s.handleHealth)
-	// Root alias for load-balancer probes
-	r.Get("/healthz", s.handleHealth)
+	r.Get(apiBase+"/server/healthz", s.handleHealth)
+	// Root alias for load-balancer probes — only when server.healthz.root.enabled: true
+	if s.config.Healthz.Root.Enabled {
+		r.Get("/healthz", s.handleHealth)
+	}
 
 	// Static assets — CSS, JS (embedded at compile time, served under /static/)
 	r.Handle("/static/*", staticFileServer())
@@ -533,31 +538,31 @@ func (s *Server) setupRoutes() http.Handler {
 	// Swagger/OpenAPI endpoints (AI.md PART 14)
 	r.Get("/server/docs/swagger", s.handleSwaggerUI)
 	r.Get("/api/swagger", s.handleSwaggerJSON)
-	r.Get("/api/v1/server/swagger", s.handleSwaggerJSON)
+	r.Get(apiBase+"/server/swagger", s.handleSwaggerJSON)
 
 	// GraphQL endpoints (AI.md PART 14)
 	r.Get("/server/docs/graphql", s.handleGraphiQL)
 	r.Post("/api/graphql", s.handleGraphQL)
-	r.Post("/api/v1/server/graphql", s.handleGraphQL)
+	r.Post(apiBase+"/server/graphql", s.handleGraphQL)
 
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
 	r.Get("/whois", s.handleWHOISPage)
 
 	// Owner/registrant search — web and API (public, rate-limited)
 	r.Get("/whois/search", s.handleWHOISOwnerSearch)
-	r.Get("/api/v1/whois/search", s.handleWHOISOwnerSearch)
+	r.Get(apiBase+"/whois/search", s.handleWHOISOwnerSearch)
 
-	// API v1 — specific typed lookups (registered before generic wildcard)
-	r.Get("/api/v1/whois/domain/*", s.handleWHOISDomainLookup)
-	r.Get("/api/v1/whois/ip/*", s.handleWHOISIPLookup)
-	r.Get("/api/v1/whois/asn/*", s.handleWHOISASNLookup)
-	r.Get("/api/v1/whois/validate/*", s.handleWHOISValidate)
+	// API — specific typed lookups (registered before generic wildcard)
+	r.Get(apiBase+"/whois/domain/*", s.handleWHOISDomainLookup)
+	r.Get(apiBase+"/whois/ip/*", s.handleWHOISIPLookup)
+	r.Get(apiBase+"/whois/asn/*", s.handleWHOISASNLookup)
+	r.Get(apiBase+"/whois/validate/*", s.handleWHOISValidate)
 
-	// API v1 — generic WHOIS lookup (catch-all, after specific routes)
-	r.Get("/api/v1/whois/*", s.handleWHOIS)
+	// API — generic WHOIS lookup (catch-all, after specific routes)
+	r.Get(apiBase+"/whois/*", s.handleWHOIS)
 
-	// API v1 — Bulk lookup (requires server token)
-	r.Post("/api/v1/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
+	// API — Bulk lookup (requires server token)
+	r.Post(apiBase+"/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
 
 	// Autodiscover endpoint (PART 32) — non-versioned, public
 	r.Get("/api/autodiscover", s.handleAutodiscover)
@@ -568,15 +573,15 @@ func (s *Server) setupRoutes() http.Handler {
 	// Locale JSON files (PART 30) — served for JS consumers; content from embedded i18n files
 	r.Get("/locales/*", s.handleLocaleJSON)
 
-	// API v1 — utility (public)
-	r.Get("/api/v1/whois-servers", s.handleWhoisServers)
-	r.Get("/api/v1/server/stats", s.handleStats)
+	// API — utility (public)
+	r.Get(apiBase+"/whois-servers", s.handleWhoisServers)
+	r.Get(apiBase+"/server/stats", s.handleStats)
 
-	// API v1 — server operations (requires server token)
-	r.Get("/api/v1/server/schedulers", s.requireToken(s.handleSchedulerStatus))
-	r.Post("/api/v1/server/schedulers/run", s.requireToken(s.handleSchedulerRun))
-	r.Get("/api/v1/server/backups", s.requireToken(s.handleBackupStatus))
-	r.Post("/api/v1/server/backups/run", s.requireToken(s.handleBackupRun))
+	// API — server operations (requires server token)
+	r.Get(apiBase+"/server/schedulers", s.requireToken(s.handleSchedulerStatus))
+	r.Post(apiBase+"/server/schedulers/run", s.requireToken(s.handleSchedulerRun))
+	r.Get(apiBase+"/server/backups", s.requireToken(s.handleBackupStatus))
+	r.Post(apiBase+"/server/backups/run", s.requireToken(s.handleBackupRun))
 
 	// Debug endpoints (PART 6) — registered only when --debug / DEBUG=true
 	s.registerDebugRoutes(r)
@@ -622,8 +627,9 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 
 // handleWHOIS handles WHOIS lookup requests.
 func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
-	// Extract query from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/whois/")
+	// Extract query from path — use config-driven API base path
+	prefix := s.config.APIBasePath() + "/whois/"
+	path := strings.TrimPrefix(r.URL.Path, prefix)
 	query := strings.TrimSpace(path)
 
 	if query == "" {

@@ -341,6 +341,19 @@ type SchedulerConfig struct {
 	CatchUpWindow string `yaml:"catch_up_window"`
 }
 
+// HealthzRootConfig controls the optional /healthz root alias (AI.md PART 13).
+type HealthzRootConfig struct {
+	// Enabled controls whether /healthz (root alias) is registered.
+	// When false, only /server/healthz and /api/{version}/server/healthz are available.
+	Enabled bool `yaml:"enabled"`
+}
+
+// HealthzConfig holds health endpoint settings (AI.md PART 13).
+type HealthzConfig struct {
+	// Root controls the optional /healthz root alias.
+	Root HealthzRootConfig `yaml:"root"`
+}
+
 // ServerConfig holds all server configuration
 // ReverseWHOISConfig holds settings for the owner-search / reverse WHOIS feature (AI.md PART 14).
 // Local history is always searched first; an external provider is queried only when configured
@@ -363,6 +376,8 @@ type ServerConfig struct {
 	FQDN      string `yaml:"fqdn"`
 	Daemonize bool   `yaml:"daemonize"`
 	PIDFile   bool   `yaml:"pidfile"`
+	// APIVersion is the API version prefix (default "v1"). Used in route registration.
+	APIVersion string `yaml:"api_version"`
 	// User and Group are the unprivileged service account the server drops to
 	// after binding a privileged port when started as root (AI.md PART 23).
 	// Defaults to the frozen internal name "caswhois". Ignored on Windows
@@ -436,6 +451,9 @@ type ServerConfig struct {
 	// Scheduler configuration (AI.md PART 18)
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 
+	// Healthz endpoint configuration (AI.md PART 13)
+	Healthz HealthzConfig `yaml:"healthz"`
+
 	// Reverse WHOIS settings — local history + optional external provider (AI.md PART 14)
 	ReverseWHOIS ReverseWHOISConfig `yaml:"reverse_whois"`
 
@@ -459,6 +477,7 @@ func Default() *ServerConfig {
 		FQDN:                "",
 		Daemonize:           false,
 		PIDFile:             true,
+		APIVersion:          "v1",
 		User:                "caswhois",
 		Group:               "caswhois",
 		// ConfigDir, DataDir, LogDir are resolved to OS-appropriate paths at runtime
@@ -724,7 +743,18 @@ func (c *ServerConfig) Validate() error {
 		c.UpdateChannel = "stable"
 	}
 
+	// API version validation — default to v1 if empty
+	if c.APIVersion == "" {
+		c.APIVersion = "v1"
+	}
+
 	return nil
+}
+
+// APIBasePath returns the API base path (e.g., "/api/v1").
+// AI.md PART 14: never hardcode v1 — always use this method.
+func (c *ServerConfig) APIBasePath() string {
+	return "/api/" + c.APIVersion
 }
 
 // GetDatabaseDir returns the SQLite database directory

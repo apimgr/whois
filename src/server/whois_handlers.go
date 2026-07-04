@@ -17,10 +17,11 @@ import (
 )
 
 // handleWHOISDomainLookup handles domain-specific WHOIS lookups
-// GET /api/v1/whois/domain/:domain
+// GET /api/{version}/whois/domain/:domain
 func (s *Server) handleWHOISDomainLookup(w http.ResponseWriter, r *http.Request) {
-	// Extract domain from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/whois/domain/")
+	// Extract domain from path — use config-driven API base path
+	prefix := s.config.APIBasePath() + "/whois/domain/"
+	path := strings.TrimPrefix(r.URL.Path, prefix)
 	domain := strings.TrimSpace(path)
 
 	if domain == "" {
@@ -42,10 +43,11 @@ func (s *Server) handleWHOISDomainLookup(w http.ResponseWriter, r *http.Request)
 }
 
 // handleWHOISIPLookup handles IP address WHOIS lookups
-// GET /api/v1/whois/ip/:ip
+// GET /api/{version}/whois/ip/:ip
 func (s *Server) handleWHOISIPLookup(w http.ResponseWriter, r *http.Request) {
-	// Extract IP from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/whois/ip/")
+	// Extract IP from path — use config-driven API base path
+	prefix := s.config.APIBasePath() + "/whois/ip/"
+	path := strings.TrimPrefix(r.URL.Path, prefix)
 	ip := strings.TrimSpace(path)
 
 	if ip == "" {
@@ -67,10 +69,11 @@ func (s *Server) handleWHOISIPLookup(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleWHOISASNLookup handles ASN WHOIS lookups
-// GET /api/v1/whois/asn/:asn
+// GET /api/{version}/whois/asn/:asn
 func (s *Server) handleWHOISASNLookup(w http.ResponseWriter, r *http.Request) {
-	// Extract ASN from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/whois/asn/")
+	// Extract ASN from path — use config-driven API base path
+	prefix := s.config.APIBasePath() + "/whois/asn/"
+	path := strings.TrimPrefix(r.URL.Path, prefix)
 	asn := strings.TrimSpace(path)
 
 	if asn == "" {
@@ -92,10 +95,11 @@ func (s *Server) handleWHOISASNLookup(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleWHOISValidate validates a WHOIS query without performing the lookup
-// GET /api/v1/whois/validate/:query
+// GET /api/{version}/whois/validate/:query
 func (s *Server) handleWHOISValidate(w http.ResponseWriter, r *http.Request) {
-	// Extract query from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/whois/validate/")
+	// Extract query from path — use config-driven API base path
+	prefix := s.config.APIBasePath() + "/whois/validate/"
+	path := strings.TrimPrefix(r.URL.Path, prefix)
 	query := strings.TrimSpace(path)
 
 	if query == "" {
