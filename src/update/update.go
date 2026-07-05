@@ -49,8 +49,107 @@ type UpdateInfo struct {
 	Checksum       string
 }
 
-// CheckForUpdates checks GitHub for available updates
-// Per AI.md PART 22 specification
+// AutodiscoverResponse mirrors the server's autodiscover response structure.
+// Used by CLI to check for updates via server's /api/autodiscover endpoint.
+type AutodiscoverResponse struct {
+	APIVersion    string                   `json:"api_version"`
+	BaseURL       string                   `json:"base_url"`
+	CLIVersions   map[string]CLIBinaryInfo `json:"cli_versions"`
+	CLIMinVersion string                   `json:"cli_min_version"`
+}
+
+// CLIBinaryInfo holds version and checksum for a CLI binary.
+type CLIBinaryInfo struct {
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+}
+
+// CheckCLIUpdates checks for CLI updates via server's /api/autodiscover endpoint.
+// Per AI.md PART 32, CLI uses autodiscover for version and SHA256 info.
+func CheckCLIUpdates(serverURL, currentVersion string) (*UpdateInfo, error) {
+	autodiscoverURL := strings.TrimSuffix(serverURL, "/") + "/api/autodiscover"
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(autodiscoverURL)
+	if err != nil {
+		return nil, fmt.Errorf("autodiscover request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("autodiscover returned status %d", resp.StatusCode)
+	}
+
+	var autoResp AutodiscoverResponse
+	if err := json.NewDecoder(resp.Body).Decode(&autoResp); err != nil {
+		return nil, fmt.Errorf("parse autodiscover response: %w", err)
+	}
+
+	// Find CLI binary for this platform
+	platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	binInfo, ok := autoResp.CLIVersions[platformKey]
+	if !ok || binInfo.Version == "" {
+		return nil, fmt.Errorf("no CLI binary available for platform %s", platformKey)
+	}
+
+	available := isNewer(binInfo.Version, currentVersion)
+	downloadURL := strings.TrimSuffix(autoResp.BaseURL, "/") + "/cli/binaries/caswhois-cli-" + platformKey
+
+	return &UpdateInfo{
+		Available:      available,
+		CurrentVersion: currentVersion,
+		LatestVersion:  binInfo.Version,
+		DownloadURL:    downloadURL,
+		Checksum:       binInfo.SHA256,
+	}, nil
+}
+
+// PerformCLIUpdate downloads and installs CLI update from server.
+// Per AI.md PART 32, CLI downloads from server's /cli/binaries/ path.
+func PerformCLIUpdate(serverURL, currentVersion string) error {
+	info, err := CheckCLIUpdates(serverURL, currentVersion)
+	if err != nil {
+		return fmt.Errorf("check for updates: %w", err)
+	}
+
+	if !info.Available {
+		return fmt.Errorf("already on latest version: %s", currentVersion)
+	}
+
+	// Download new binary to temp location
+	tempFile, err := downloadBinary(info.DownloadURL)
+	if err != nil {
+		return fmt.Errorf("download binary: %w", err)
+	}
+	defer os.Remove(tempFile)
+
+	// Verify checksum
+	if info.Checksum != "" {
+		if err := verifyChecksum(tempFile, info.Checksum); err != nil {
+			return fmt.Errorf("checksum verification failed: %w", err)
+		}
+	}
+
+	// Get current binary path
+	currentPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable path: %w", err)
+	}
+
+	// Replace binary (platform-specific)
+	if err := replaceBinary(currentPath, tempFile); err != nil {
+		return fmt.Errorf("replace binary: %w", err)
+	}
+
+	// Re-exec the new binary with original args
+	if err := reexecSelf(); err != nil {
+		return fmt.Errorf("re-exec: %w", err)
+	}
+
+	return nil
+}
+
+// CheckForUpdates checks GitHub for available updates (server self-update).
+// Per AI.md PART 22 specification.
 func CheckForUpdates(currentVersion string, channel UpdateChannel) (*UpdateInfo, error) {
 	// Get latest release from GitHub API
 	release, err := getLatestRelease(channel)

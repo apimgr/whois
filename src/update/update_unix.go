@@ -56,3 +56,13 @@ func restartSelf() error {
 	// syscall.Exec replaces the current process
 	return syscall.Exec(exe, os.Args, os.Environ())
 }
+
+// reexecSelf re-executes the CLI with original args (Unix).
+// Per AI.md PART 32, CLI re-execs after update to continue command.
+func reexecSelf() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable path: %w", err)
+	}
+	return syscall.Exec(exe, os.Args, os.Environ())
+}

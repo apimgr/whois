@@ -1158,6 +1158,194 @@ func TestReleaseJSONRoundTrip(t *testing.T) {
 	}
 }
 
+// --- CheckCLIUpdates tests (via /api/autodiscover) --------------------------
+// Covers: update available, already up to date, server error, no platform binary.
+
+func TestCheckCLIUpdates_NewerVersionAvailable(t *testing.T) {
+	platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/autodiscover" {
+			http.NotFound(w, r)
+			return
+		}
+		resp := AutodiscoverResponse{
+			APIVersion: "v1",
+			BaseURL:    "http://" + r.Host,
+			CLIVersions: map[string]CLIBinaryInfo{
+				platformKey: {Version: "v2.0.0", SHA256: strings.Repeat("a", 64)},
+			},
+			CLIMinVersion: "v1.0.0",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	info, err := CheckCLIUpdates(srv.URL, "v1.0.0")
+	if err != nil {
+		t.Fatalf("CheckCLIUpdates: %v", err)
+	}
+	if !info.Available {
+		t.Error("Available = false, want true")
+	}
+	if info.LatestVersion != "v2.0.0" {
+		t.Errorf("LatestVersion = %q, want %q", info.LatestVersion, "v2.0.0")
+	}
+	if info.Checksum != strings.Repeat("a", 64) {
+		t.Errorf("Checksum = %q, want %q", info.Checksum, strings.Repeat("a", 64))
+	}
+}
+
+func TestCheckCLIUpdates_AlreadyUpToDate(t *testing.T) {
+	platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := AutodiscoverResponse{
+			APIVersion: "v1",
+			BaseURL:    "http://" + r.Host,
+			CLIVersions: map[string]CLIBinaryInfo{
+				platformKey: {Version: "v1.0.0", SHA256: strings.Repeat("b", 64)},
+			},
+			CLIMinVersion: "v1.0.0",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	info, err := CheckCLIUpdates(srv.URL, "v1.0.0")
+	if err != nil {
+		t.Fatalf("CheckCLIUpdates: %v", err)
+	}
+	if info.Available {
+		t.Error("Available = true, want false when already up to date")
+	}
+}
+
+func TestCheckCLIUpdates_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := CheckCLIUpdates(srv.URL, "v1.0.0")
+	if err == nil {
+		t.Error("CheckCLIUpdates with server error expected error, got nil")
+	}
+}
+
+func TestCheckCLIUpdates_NoPlatformBinary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := AutodiscoverResponse{
+			APIVersion: "v1",
+			BaseURL:    "http://" + r.Host,
+			CLIVersions: map[string]CLIBinaryInfo{
+				"plan9-mips64": {Version: "v2.0.0", SHA256: "abc"},
+			},
+			CLIMinVersion: "v1.0.0",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	_, err := CheckCLIUpdates(srv.URL, "v1.0.0")
+	if err == nil {
+		t.Error("CheckCLIUpdates with no platform binary expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no CLI binary available") {
+		t.Errorf("error = %q, want 'no CLI binary available' message", err.Error())
+	}
+}
+
+func TestCheckCLIUpdates_InvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "not valid json {{{")
+	}))
+	defer srv.Close()
+
+	_, err := CheckCLIUpdates(srv.URL, "v1.0.0")
+	if err == nil {
+		t.Error("CheckCLIUpdates with invalid JSON expected error, got nil")
+	}
+}
+
+// --- PerformCLIUpdate tests --------------------------------------------------
+
+func TestPerformCLIUpdate_AlreadyUpToDate(t *testing.T) {
+	platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := AutodiscoverResponse{
+			APIVersion: "v1",
+			BaseURL:    "http://" + r.Host,
+			CLIVersions: map[string]CLIBinaryInfo{
+				platformKey: {Version: "v1.0.0", SHA256: strings.Repeat("c", 64)},
+			},
+			CLIMinVersion: "v1.0.0",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	err := PerformCLIUpdate(srv.URL, "v1.0.0")
+	if err == nil {
+		t.Error("PerformCLIUpdate when already up to date expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "already on latest version") {
+		t.Errorf("error = %q, want 'already on latest version' message", err.Error())
+	}
+}
+
+func TestPerformCLIUpdate_CheckError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	err := PerformCLIUpdate(srv.URL, "v1.0.0")
+	if err == nil {
+		t.Error("PerformCLIUpdate with server error expected error, got nil")
+	}
+}
+
+// --- AutodiscoverResponse / CLIBinaryInfo JSON round-trip --------------------
+
+func TestAutodiscoverResponse_JSONRoundTrip(t *testing.T) {
+	original := AutodiscoverResponse{
+		APIVersion: "v1",
+		BaseURL:    "https://example.com",
+		CLIVersions: map[string]CLIBinaryInfo{
+			"linux-amd64":  {Version: "v1.2.3", SHA256: strings.Repeat("a", 64)},
+			"darwin-arm64": {Version: "v1.2.3", SHA256: strings.Repeat("b", 64)},
+		},
+		CLIMinVersion: "v1.0.0",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var got AutodiscoverResponse
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	if got.APIVersion != original.APIVersion {
+		t.Errorf("APIVersion = %q, want %q", got.APIVersion, original.APIVersion)
+	}
+	if got.BaseURL != original.BaseURL {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, original.BaseURL)
+	}
+	if len(got.CLIVersions) != 2 {
+		t.Errorf("CLIVersions count = %d, want 2", len(got.CLIVersions))
+	}
+	if got.CLIMinVersion != original.CLIMinVersion {
+		t.Errorf("CLIMinVersion = %q, want %q", got.CLIMinVersion, original.CLIMinVersion)
+	}
+}
+
 // --- UpdateInfo fields -------------------------------------------------------
 
 func TestUpdateInfo_FieldsSetCorrectly(t *testing.T) {

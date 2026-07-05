@@ -196,33 +196,67 @@ func resolveColor(flagColor string) bool {
 }
 
 // runUpdateCommand handles --update check/yes/branch=<name> and returns an exit code.
+// Per AI.md PART 32: CLI uses server's /api/autodiscover for update info.
 func runUpdateCommand(cmd string, cfg *config.CLIConfig) int {
-	channel := update.ChannelStable
-	if cfg.UpdateChannel != "" {
-		channel = update.UpdateChannel(cfg.UpdateChannel)
+	// Per AI.md PART 22: --update without argument defaults to "yes"
+	if cmd == "" {
+		cmd = "yes"
 	}
 
 	switch {
 	case cmd == "check":
-		info, err := update.CheckForUpdates(Version, channel)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error checking for updates: %v\n", err)
-			return 1
-		}
-		if info.Available {
-			fmt.Printf("Update available: %s → %s\n", info.CurrentVersion, info.LatestVersion)
-			fmt.Printf("Run '%s --update yes' to install.\n", filepath.Base(os.Args[0]))
+		// Use autodiscover if server is configured; fall back to GitHub otherwise
+		if cfg.Server != "" {
+			info, err := update.CheckCLIUpdates(cfg.Server, Version)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error checking for updates via server: %v\n", err)
+				return 1
+			}
+			if info.Available {
+				fmt.Printf("Update available: %s → %s\n", info.CurrentVersion, info.LatestVersion)
+				fmt.Printf("Run '%s --update yes' to install.\n", filepath.Base(os.Args[0]))
+			} else {
+				fmt.Printf("Already up to date (%s)\n", info.CurrentVersion)
+			}
 		} else {
-			fmt.Printf("Already up to date (%s)\n", info.CurrentVersion)
+			channel := update.ChannelStable
+			if cfg.UpdateChannel != "" {
+				channel = update.UpdateChannel(cfg.UpdateChannel)
+			}
+			info, err := update.CheckForUpdates(Version, channel)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error checking for updates: %v\n", err)
+				return 1
+			}
+			if info.Available {
+				fmt.Printf("Update available: %s → %s\n", info.CurrentVersion, info.LatestVersion)
+				fmt.Printf("Run '%s --update yes' to install.\n", filepath.Base(os.Args[0]))
+			} else {
+				fmt.Printf("Already up to date (%s)\n", info.CurrentVersion)
+			}
 		}
 
 	case cmd == "yes":
-		fmt.Printf("Checking for updates (channel: %s)…\n", channel)
-		if err := update.PerformUpdate(Version, channel); err != nil {
-			fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
-			return 1
+		// Use autodiscover if server is configured; fall back to GitHub otherwise
+		if cfg.Server != "" {
+			fmt.Println("Checking for updates via server…")
+			if err := update.PerformCLIUpdate(cfg.Server, Version); err != nil {
+				fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
+				return 1
+			}
+			fmt.Println("Update complete.")
+		} else {
+			channel := update.ChannelStable
+			if cfg.UpdateChannel != "" {
+				channel = update.UpdateChannel(cfg.UpdateChannel)
+			}
+			fmt.Printf("Checking for updates (channel: %s)…\n", channel)
+			if err := update.PerformUpdate(Version, channel); err != nil {
+				fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
+				return 1
+			}
+			fmt.Println("Update complete.")
 		}
-		fmt.Println("Update complete.")
 
 	case strings.HasPrefix(cmd, "branch="):
 		branch := strings.TrimPrefix(cmd, "branch=")

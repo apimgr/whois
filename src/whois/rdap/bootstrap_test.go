@@ -23,6 +23,54 @@ func TestNewBootstrap(t *testing.T) {
 	}
 }
 
+// TestBootstrap_GetIPv4Endpoints verifies that GetIPv4Endpoints returns nil for unloaded data.
+func TestBootstrap_GetIPv4Endpoints(t *testing.T) {
+	dataDir := t.TempDir()
+	b := NewBootstrap(dataDir)
+
+	// Without data loaded, should return nil
+	endpoints := b.GetIPv4Endpoints("8.8.8.8")
+	if endpoints != nil {
+		t.Error("GetIPv4Endpoints() with no data should return nil")
+	}
+}
+
+// TestBootstrap_GetIPv6Endpoints verifies that GetIPv6Endpoints returns nil for unloaded data.
+func TestBootstrap_GetIPv6Endpoints(t *testing.T) {
+	dataDir := t.TempDir()
+	b := NewBootstrap(dataDir)
+
+	// Without data loaded, should return nil
+	endpoints := b.GetIPv6Endpoints("2001:4860:4860::8888")
+	if endpoints != nil {
+		t.Error("GetIPv6Endpoints() with no data should return nil")
+	}
+}
+
+// TestBootstrap_GetASNEndpoints verifies that GetASNEndpoints returns nil for unloaded data.
+func TestBootstrap_GetASNEndpoints(t *testing.T) {
+	dataDir := t.TempDir()
+	b := NewBootstrap(dataDir)
+
+	// Without data loaded, should return nil
+	endpoints := b.GetASNEndpoints(15169)
+	if endpoints != nil {
+		t.Error("GetASNEndpoints() with no data should return nil")
+	}
+}
+
+// TestBootstrap_GetDomainEndpoints verifies that GetDomainEndpoints returns nil for unloaded data.
+func TestBootstrap_GetDomainEndpoints(t *testing.T) {
+	dataDir := t.TempDir()
+	b := NewBootstrap(dataDir)
+
+	// Without data loaded, should return nil
+	endpoints := b.GetDomainEndpoints("example.com")
+	if endpoints != nil {
+		t.Error("GetDomainEndpoints() with no data should return nil")
+	}
+}
+
 func TestBootstrap_HasData(t *testing.T) {
 	dataDir := t.TempDir()
 	b := NewBootstrap(dataDir)

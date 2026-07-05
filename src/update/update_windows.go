@@ -73,3 +73,27 @@ func restartSelf() error {
 	os.Exit(0)
 	return nil // unreachable
 }
+
+// reexecSelf re-executes the CLI with original args (Windows).
+// Per AI.md PART 32, CLI re-execs after update to continue command.
+func reexecSelf() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable path: %w", err)
+	}
+
+	// Start new process with same args
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start new process: %w", err)
+	}
+
+	// Wait briefly then exit
+	time.Sleep(100 * time.Millisecond)
+	os.Exit(0)
+	return nil
+}
