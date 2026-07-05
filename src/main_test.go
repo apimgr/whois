@@ -1200,6 +1200,44 @@ func TestRunSubcommand_FlagPassthrough(t *testing.T) {
 	}
 }
 
+// TestHandleShell_AutoDetect verifies handleShell auto-detects shell from $SHELL env.
+func TestHandleShell_AutoDetect(t *testing.T) {
+	oldShell := os.Getenv("SHELL")
+	defer os.Setenv("SHELL", oldShell)
+
+	os.Setenv("SHELL", "/bin/bash")
+	out := captureStdout(t, func() {
+		code := handleShell("completions", "caswhois", nil)
+		if code != 0 {
+			t.Errorf("handleShell with auto-detected bash returned %d", code)
+		}
+	})
+	if !strings.Contains(out, "bash completions") {
+		t.Errorf("Expected bash completions output, got: %q", out)
+	}
+}
+
+// TestHandleShell_UnknownCmd verifies handleShell returns 1 on unknown command.
+func TestHandleShell_UnknownCmd(t *testing.T) {
+	code := handleShell("unknown", "caswhois", []string{"bash"})
+	if code != 1 {
+		t.Errorf("handleShell unknown cmd = %d, want 1", code)
+	}
+}
+
+// TestHandleShell_InitBash verifies handleShell init with bash.
+func TestHandleShell_InitBash(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := handleShell("init", "caswhois", []string{"bash"})
+		if code != 0 {
+			t.Errorf("handleShell init bash = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "caswhois") {
+		t.Errorf("handleShell init bash output missing binary name, got: %q", out)
+	}
+}
+
 // TestHandleSubcommand_Version verifies that `version` subcommand prints version.
 func TestHandleSubcommand_Version(t *testing.T) {
 	out := captureStdout(t, func() {

@@ -1,4 +1,4 @@
-// Package scheduler provides built-in task scheduling
+// Package scheduler provides built-in task scheduling using gocron/v2
 // See AI.md PART 18: SCHEDULER
 package scheduler
 
@@ -9,11 +9,14 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/go-co-op/gocron/v2"
 )
 
-// Scheduler manages scheduled tasks (AI.md PART 18).
+// Scheduler manages scheduled tasks using gocron/v2 (AI.md PART 18).
 type Scheduler struct {
 	db          *sql.DB
+	gocron      gocron.Scheduler
 	tasks       map[string]*Task
 	mu          sync.RWMutex
 	ctx         context.Context
@@ -23,18 +26,18 @@ type Scheduler struct {
 
 	// Hooks let the server inject real implementations for built-in tasks.
 	// When nil the task logs a no-op message and returns nil rather than failing.
-	SSLRenewHook       func(context.Context) error
-	BackupDailyHook    func(context.Context) error
-	BackupHourlyHook   func(context.Context) error
-	LogRotateHook      func(context.Context) error
-	GeoIPUpdateHook    func(context.Context) error
+	SSLRenewHook        func(context.Context) error
+	BackupDailyHook     func(context.Context) error
+	BackupHourlyHook    func(context.Context) error
+	LogRotateHook       func(context.Context) error
+	GeoIPUpdateHook     func(context.Context) error
 	BlocklistUpdateHook func(context.Context) error
-	CVEUpdateHook      func(context.Context) error
-	TorHealthHook      func(context.Context) error
+	CVEUpdateHook       func(context.Context) error
+	TorHealthHook       func(context.Context) error
 	// WhoisRefreshHook re-queries the supplied stale queries and upserts fresh records.
-	WhoisRefreshHook   func(context.Context, []string) error
+	WhoisRefreshHook func(context.Context, []string) error
 	// RDAPBootstrapHook fetches latest IANA RDAP bootstrap files.
-	RDAPBootstrapHook  func(context.Context) error
+	RDAPBootstrapHook func(context.Context) error
 }
 
 // Task represents a scheduled task
@@ -51,6 +54,9 @@ type Task struct {
 	RunCount    int64
 	FailCount   int64
 	RetryPolicy *RetryPolicy
+
+	// gocronJob holds the gocron job reference for this task
+	gocronJob gocron.Job
 }
 
 // RetryPolicy defines retry behavior
@@ -60,7 +66,7 @@ type RetryPolicy struct {
 	Backoff    string
 }
 
-// New creates a new scheduler instance.
+// New creates a new scheduler instance using gocron/v2.
 // The scheduler uses the scheduler_tasks table created by the main DB schema (PART 10).
 func New(db *sql.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, error) {
 	loc, err := time.LoadLocation(timezone)
@@ -71,8 +77,16 @@ func New(db *sql.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, 
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create gocron scheduler with timezone
+	gs, err := gocron.NewScheduler(gocron.WithLocation(loc))
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("creating gocron scheduler: %w", err)
+	}
+
 	s := &Scheduler{
 		db:          db,
+		gocron:      gs,
 		tasks:       make(map[string]*Task),
 		ctx:         ctx,
 		cancel:      cancel,
@@ -98,8 +112,111 @@ func (s *Scheduler) Register(task *Task) error {
 		log.Printf("WARN: Could not load task state for %s: %v", task.ID, err)
 	}
 
+	// Create gocron job definition based on schedule
+	var jobDef gocron.JobDefinition
+	var err error
+
+	if task.Schedule != "" {
+		jobDef, err = parseScheduleToJobDef(task.Schedule)
+		if err != nil {
+			log.Printf("WARN: Invalid schedule %q for task %s: %v", task.Schedule, task.ID, err)
+			// Default to hourly if schedule is invalid
+			jobDef = gocron.DurationJob(time.Hour)
+		}
+	} else {
+		// Default to hourly if no schedule
+		jobDef = gocron.DurationJob(time.Hour)
+	}
+
+	// Create the gocron job
+	wrappedHandler := s.wrapHandler(task)
+	job, err := s.gocron.NewJob(
+		jobDef,
+		gocron.NewTask(wrappedHandler),
+		gocron.WithName(task.ID),
+	)
+	if err != nil {
+		return fmt.Errorf("creating gocron job for %s: %w", task.ID, err)
+	}
+
+	task.gocronJob = job
+
+	// Calculate initial NextRun
+	if task.NextRun.IsZero() {
+		nextRuns, _ := job.NextRuns(1)
+		if len(nextRuns) > 0 {
+			task.NextRun = nextRuns[0]
+		}
+	}
+
 	s.tasks[task.ID] = task
 	return nil
+}
+
+// parseScheduleToJobDef converts a cron schedule string to a gocron JobDefinition
+func parseScheduleToJobDef(schedule string) (gocron.JobDefinition, error) {
+	// Handle @every <duration>
+	if len(schedule) > 7 && schedule[:7] == "@every " {
+		durStr := schedule[7:]
+		d, err := time.ParseDuration(durStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid @every duration %q: %w", durStr, err)
+		}
+		if d <= 0 {
+			return nil, fmt.Errorf("@every duration must be positive, got %v", d)
+		}
+		return gocron.DurationJob(d), nil
+	}
+
+	// Use gocron's cron parser for standard cron expressions and @ shortcuts
+	return gocron.CronJob(schedule, false), nil
+}
+
+// estimateNextRun computes the next run time from a schedule string.
+// Used as fallback when gocronJob.NextRuns is unavailable.
+func (s *Scheduler) estimateNextRun(schedule string) time.Time {
+	now := time.Now().In(s.timezone)
+
+	// Handle @every <duration>
+	if len(schedule) > 7 && schedule[:7] == "@every " {
+		d, err := time.ParseDuration(schedule[7:])
+		if err == nil && d > 0 {
+			return now.Add(d)
+		}
+	}
+
+	// Handle common shortcuts
+	switch schedule {
+	case "@hourly":
+		return now.Add(time.Hour)
+	case "@daily", "@midnight":
+		return now.Add(24 * time.Hour)
+	case "@weekly":
+		return now.Add(7 * 24 * time.Hour)
+	case "@monthly":
+		return now.AddDate(0, 1, 0)
+	case "@yearly", "@annually":
+		return now.AddDate(1, 0, 0)
+	}
+
+	// For cron expressions, default to 1 minute in the future
+	return now.Add(time.Minute)
+}
+
+// wrapHandler creates a wrapped handler that tracks execution state
+func (s *Scheduler) wrapHandler(task *Task) func() {
+	return func() {
+		// Skip if task is disabled
+		s.mu.RLock()
+		enabled := task.Enabled
+		s.mu.RUnlock()
+
+		if !enabled {
+			return
+		}
+
+		s.executeTask(task)
+	}
 }
 
 // loadTaskState loads task state from the scheduler_tasks table (PART 10 schema).
@@ -177,8 +294,8 @@ func (s *Scheduler) Start() error {
 		log.Printf("WARN: Error catching up missed tasks: %v", err)
 	}
 
-	// Start scheduler loop
-	go s.run()
+	// Start the gocron scheduler
+	s.gocron.Start()
 
 	log.Println("INFO: Scheduler started")
 	return nil
@@ -208,40 +325,6 @@ func (s *Scheduler) catchUpMissedTasks() error {
 	return nil
 }
 
-// run is the main scheduler loop
-func (s *Scheduler) run() {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case <-ticker.C:
-			s.checkTasks()
-		}
-	}
-}
-
-// checkTasks checks if any tasks are ready to run
-func (s *Scheduler) checkTasks() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	now := time.Now()
-	for _, task := range s.tasks {
-		if !task.Enabled {
-			continue
-		}
-
-		// Check if task is ready to run
-		if !task.NextRun.IsZero() && task.NextRun.Before(now) {
-			// Execute in goroutine to avoid blocking
-			go s.executeTask(task)
-		}
-	}
-}
-
 // executeTask executes a single task with state tracking and error handling.
 // See AI.md PART 18: Task Execution Flow
 func (s *Scheduler) executeTask(task *Task) {
@@ -268,24 +351,23 @@ func (s *Scheduler) executeTask(task *Task) {
 		log.Printf("INFO: Task %s completed successfully in %v", task.Name, duration)
 	}
 
-	task.NextRun = s.calculateNextRun(task)
+	// Update NextRun from gocron
+	if task.gocronJob != nil {
+		nextRuns, _ := task.gocronJob.NextRuns(1)
+		if len(nextRuns) > 0 {
+			task.NextRun = nextRuns[0]
+		}
+	}
+	// Fallback: if gocronJob didn't provide NextRun, estimate from schedule
+	if task.NextRun.IsZero() || !task.NextRun.After(startTime) {
+		task.NextRun = s.estimateNextRun(task.Schedule)
+	}
 
 	// Save state to database
 	if err := s.saveTaskState(task); err != nil {
 		log.Printf("ERROR: Failed to save task state for %s: %v", task.Name, err)
 	}
 	s.mu.Unlock()
-}
-
-// calculateNextRun calculates the next run time for a task using the cron parser.
-// Falls back to 1 hour from now when the schedule expression is invalid.
-func (s *Scheduler) calculateNextRun(task *Task) time.Time {
-	expr, err := parseCron(task.Schedule)
-	if err != nil {
-		log.Printf("WARN: Invalid cron schedule %q for task %s: %v", task.Schedule, task.ID, err)
-		return time.Now().Add(time.Hour)
-	}
-	return expr.nextAfter(time.Now(), s.timezone)
 }
 
 // Stop gracefully stops the scheduler
@@ -297,7 +379,10 @@ func (s *Scheduler) Stop() error {
 	// Cancel context to stop scheduler loop
 	s.cancel()
 
-	time.Sleep(1 * time.Second)
+	// Stop gocron scheduler
+	if err := s.gocron.Shutdown(); err != nil {
+		log.Printf("WARN: Error shutting down gocron: %v", err)
+	}
 
 	log.Println("INFO: Scheduler stopped")
 	return nil
@@ -336,6 +421,26 @@ func (s *Scheduler) RunTaskNow(id string) error {
 
 	go s.executeTask(task)
 	return nil
+}
+
+// checkTasks iterates over all tasks and executes any that are due.
+// This provides backward compatibility with the tick-based scheduler pattern.
+func (s *Scheduler) checkTasks() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	now := time.Now()
+	for _, task := range s.tasks {
+		if !task.Enabled {
+			continue
+		}
+		if task.NextRun.IsZero() {
+			continue
+		}
+		if now.After(task.NextRun) || now.Equal(task.NextRun) {
+			go s.executeTask(task)
+		}
+	}
 }
 
 // GetTimezone returns the scheduler's configured timezone
