@@ -121,11 +121,22 @@ type ContactRoleConfig struct {
 	Webhooks ContactWebhooksConfig `yaml:"webhooks"`
 }
 
+// TrackingConfig holds analytics tracking settings (AI.md PART 12 — server.tracking.*).
+type TrackingConfig struct {
+	// Type selects the analytics provider: "umami", "simple", "cloudflare", or "" (none).
+	Type string `yaml:"type"`
+	// ID is the site token or beacon ID (provider-specific).
+	ID string `yaml:"id"`
+	// URL is the custom endpoint for self-hosted analytics (e.g., Umami).
+	URL string `yaml:"url"`
+}
+
 // ContactConfig mirrors the server.contact block in server.yml (AI.md PART 12).
-// Three roles: admin (server-internal alerts), security (vuln reports), general (contact form).
+// Four roles: admin (server-internal alerts), security (vuln reports), abuse (abuse reports), general (contact form).
 type ContactConfig struct {
 	Admin    ContactRoleConfig `yaml:"admin"`
 	Security ContactRoleConfig `yaml:"security"`
+	Abuse    ContactRoleConfig `yaml:"abuse"`
 	General  ContactRoleConfig `yaml:"general"`
 }
 
@@ -445,6 +456,9 @@ type ServerConfig struct {
 	// Contact configuration (AI.md PART 12)
 	Contact ContactConfig `yaml:"contact"`
 
+	// Analytics tracking configuration (AI.md PART 12 — server.tracking.*)
+	Tracking TrackingConfig `yaml:"tracking"`
+
 	// Logging configuration (AI.md PART 11)
 	Logs LogsConfig `yaml:"logs"`
 
@@ -534,10 +548,10 @@ func Default() *ServerConfig {
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:     true,
-			Read:        RateLimitEndpointConfig{Requests: 100, Window: 60},
-			Write:       RateLimitEndpointConfig{Requests: 20, Window: 60},
-			Health:      RateLimitEndpointConfig{Requests: 60, Window: 60},
-			GlobalBurst: 10,
+			Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},
+			Write:       RateLimitEndpointConfig{Requests: 10, Window: 60},
+			Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
+			GlobalBurst: 240,
 		},
 		GeoIP: GeoIPConfig{
 			Enabled:        true,
@@ -613,7 +627,13 @@ func Default() *ServerConfig {
 		Contact: ContactConfig{
 			Admin:    ContactRoleConfig{Email: ""},
 			Security: ContactRoleConfig{Email: ""},
+			Abuse:    ContactRoleConfig{Email: ""},
 			General:  ContactRoleConfig{Email: ""},
+		},
+		Tracking: TrackingConfig{
+			Type: "",
+			ID:   "",
+			URL:  "",
 		},
 		Logs: DefaultLogsConfig(),
 		Scheduler: SchedulerConfig{
@@ -705,16 +725,19 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-// Validate validates the configuration
+// Validate validates the configuration, warning on bad values and replacing with defaults.
+// This function NEVER returns an error — the server always starts per AI.md PART 12.
 func (c *ServerConfig) Validate() error {
-	// Port range
+	// Port range — warn and reset to 0 (random assignment on first run) if invalid.
 	if c.Port < 0 || c.Port > 65535 {
-		return fmt.Errorf("port must be between 0 and 65535")
+		fmt.Printf("WARN: invalid port %d — resetting to 0 (random assignment)\n", c.Port)
+		c.Port = 0
 	}
 
-	// Mode validation
+	// Mode validation — warn and reset to production if unknown.
 	if c.Mode != "production" && c.Mode != "development" {
-		return fmt.Errorf("mode must be 'production' or 'development'")
+		fmt.Printf("WARN: invalid mode %q — defaulting to production\n", c.Mode)
+		c.Mode = "production"
 	}
 
 	// Backup retention validation (warn, don't error - server must start per spec)

@@ -595,32 +595,38 @@ func (s *Server) setupRoutes() http.Handler {
 	return r
 }
 
-// setupMiddleware configures middleware chain
-// Order matters - security first!
+// setupMiddleware configures the middleware chain per AI.md PART 5.
+// The last handler applied is the outermost wrapper and therefore runs FIRST on each request.
+// Execution order (first → last): URLNormalize → RequestID → PathSecurity →
+// SecurityHeaders → Language → Allowlist → Blocklist → RateLimit → GeoIP → Auth → Logging → Metrics
 func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
-	// Middleware is applied innermost-first; the outermost wrapper (last line)
-	// runs first on the request and last on the response. Order matters —
-	// see comments above each wrapper for the layer they implement.
 	if s.metrics != nil {
-		// 7. Metrics collection — outermost so it sees every request.
+		// Innermost (applied first) — outermost layer after Logging; sees every request after auth.
 		handler = s.metrics.HTTPMiddleware(handler)
 	}
-	// 7. Access log.
+	// 10. Logging — records every request; last layer to execute on ingress.
 	handler = s.LoggingMiddleware(handler)
-	// 6. Authentication.
+	// 9. Authentication — annotates context with bearer-token status.
 	handler = AuthMiddleware(handler)
-	// 5. Rate limiting — use configured read limit as the global default for the middleware header.
+	// 8. GeoIP country block/allow enforcement.
+	handler = GeoIPMiddleware(s.geoip, s.config.GeoIP.DenyCountries, s.config.GeoIP.AllowCountries)(handler)
+	// 7. Rate limiting — use configured read limit as the global header default.
 	handler = RateLimitMiddleware(s.ratelimit, s.config.RateLimit.Read.Requests, s.config.RateLimit.Read.Window)(handler)
-	// 4. Request-language detection.
+	// 6. Blocklist — blocks denied IPs before rate-limit accounting.
+	handler = BlocklistMiddleware(handler)
+	// 5. Allowlist — enforces IP allowlist before blocklist.
+	handler = AllowlistMiddleware(handler)
+	// 4a. Request-language detection (project-specific, between security headers and allowlist).
 	handler = LanguageMiddleware(handler)
-	// 3. Security response headers.
+	// 4. Security response headers.
 	handler = SecurityHeadersMiddleware(handler)
-	// 2. Path validation / traversal block.
-	handler = PathSecurityMiddleware(handler)
-	// 1a. CORS headers for API paths — before URL normalization so preflight
-	//     OPTIONS returns correct headers without entering route handlers.
+	// 3. CORS headers for API paths — handles OPTIONS preflight before route handlers.
 	handler = CORSMiddleware(s.config.Web.CORS)(handler)
-	// 1. URL normalization — runs first.
+	// 2. Path traversal check and normalization.
+	handler = PathSecurityMiddleware(handler)
+	// 1b. Request ID assignment — before PathSecurity so the ID is always set.
+	handler = RequestIDMiddleware(handler)
+	// 1. URL normalization — outermost, runs first on every request.
 	handler = URLNormalizeMiddleware(handler)
 	return handler
 }

@@ -174,25 +174,46 @@ func TestValidate(t *testing.T) {
 		checkAfter func(*testing.T, *ServerConfig)
 	}{
 		{
+			// Spec (AI.md PART 12): Validate() warns and resets to 0 — never fails startup.
 			name: "port too high",
 			setup: func(c *ServerConfig) {
 				c.Port = 65536
 			},
-			wantErr: true,
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.Port != 0 {
+					t.Errorf("Port after correction = %d, want 0 (random assignment)", c.Port)
+				}
+			},
 		},
 		{
+			// Spec (AI.md PART 12): Validate() warns and resets to 0 — never fails startup.
 			name: "port negative",
 			setup: func(c *ServerConfig) {
 				c.Port = -1
 			},
-			wantErr: true,
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.Port != 0 {
+					t.Errorf("Port after correction = %d, want 0 (random assignment)", c.Port)
+				}
+			},
 		},
 		{
+			// Spec (AI.md PART 12): Validate() warns and defaults to production — never fails startup.
 			name: "invalid mode",
 			setup: func(c *ServerConfig) {
 				c.Mode = "staging"
 			},
-			wantErr: true,
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.Mode != "production" {
+					t.Errorf("Mode after correction = %q, want %q", c.Mode, "production")
+				}
+			},
 		},
 		{
 			name: "development mode is valid",
@@ -471,8 +492,8 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	if cfg.UpdateChannel != "stable" {
 		t.Errorf("cfg.UpdateChannel = %q, want %q (default)", cfg.UpdateChannel, "stable")
 	}
-	if cfg.RateLimit.Read.Requests != 100 {
-		t.Errorf("cfg.RateLimit.Read.Requests = %d, want 100 (default)", cfg.RateLimit.Read.Requests)
+	if cfg.RateLimit.Read.Requests != 120 {
+		t.Errorf("cfg.RateLimit.Read.Requests = %d, want 120 (default)", cfg.RateLimit.Read.Requests)
 	}
 }
 
@@ -553,7 +574,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 }
 
 // TestLoadServerConfigInvalidPortInYAML verifies that a port out of range in
-// the config file causes an error from the Validate call inside LoadServerConfig.
+// the config file is warn-and-reset to 0 — Validate() never fails startup (AI.md PART 12).
 func TestLoadServerConfigInvalidPortInYAML(t *testing.T) {
 	dir := t.TempDir()
 
@@ -562,9 +583,12 @@ func TestLoadServerConfigInvalidPortInYAML(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	_, err := LoadServerConfig(dir)
-	if err == nil {
-		t.Error("LoadServerConfig with out-of-range port expected error, got nil")
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Errorf("LoadServerConfig with out-of-range port returned unexpected error: %v", err)
+	}
+	if cfg != nil && cfg.Port != 0 {
+		t.Errorf("cfg.Port after correction = %d, want 0 (random assignment)", cfg.Port)
 	}
 }
 
@@ -1379,6 +1403,72 @@ func TestNormalizePath(t *testing.T) {
 			got := normalizePath(tc.input)
 			if got != tc.want {
 				t.Errorf("normalizePath(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SafeFilePath()
+// ---------------------------------------------------------------------------
+
+// TestSafeFilePath verifies that SafeFilePath correctly contains paths within
+// baseDir and rejects traversal attempts.
+func TestSafeFilePath(t *testing.T) {
+	base := t.TempDir()
+
+	cases := []struct {
+		name     string
+		userPath string
+		wantErr  bool
+	}{
+		{
+			name:     "simple subpath",
+			userPath: "data",
+			wantErr:  false,
+		},
+		{
+			name:     "nested subpath",
+			userPath: "data/logs",
+			wantErr:  false,
+		},
+		{
+			name:     "traversal via dotdot",
+			userPath: "../etc/passwd",
+			wantErr:  true,
+		},
+		{
+			name:     "absolute path with dotdot",
+			userPath: "data/../../etc",
+			wantErr:  true,
+		},
+		{
+			name:     "empty path normalizes to base",
+			userPath: "",
+			wantErr:  false,
+		},
+		{
+			name:     "invalid characters in path",
+			userPath: "DATA",
+			wantErr:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := SafeFilePath(base, tc.userPath)
+			if tc.wantErr && err == nil {
+				t.Errorf("SafeFilePath(%q, %q) expected error, got %q", base, tc.userPath, got)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("SafeFilePath(%q, %q) unexpected error: %v", base, tc.userPath, err)
+			}
+			if err == nil && got != "" {
+				// Result must always start with base.
+				absBase, _ := filepath.Abs(base)
+				if got != absBase && !strings.HasPrefix(got, absBase+string(filepath.Separator)) {
+					t.Errorf("SafeFilePath result %q escapes base %q", got, absBase)
+				}
 			}
 		})
 	}

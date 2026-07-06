@@ -2,7 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -83,10 +85,36 @@ func validatePath(p string) error {
 	return nil
 }
 
-// SafePath normalizes and validates - returns error if invalid
+// SafePath normalizes and validates a user-supplied path value (e.g., from config or API).
+// Returns the cleaned path and an error if the path contains traversal, invalid characters,
+// or exceeds the maximum length. NOT intended for validating raw HTTP request paths —
+// use PathSecurityMiddleware for that purpose.
 func SafePath(input string) (string, error) {
 	if err := validatePath(input); err != nil {
 		return "", err
 	}
 	return normalizePath(input), nil
+}
+
+// SafeFilePath validates that a user-supplied relative path stays within baseDir.
+// It runs SafePath on userPath, joins with baseDir, resolves both to absolute paths,
+// and rejects any result that escapes baseDir (path traversal guard).
+func SafeFilePath(baseDir, userPath string) (string, error) {
+	safe, err := SafePath(userPath)
+	if err != nil {
+		return "", err
+	}
+	fullPath := filepath.Join(baseDir, safe)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrInvalidPath, err)
+	}
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrInvalidPath, err)
+	}
+	if absPath != absBase && !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) {
+		return "", ErrPathTraversal
+	}
+	return absPath, nil
 }

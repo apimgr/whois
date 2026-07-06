@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -384,4 +385,48 @@ func (m *GeoIPManager) Close() error {
 // Enabled returns whether GeoIP is enabled
 func (m *GeoIPManager) Enabled() bool {
 	return m.enabled
+}
+
+// IsCountryBlocked reports whether the given IP address is blocked by the
+// denyCountries / allowCountries access control lists.
+//
+// Logic (matching AI.md PART 19):
+//   - If allowCountries is non-empty: only IPs whose country is in the list are allowed;
+//     everything else is blocked.
+//   - If denyCountries is non-empty: IPs whose country is in the list are blocked.
+//   - If the IP cannot be looked up, it is allowed through (fail-open).
+//   - An empty denyCountries and empty allowCountries means no blocking.
+func (m *GeoIPManager) IsCountryBlocked(ipStr string, denyCountries, allowCountries []string) bool {
+	if !m.enabled || (len(denyCountries) == 0 && len(allowCountries) == 0) {
+		return false
+	}
+	result, err := m.Lookup(ipStr)
+	if err != nil || result == nil {
+		return false
+	}
+	countryCode := ""
+	if result.Country != nil {
+		countryCode = result.Country.Code
+	} else if result.City != nil {
+		countryCode = result.City.CountryCode
+	}
+	if countryCode == "" {
+		return false
+	}
+	// Allow-list takes precedence: block if country is NOT in the allowed set.
+	if len(allowCountries) > 0 {
+		for _, c := range allowCountries {
+			if strings.EqualFold(c, countryCode) {
+				return false
+			}
+		}
+		return true
+	}
+	// Deny-list: block if country IS in the denied set.
+	for _, c := range denyCountries {
+		if strings.EqualFold(c, countryCode) {
+			return true
+		}
+	}
+	return false
 }

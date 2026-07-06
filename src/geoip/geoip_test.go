@@ -838,3 +838,40 @@ func TestUpdateDatabases_WithValidReload(t *testing.T) {
 	}
 	m.Close()
 }
+
+// ---------------------------------------------------------------------------
+// IsCountryBlocked()
+// ---------------------------------------------------------------------------
+
+// TestIsCountryBlocked_Disabled verifies that a disabled manager never blocks.
+func TestIsCountryBlocked_Disabled(t *testing.T) {
+	m := &GeoIPManager{enabled: false}
+	if m.IsCountryBlocked("1.2.3.4", []string{"US"}, nil) {
+		t.Error("IsCountryBlocked on disabled manager must return false")
+	}
+}
+
+// TestIsCountryBlocked_NoDenyNoAllow verifies pass-through when both lists are empty.
+func TestIsCountryBlocked_NoDenyNoAllow(t *testing.T) {
+	m := &GeoIPManager{enabled: true}
+	if m.IsCountryBlocked("1.2.3.4", nil, nil) {
+		t.Error("IsCountryBlocked with empty lists must return false")
+	}
+}
+
+// TestIsCountryBlocked_InvalidIP verifies fail-open for unresolvable IPs.
+func TestIsCountryBlocked_InvalidIP(t *testing.T) {
+	m := &GeoIPManager{enabled: true}
+	if m.IsCountryBlocked("not-an-ip", []string{"US"}, nil) {
+		t.Error("IsCountryBlocked with invalid IP must return false (fail-open)")
+	}
+}
+
+// TestIsCountryBlocked_NoDBs verifies fail-open when no database is loaded.
+func TestIsCountryBlocked_NoDBs(t *testing.T) {
+	m := &GeoIPManager{enabled: true}
+	// Valid IP but no databases loaded — Lookup returns no country.
+	if m.IsCountryBlocked("8.8.8.8", []string{"US"}, nil) {
+		t.Error("IsCountryBlocked with no DB must return false (fail-open)")
+	}
+}

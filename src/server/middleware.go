@@ -1,13 +1,17 @@
 package server
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"path"
 	"strings"
 
-	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/geoip"
 	"github.com/apimgr/whois/src/ratelimit"
 )
 
@@ -43,23 +47,149 @@ func URLNormalizeMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// PathSecurityMiddleware normalizes paths and blocks traversal attempts
-// MUST be SECOND in middleware chain (after URL normalization)
+// requestIDContextKey is the context key for the per-request ID.
+type requestIDContextKey struct{}
+
+// RequestIDMiddleware assigns a unique request ID to each inbound request.
+// It reuses the X-Request-ID header from a trusted upstream proxy when present.
+// The ID is stored in the request context and echoed in the X-Request-ID response header.
+// MUST be SECOND in middleware chain (after URLNormalize).
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			b := make([]byte, 16)
+			if _, err := rand.Read(b); err != nil {
+				id = "unknown"
+			} else {
+				id = hex.EncodeToString(b)
+			}
+		}
+		w.Header().Set("X-Request-ID", id)
+		ctx := context.WithValue(r.Context(), requestIDContextKey{}, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// RequestIDFromContext retrieves the request ID stored by RequestIDMiddleware.
+func RequestIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDContextKey{}).(string)
+	return id
+}
+
+// PathSecurityMiddleware rejects requests containing path-traversal sequences and
+// normalizes remaining paths with path.Clean.
+//
+// It blocks:
+//   - ".." segments in the decoded path
+//   - Percent-encoded dot traversal (%2e%2e, %2e., .%2e) in the raw path
+//
+// It does NOT restrict characters to lowercase-only — that validation applies
+// to user-supplied config values (config.SafePath), not to HTTP request paths.
+// MUST be THIRD in middleware chain (after URLNormalize and RequestID).
 func PathSecurityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Validate path using SafePath
-		safe, err := config.SafePath(r.URL.Path)
-		if err != nil {
+		original := r.URL.Path
+		rawPath := r.URL.RawPath
+
+		// Reject ".." in the decoded path.
+		if strings.Contains(original, "..") {
 			http.Error(w, "Invalid path", http.StatusBadRequest)
-			log.Printf("Path security violation: %s (%v)", r.URL.Path, err)
+			log.Printf("Path security violation (traversal): %s", original)
 			return
 		}
 
-		// Update request with normalized path
-		r.URL.Path = "/" + safe
+		// Reject encoded-dot traversal sequences in the raw path.
+		if rawPath != "" {
+			lower := strings.ToLower(rawPath)
+			if strings.Contains(lower, "%2e%2e") ||
+				strings.Contains(lower, "%2e.") ||
+				strings.Contains(lower, ".%2e") {
+				http.Error(w, "Invalid path", http.StatusBadRequest)
+				log.Printf("Path security violation (encoded traversal): %s", rawPath)
+				return
+			}
+		}
+
+		// Normalize double-slashes and redundant dots via path.Clean.
+		cleaned := path.Clean(original)
+		if cleaned != original {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = cleaned
+			if rawPath != "" {
+				cleanedRaw := path.Clean(rawPath)
+				r2.URL.RawPath = cleanedRaw
+			}
+			next.ServeHTTP(w, r2)
+			return
+		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// AllowlistMiddleware allows only requests from IP addresses in the configured IP allowlist.
+// When the allowlist is empty, all IPs are allowed through (default: open).
+// This is a framework-level placeholder; specific enforcement is wired at setup time
+// via the allowlist in the security package when the operator configures it.
+// MUST be FIFTH in middleware chain (after SecurityHeaders).
+func AllowlistMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	})
+}
+
+// BlocklistMiddleware blocks requests from IP addresses in the configured IP blocklist.
+// This is a framework-level placeholder; specific enforcement is wired at setup time
+// via the blocklist in the security package when the operator configures it.
+// MUST be SIXTH in middleware chain (after Allowlist).
+func BlocklistMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	})
+}
+
+// GeoIPMiddleware blocks or allows requests based on the GeoIP country deny/allow lists.
+// When geoipMgr is nil or no countries are configured, all requests pass through.
+// MUST be EIGHTH in middleware chain (after RateLimit and Blocklist).
+func GeoIPMiddleware(geoipMgr *geoip.GeoIPManager, denyCountries, allowCountries []string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if geoipMgr != nil && geoipMgr.Enabled() {
+				clientIP := extractClientIP(r)
+				if geoipMgr.IsCountryBlocked(clientIP, denyCountries, allowCountries) {
+					http.Error(w, "Access denied", http.StatusForbidden)
+					log.Printf("GeoIP block: %s", clientIP)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// extractClientIP returns the best-guess real client IP from the request.
+// Prefers X-Forwarded-For and X-Real-IP headers (trusting the reverse proxy)
+// before falling back to RemoteAddr.
+func extractClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For may be a comma-separated list; the leftmost is the client.
+		parts := strings.SplitN(xff, ",", 2)
+		ip := strings.TrimSpace(parts[0])
+		if net.ParseIP(ip) != nil {
+			return ip
+		}
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		if net.ParseIP(xri) != nil {
+			return xri
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // SecurityHeadersMiddleware adds security headers to all responses
