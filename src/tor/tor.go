@@ -23,6 +23,9 @@ type TorConfig struct {
 
 	// Outbound network settings
 	UseNetwork bool `yaml:"use_network" json:"use_network"`
+	// AllowUserPreference enables the Tor SOCKS proxy port so end-users can route
+	// their own traffic through Tor even when UseNetwork is false (AI.md PART 31).
+	AllowUserPreference bool `yaml:"allow_user_preference" json:"allow_user_preference"`
 
 	// Performance settings
 	MaxCircuits      int `yaml:"max_circuits" json:"max_circuits"`
@@ -49,6 +52,7 @@ func DefaultTorConfig() TorConfig {
 	return TorConfig{
 		Binary:                    "",
 		UseNetwork:                false,
+		AllowUserPreference:       true,
 		MaxCircuits:               32,
 		CircuitTimeout:            60,
 		BootstrapTimeout:          180,
@@ -308,9 +312,10 @@ func saveOnionKey(path string, key control.Key) error {
 // getTorConfig generates torrc content from the TorConfig.
 // The hidden service itself is created via control.AddOnion(), NOT via torrc.
 func getTorConfig(cfg *TorConfig) string {
-	// SocksPort: enabled for outbound, disabled for hidden-service-only mode
+	// SocksPort: enabled when server needs outbound access or when AllowUserPreference
+	// lets end-users route their own traffic through Tor (AI.md PART 31).
 	var socksConfig string
-	if cfg.UseNetwork {
+	if cfg.UseNetwork || cfg.AllowUserPreference {
 		socksConfig = "SocksPort auto"
 	} else {
 		socksConfig = "SocksPort 0"

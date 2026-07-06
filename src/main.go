@@ -573,6 +573,12 @@ func loadConfig(configDir, mode, address, baseURL string, port int, debug bool) 
 	if mode != "" {
 		cfg.Mode = mode
 	}
+
+	// Re-validate mode after CLI override — catches --mode badvalue (AI.md PART 6).
+	if cfg.Mode != "" && cfg.Mode != "production" && cfg.Mode != "development" {
+		return nil, fmt.Errorf("invalid mode %q: must be production or development", cfg.Mode)
+	}
+
 	if address != "" {
 		cfg.Address = address
 	}

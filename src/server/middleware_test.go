@@ -152,25 +152,26 @@ func TestBlocklistMiddleware_PassThrough(t *testing.T) {
 // extractClientIP
 // ---------------------------------------------------------------------------
 
-// TestExtractClientIP_XForwardedFor verifies that the leftmost XFF IP is used.
+// TestExtractClientIP_XForwardedFor verifies that XFF is honored when the peer is trusted.
 func TestExtractClientIP_XForwardedFor(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Forwarded-For", "203.0.113.5, 10.0.0.1")
+	// 10.0.0.2 is RFC 1918 — always trusted.
 	req.RemoteAddr = "10.0.0.2:12345"
 
-	ip := extractClientIP(req)
+	ip := extractClientIP(req, nil)
 	if ip != "203.0.113.5" {
 		t.Errorf("extractClientIP (XFF) = %q, want %q", ip, "203.0.113.5")
 	}
 }
 
-// TestExtractClientIP_XRealIP verifies that X-Real-IP is used when XFF is absent.
+// TestExtractClientIP_XRealIP verifies that X-Real-IP is used when XFF is absent and peer is trusted.
 func TestExtractClientIP_XRealIP(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Real-IP", "203.0.113.7")
 	req.RemoteAddr = "10.0.0.2:12345"
 
-	ip := extractClientIP(req)
+	ip := extractClientIP(req, nil)
 	if ip != "203.0.113.7" {
 		t.Errorf("extractClientIP (X-Real-IP) = %q, want %q", ip, "203.0.113.7")
 	}
@@ -181,7 +182,7 @@ func TestExtractClientIP_RemoteAddr(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "192.0.2.1:54321"
 
-	ip := extractClientIP(req)
+	ip := extractClientIP(req, nil)
 	if ip != "192.0.2.1" {
 		t.Errorf("extractClientIP (RemoteAddr) = %q, want %q", ip, "192.0.2.1")
 	}
@@ -194,9 +195,38 @@ func TestExtractClientIP_InvalidXFF(t *testing.T) {
 	req.Header.Set("X-Real-IP", "203.0.113.9")
 	req.RemoteAddr = "10.0.0.2:12345"
 
-	ip := extractClientIP(req)
+	ip := extractClientIP(req, nil)
 	if ip != "203.0.113.9" {
 		t.Errorf("extractClientIP (invalid XFF, valid X-Real-IP) = %q, want %q", ip, "203.0.113.9")
+	}
+}
+
+// TestExtractClientIP_UntrustedPeer_IgnoresXFF verifies that an untrusted peer
+// (public IP) cannot spoof its IP via X-Forwarded-For (AI.md PART 12).
+func TestExtractClientIP_UntrustedPeer_IgnoresXFF(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	req.Header.Set("X-Real-IP", "5.6.7.8")
+	// 203.0.113.1 is a public IP — not trusted.
+	req.RemoteAddr = "203.0.113.1:12345"
+
+	ip := extractClientIP(req, nil)
+	if ip != "203.0.113.1" {
+		t.Errorf("extractClientIP (untrusted peer) = %q, want %q (peer IP, not XFF)", ip, "203.0.113.1")
+	}
+}
+
+// TestExtractClientIP_AdditionalTrusted verifies that a public IP listed in additional
+// causes XFF to be honored (AI.md PART 12).
+func TestExtractClientIP_AdditionalTrusted(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-For", "9.9.9.9")
+	req.RemoteAddr = "203.0.113.50:12345"
+
+	additional := []string{"203.0.113.50"}
+	ip := extractClientIP(req, additional)
+	if ip != "9.9.9.9" {
+		t.Errorf("extractClientIP (additional trusted) = %q, want %q", ip, "9.9.9.9")
 	}
 }
 
@@ -206,7 +236,7 @@ func TestExtractClientIP_InvalidXFF(t *testing.T) {
 
 // TestGeoIPMiddleware_NilManager verifies that a nil GeoIP manager passes all requests.
 func TestGeoIPMiddleware_NilManager(t *testing.T) {
-	mw := GeoIPMiddleware(nil, []string{"CN"}, nil)
+	mw := GeoIPMiddleware(nil, []string{"CN"}, nil, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))

@@ -202,18 +202,10 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			// Spec (AI.md PART 12): Validate() warns and defaults to production — never fails startup.
-			name: "invalid mode",
-			setup: func(c *ServerConfig) {
-				c.Mode = "staging"
-			},
-			wantErr: false,
-			checkAfter: func(t *testing.T, c *ServerConfig) {
-				t.Helper()
-				if c.Mode != "production" {
-					t.Errorf("Mode after correction = %q, want %q", c.Mode, "production")
-				}
-			},
+			// Spec (AI.md PART 6): invalid mode must return an error — fail with clear error messages.
+			name:    "invalid mode",
+			setup:   func(c *ServerConfig) { c.Mode = "staging" },
+			wantErr: true,
 		},
 		{
 			name: "development mode is valid",

@@ -609,7 +609,7 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	// 9. Authentication — annotates context with bearer-token status.
 	handler = AuthMiddleware(handler)
 	// 8. GeoIP country block/allow enforcement.
-	handler = GeoIPMiddleware(s.geoip, s.config.GeoIP.DenyCountries, s.config.GeoIP.AllowCountries)(handler)
+	handler = GeoIPMiddleware(s.geoip, s.config.GeoIP.DenyCountries, s.config.GeoIP.AllowCountries, s.config.TrustedProxies.Additional)(handler)
 	// 7. Rate limiting — use configured read limit as the global header default.
 	handler = RateLimitMiddleware(s.ratelimit, s.config.RateLimit.Read.Requests, s.config.RateLimit.Read.Window)(handler)
 	// 6. Blocklist — blocks denied IPs before rate-limit accounting.

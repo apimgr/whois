@@ -109,10 +109,13 @@ type RateLimitConfig struct {
 
 // ContactWebhooksConfig holds webhook delivery URLs for a contact role (AI.md PART 12).
 type ContactWebhooksConfig struct {
-	Telegram string `yaml:"telegram"`
-	Discord  string `yaml:"discord"`
-	Slack    string `yaml:"slack"`
-	Generic  string `yaml:"generic"`
+	Telegram   string `yaml:"telegram"`
+	Discord    string `yaml:"discord"`
+	Slack      string `yaml:"slack"`
+	Mattermost string `yaml:"mattermost"`
+	Pushover   string `yaml:"pushover"`
+	Gotify     string `yaml:"gotify"`
+	Generic    string `yaml:"generic"`
 }
 
 // ContactRoleConfig holds the email address and webhooks for a single contact role.
@@ -223,6 +226,9 @@ type ComplianceConfig struct {
 type TorConfig struct {
 	Binary                    string `yaml:"binary"`
 	UseNetwork                bool   `yaml:"use_network"`
+	// AllowUserPreference enables SOCKS proxy port so end-users can route their
+	// own traffic through Tor even when server UseNetwork is false (AI.md PART 31).
+	AllowUserPreference       bool   `yaml:"allow_user_preference"`
 	MaxCircuits               int    `yaml:"max_circuits"`
 	CircuitTimeout            int    `yaml:"circuit_timeout"`
 	BootstrapTimeout          int    `yaml:"bootstrap_timeout"`
@@ -234,6 +240,14 @@ type TorConfig struct {
 	MaxMonthlyBandwidth       string `yaml:"max_monthly_bandwidth"`
 	NumIntroPoints            int    `yaml:"num_intro_points"`
 	VirtualPort               int    `yaml:"virtual_port"`
+	// OnionAddress is the .onion hostname for this service (without http:// prefix).
+	// Set by the operator after first run; used by BuildURL and privacy rules (AI.md PART 12).
+	// When set, requests whose Host matches this value are treated as Tor requests.
+	OnionAddress              string `yaml:"onion_address"`
+	// ContactEmail is the contact address shown exclusively in Tor responses (security.txt,
+	// contact pages). When unset, no email appears in Tor responses — never falls back to
+	// the clearnet contact email (AI.md PART 12 — Tor privacy rules).
+	ContactEmail              string `yaml:"contact_email"`
 }
 
 // MetricsConfig holds Prometheus metrics settings (AI.md PART 20 — server.metrics.*).
@@ -594,6 +608,7 @@ func Default() *ServerConfig {
 		Tor: TorConfig{
 			Binary:                    "",
 			UseNetwork:                false,
+			AllowUserPreference:       true,
 			MaxCircuits:               32,
 			CircuitTimeout:            60,
 			BootstrapTimeout:          180,
@@ -605,6 +620,8 @@ func Default() *ServerConfig {
 			MaxMonthlyBandwidth:       "100 GB",
 			NumIntroPoints:            3,
 			VirtualPort:               80,
+			OnionAddress:              "",
+			ContactEmail:              "",
 		},
 		Notifications: NotificationsConfig{
 			Email: EmailNotificationsConfig{
@@ -725,8 +742,8 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-// Validate validates the configuration, warning on bad values and replacing with defaults.
-// This function NEVER returns an error — the server always starts per AI.md PART 12.
+// Validate validates the configuration. Invalid critical fields return an error;
+// non-critical fields that are out of range are clamped to safe defaults (AI.md PART 6).
 func (c *ServerConfig) Validate() error {
 	// Port range — warn and reset to 0 (random assignment on first run) if invalid.
 	if c.Port < 0 || c.Port > 65535 {
@@ -734,10 +751,9 @@ func (c *ServerConfig) Validate() error {
 		c.Port = 0
 	}
 
-	// Mode validation — warn and reset to production if unknown.
-	if c.Mode != "production" && c.Mode != "development" {
-		fmt.Printf("WARN: invalid mode %q — defaulting to production\n", c.Mode)
-		c.Mode = "production"
+	// Mode validation — only "production" and "development" are valid (AI.md PART 6).
+	if c.Mode != "" && c.Mode != "production" && c.Mode != "development" {
+		return fmt.Errorf("invalid mode %q: must be production or development", c.Mode)
 	}
 
 	// Backup retention validation (warn, don't error - server must start per spec)

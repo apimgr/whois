@@ -151,12 +151,13 @@ func BlocklistMiddleware(next http.Handler) http.Handler {
 
 // GeoIPMiddleware blocks or allows requests based on the GeoIP country deny/allow lists.
 // When geoipMgr is nil or no countries are configured, all requests pass through.
+// additional is the trusted_proxies.additional list from config (AI.md PART 12).
 // MUST be EIGHTH in middleware chain (after RateLimit and Blocklist).
-func GeoIPMiddleware(geoipMgr *geoip.GeoIPManager, denyCountries, allowCountries []string) func(http.Handler) http.Handler {
+func GeoIPMiddleware(geoipMgr *geoip.GeoIPManager, denyCountries, allowCountries, additional []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if geoipMgr != nil && geoipMgr.Enabled() {
-				clientIP := extractClientIP(r)
+				clientIP := extractClientIP(r, additional)
 				if geoipMgr.IsCountryBlocked(clientIP, denyCountries, allowCountries) {
 					http.Error(w, "Access denied", http.StatusForbidden)
 					log.Printf("GeoIP block: %s", clientIP)
@@ -168,28 +169,32 @@ func GeoIPMiddleware(geoipMgr *geoip.GeoIPManager, denyCountries, allowCountries
 	}
 }
 
-// extractClientIP returns the best-guess real client IP from the request.
-// Prefers X-Forwarded-For and X-Real-IP headers (trusting the reverse proxy)
-// before falling back to RemoteAddr.
-func extractClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For may be a comma-separated list; the leftmost is the client.
-		parts := strings.SplitN(xff, ",", 2)
-		ip := strings.TrimSpace(parts[0])
-		if net.ParseIP(ip) != nil {
-			return ip
-		}
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		if net.ParseIP(xri) != nil {
-			return xri
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+// extractClientIP returns the real client IP from the request.
+// Proxy headers (X-Forwarded-For, X-Real-IP) are only trusted when the
+// immediate peer (RemoteAddr) is in a trusted range (RFC 1918 / loopback /
+// fc00::/7 / link-local or the operator-configured additional list).
+// This prevents spoofing when the binary is accessed directly (AI.md PART 12).
+func extractClientIP(r *http.Request, additional []string) string {
+	peerHost, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		peerHost = r.RemoteAddr
 	}
-	return host
+	if isTrustedPeer(peerHost, additional) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// X-Forwarded-For may be a comma-separated list; the leftmost is the client.
+			parts := strings.SplitN(xff, ",", 2)
+			ip := strings.TrimSpace(parts[0])
+			if net.ParseIP(ip) != nil {
+				return ip
+			}
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			if net.ParseIP(xri) != nil {
+				return xri
+			}
+		}
+	}
+	return peerHost
 }
 
 // SecurityHeadersMiddleware adds security headers to all responses

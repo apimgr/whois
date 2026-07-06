@@ -24,6 +24,9 @@ func TestDefaultTorConfig_AllFields(t *testing.T) {
 	if cfg.UseNetwork {
 		t.Error("UseNetwork = true, want false")
 	}
+	if !cfg.AllowUserPreference {
+		t.Error("AllowUserPreference = false, want true")
+	}
 	if cfg.MaxCircuits != 32 {
 		t.Errorf("MaxCircuits = %d, want 32", cfg.MaxCircuits)
 	}
@@ -307,8 +310,9 @@ func TestGetTorConfig_ContainsExpectedLines(t *testing.T) {
 	cfg := DefaultTorConfig()
 	out := getTorConfig(&cfg)
 
+	// DefaultTorConfig has AllowUserPreference=true, so SocksPort must be "auto".
 	checks := []string{
-		"SocksPort 0",        // UseNetwork=false
+		"SocksPort auto",     // AllowUserPreference=true (default)
 		"SafeLogging 1",      // SafeLogging=true
 		"BandwidthRate 1 MB",
 		"BandwidthBurst 2 MB",
@@ -328,6 +332,32 @@ func TestGetTorConfig_ContainsExpectedLines(t *testing.T) {
 		if !found {
 			t.Errorf("getTorConfig() output missing line %q", line)
 		}
+	}
+}
+
+// TestGetTorConfig_AllSocksDisabled verifies SocksPort 0 when both UseNetwork
+// and AllowUserPreference are false (AI.md PART 31).
+func TestGetTorConfig_AllSocksDisabled(t *testing.T) {
+	cfg := DefaultTorConfig()
+	cfg.UseNetwork = false
+	cfg.AllowUserPreference = false
+	out := getTorConfig(&cfg)
+
+	if !containsLine(out, "SocksPort 0") {
+		t.Error("getTorConfig() must contain 'SocksPort 0' when UseNetwork=false and AllowUserPreference=false")
+	}
+}
+
+// TestGetTorConfig_AllowUserPreference verifies SocksPort auto when
+// AllowUserPreference=true even if UseNetwork=false (AI.md PART 31).
+func TestGetTorConfig_AllowUserPreference(t *testing.T) {
+	cfg := DefaultTorConfig()
+	cfg.UseNetwork = false
+	cfg.AllowUserPreference = true
+	out := getTorConfig(&cfg)
+
+	if !containsLine(out, "SocksPort auto") {
+		t.Error("getTorConfig() must contain 'SocksPort auto' when AllowUserPreference=true")
 	}
 }
 
