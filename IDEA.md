@@ -9,6 +9,7 @@ Target users include system administrators, network engineers, security research
 project_name:      caswhois
 project_org:       apimgr
 internal_name:     caswhois
+internal_org:      apimgr
 app_name:          caswhois
 binary:            caswhois
 binary_cli:        caswhois-cli
