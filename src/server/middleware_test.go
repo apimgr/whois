@@ -234,6 +234,209 @@ func TestExtractClientIP_AdditionalTrusted(t *testing.T) {
 // GeoIPMiddleware
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// SecurityHeadersMiddleware
+// ---------------------------------------------------------------------------
+
+// TestSecurityHeadersMiddleware_RequiredHeaders verifies that all mandatory
+// security headers are present in every response (AI.md PART 11).
+func TestSecurityHeadersMiddleware_RequiredHeaders(t *testing.T) {
+	mw := SecurityHeadersMiddleware("example.com", "v1", false, false)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	required := map[string]string{
+		"X-Content-Type-Options":      "nosniff",
+		"X-Frame-Options":             "SAMEORIGIN",
+		"X-XSS-Protection":            "1; mode=block",
+		"Referrer-Policy":             "strict-origin-when-cross-origin",
+		"X-Permitted-Cross-Domain-Policies": "none",
+		"Origin-Agent-Cluster":        "?1",
+		"Cross-Origin-Opener-Policy":  "unsafe-none",
+		"Cross-Origin-Embedder-Policy": "unsafe-none",
+		"Cross-Origin-Resource-Policy": "cross-origin",
+	}
+	for header, want := range required {
+		got := rr.Header().Get(header)
+		if got != want {
+			t.Errorf("header %s = %q, want %q", header, got, want)
+		}
+	}
+	if rr.Header().Get("Content-Security-Policy") == "" {
+		t.Error("Content-Security-Policy must be set")
+	}
+	if rr.Header().Get("Permissions-Policy") == "" {
+		t.Error("Permissions-Policy must be set")
+	}
+	if rr.Header().Get("Reporting-Endpoints") == "" {
+		t.Error("Reporting-Endpoints must be set when FQDN is known")
+	}
+	if rr.Header().Get("Report-To") == "" {
+		t.Error("Report-To must be set when FQDN is known")
+	}
+	if rr.Header().Get("NEL") == "" {
+		t.Error("NEL must be set when FQDN is known")
+	}
+	// HSTS must NOT be set when SSL is disabled.
+	if rr.Header().Get("Strict-Transport-Security") != "" {
+		t.Error("Strict-Transport-Security must not be set when SSL is disabled")
+	}
+}
+
+// TestSecurityHeadersMiddleware_HSTS verifies that HSTS is only emitted with SSL.
+func TestSecurityHeadersMiddleware_HSTS(t *testing.T) {
+	mw := SecurityHeadersMiddleware("example.com", "v1", true, false)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	hsts := rr.Header().Get("Strict-Transport-Security")
+	if hsts == "" {
+		t.Error("Strict-Transport-Security must be set when SSL is enabled")
+	}
+	if hsts != "max-age=63072000; includeSubDomains; preload" {
+		t.Errorf("HSTS = %q, want max-age=63072000; includeSubDomains; preload", hsts)
+	}
+}
+
+// TestSecurityHeadersMiddleware_NoFQDN verifies that report headers are skipped
+// when no FQDN is configured.
+func TestSecurityHeadersMiddleware_NoFQDN(t *testing.T) {
+	mw := SecurityHeadersMiddleware("", "v1", false, false)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Header().Get("Reporting-Endpoints") != "" {
+		t.Error("Reporting-Endpoints must not be set without a FQDN")
+	}
+}
+
+// TestSecurityHeadersMiddleware_DebugMode verifies CSP runs as Report-Only in debug mode.
+func TestSecurityHeadersMiddleware_DebugMode(t *testing.T) {
+	mw := SecurityHeadersMiddleware("example.com", "v1", false, true)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Header().Get("Content-Security-Policy") != "" {
+		t.Error("Content-Security-Policy must not be set in debug mode (use Report-Only)")
+	}
+	if rr.Header().Get("Content-Security-Policy-Report-Only") == "" {
+		t.Error("Content-Security-Policy-Report-Only must be set in debug mode")
+	}
+}
+
+// TestSecurityHeadersMiddleware_SecGPC verifies that Sec-GPC: 1 is honored in context.
+func TestSecurityHeadersMiddleware_SecGPC(t *testing.T) {
+	mw := SecurityHeadersMiddleware("", "v1", false, false)
+	var gpcReceived bool
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gpcReceived = SecGPCFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Sec-GPC", "1")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if !gpcReceived {
+		t.Error("SecGPCFromContext must return true when Sec-GPC: 1 is present")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SecFetchValidationMiddleware
+// ---------------------------------------------------------------------------
+
+// TestSecFetchValidationMiddleware_BlocksCrossSiteNoToken verifies that cross-site
+// state-changing requests without a Bearer token are rejected (AI.md PART 11).
+func TestSecFetchValidationMiddleware_BlocksCrossSiteNoToken(t *testing.T) {
+	handler := SecFetchValidationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/something", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("cross-site POST without token = %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+// TestSecFetchValidationMiddleware_AllowsCrossSiteWithToken verifies that a Bearer
+// token bypasses the Sec-Fetch-Site check.
+func TestSecFetchValidationMiddleware_AllowsCrossSiteWithToken(t *testing.T) {
+	handler := SecFetchValidationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/something", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Authorization", "Bearer tok_abc123")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("cross-site POST with token = %d, want %d (should pass)", rr.Code, http.StatusOK)
+	}
+}
+
+// TestSecFetchValidationMiddleware_BlocksNavigateOnAPI verifies that
+// Sec-Fetch-Mode: navigate is rejected on /api/* endpoints (form CSRF).
+func TestSecFetchValidationMiddleware_BlocksNavigateOnAPI(t *testing.T) {
+	handler := SecFetchValidationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/something", nil)
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("navigate POST on /api/* = %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+// TestSecFetchValidationMiddleware_AllowsGetRequests verifies that GET requests
+// are not validated (GETs are side-effect-free).
+func TestSecFetchValidationMiddleware_AllowsGetRequests(t *testing.T) {
+	handler := SecFetchValidationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/something", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GET with cross-site/navigate = %d, want %d (GETs are not validated)", rr.Code, http.StatusOK)
+	}
+}
+
 // TestGeoIPMiddleware_NilManager verifies that a nil GeoIP manager passes all requests.
 func TestGeoIPMiddleware_NilManager(t *testing.T) {
 	mw := GeoIPMiddleware(nil, []string{"CN"}, nil, nil)

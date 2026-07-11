@@ -344,18 +344,19 @@ func TestPathSecurityMiddlewareTraversalBlocked(t *testing.T) {
 }
 
 // TestSecurityHeadersMiddleware verifies all required security headers are set.
+// Uses the factory with empty FQDN, no SSL, no debug (AI.md PART 11).
 func TestSecurityHeadersMiddleware(t *testing.T) {
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mw := SecurityHeadersMiddleware("", "v1", false, false)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	})
-	h := SecurityHeadersMiddleware(next)
+	}))
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
 	headers := map[string]string{
 		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "DENY",
+		"X-Frame-Options":        "SAMEORIGIN",
 		"X-XSS-Protection":       "1; mode=block",
 		"Referrer-Policy":        "strict-origin-when-cross-origin",
 	}

@@ -197,26 +197,144 @@ func extractClientIP(r *http.Request, additional []string) string {
 	return peerHost
 }
 
-// SecurityHeadersMiddleware adds security headers to all responses
-// MUST be THIRD in middleware chain
-func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+// secGPCContextKey is the context key for the inbound Sec-GPC opt-out flag.
+type secGPCContextKey struct{}
+
+// SecGPCFromContext returns true when the request carried Sec-GPC: 1.
+func SecGPCFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(secGPCContextKey{}).(bool)
+	return v
+}
+
+// permissionsPolicy is the default Permissions-Policy header value (AI.md PART 11).
+// Locked-down by default; projects declare feature needs via IDEA.md → server.yml overrides.
+const permissionsPolicy = "accelerometer=(), ambient-light-sensor=(), battery=(), camera=(), " +
+	"display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), " +
+	"magnetometer=(), microphone=(), midi=(), screen-wake-lock=(), serial=(), usb=(), " +
+	"xr-spatial-tracking=(), attribution-reporting=(), browsing-topics=(), " +
+	"interest-cohort=(), autoplay=(self), encrypted-media=(self), fullscreen=(self), " +
+	"payment=(self), picture-in-picture=(self), publickey-credentials-get=(self), " +
+	"storage-access=(self), web-share=(self)"
+
+// SecurityHeadersMiddleware adds all required security response headers (AI.md PART 11).
+// Parameters: fqdn is the server FQDN used to build report endpoint URLs;
+// apiVersion is the API version string (e.g. "v1"); sslEnabled enables HSTS;
+// debugMode switches CSP to report-only mode.
+// MUST be FOURTH in middleware chain (after CORS, PathSecurity, RequestID).
+func SecurityHeadersMiddleware(fqdn, apiVersion string, sslEnabled, debugMode bool) func(http.Handler) http.Handler {
+	// Build CSP once at setup time (PART 11 — report endpoint uses FQDN).
+	reportEndpoint := ""
+	cspReportURI := ""
+	reportToHeader := ""
+	nelHeader := ""
+	reportingEndpoints := ""
+	if fqdn != "" {
+		base := "https://" + fqdn
+		reportEndpoint = base + "/api/" + apiVersion + "/server/reports"
+		cspReportURI = reportEndpoint + "/csp"
+		reportingEndpoints = `default="` + reportEndpoint + `/default"`
+		reportToHeader = `{"group":"default","max_age":10886400,"endpoints":[{"url":"` + reportEndpoint + `/default"}]}`
+		nelHeader = `{"report_to":"default","max_age":2592000,"include_subdomains":true}`
+	}
+
+	// CSP directive — style-src allows 'unsafe-inline' for inline styles in Go templates.
+	cspDirective := "default-src 'self'; " +
+		"script-src 'self'; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data: blob: https:; " +
+		"font-src 'self' https:; " +
+		"connect-src 'self'; " +
+		"media-src 'self' blob:; " +
+		"worker-src 'self' blob:; " +
+		"manifest-src 'self'; " +
+		"frame-src 'self'; " +
+		"frame-ancestors 'self'; " +
+		"base-uri 'self'; " +
+		"form-action 'self'; " +
+		"object-src 'none'; " +
+		"upgrade-insecure-requests"
+	if cspReportURI != "" {
+		cspDirective += "; report-to default; report-uri " + cspReportURI
+	}
+
+	// In development mode CSP runs as report-only so violations are logged without blocking.
+	cspHeaderName := "Content-Security-Policy"
+	if debugMode {
+		cspHeaderName = "Content-Security-Policy-Report-Only"
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Honor inbound Sec-GPC: 1 opt-out signal (CCPA/GDPR — AI.md PART 11).
+			ctx := r.Context()
+			if r.Header.Get("Sec-GPC") == "1" {
+				ctx = context.WithValue(ctx, secGPCContextKey{}, true)
+				r = r.WithContext(ctx)
+			}
+
+			// Standard security headers required on every response.
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			// SAMEORIGIN allows the app to embed its own pages in iframes.
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			// Kept for older browsers; modern browsers use CSP.
+			w.Header().Set("X-XSS-Protection", "1; mode=block")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			// Block Adobe Flash / PDF cross-domain embedding.
+			w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+			// Opt into per-origin agent clustering (security / perf hygiene).
+			w.Header().Set("Origin-Agent-Cluster", "?1")
+			// Cross-Origin isolation defaults — loose (tighten via server.yml for SharedArrayBuffer etc.).
+			w.Header().Set("Cross-Origin-Opener-Policy", "unsafe-none")
+			w.Header().Set("Cross-Origin-Embedder-Policy", "unsafe-none")
+			w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+			// Content Security Policy.
+			w.Header().Set(cspHeaderName, cspDirective)
+			// Permissions-Policy — all sensors and tracking off by default.
+			w.Header().Set("Permissions-Policy", permissionsPolicy)
+
+			// Reporting endpoints — only emitted when FQDN is known.
+			if reportingEndpoints != "" {
+				w.Header().Set("Reporting-Endpoints", reportingEndpoints)
+				w.Header().Set("Report-To", reportToHeader)
+				w.Header().Set("NEL", nelHeader)
+			}
+
+			// HSTS — emitted only when SSL is active (PART 11 / RFC 6797).
+			if sslEnabled {
+				w.Header().Set("Strict-Transport-Security",
+					"max-age=63072000; includeSubDomains; preload")
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// SecFetchValidationMiddleware rejects cross-site state-changing requests that
+// lack a Bearer token (defense-in-depth CSRF layer — AI.md PART 11).
+// Validation is present-and-bad only — absent Sec-Fetch-* headers pass through
+// for legacy browser compatibility.
+func SecFetchValidationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Prevent MIME type sniffing
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-
-		// Prevent clickjacking
-		w.Header().Set("X-Frame-Options", "DENY")
-
-		// XSS protection
-		w.Header().Set("X-XSS-Protection", "1; mode=block")
-
-		// Referrer policy
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-
-		// Content Security Policy — no unsafe-inline; nonces must be added per-request for inline scripts.
-		csp := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
-		w.Header().Set("Content-Security-Policy", csp)
-
+		// Only validate state-changing methods.
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			// Reject cross-site requests without a Bearer token.
+			fetchSite := r.Header.Get("Sec-Fetch-Site")
+			if fetchSite == "cross-site" {
+				auth := r.Header.Get("Authorization")
+				if !strings.HasPrefix(auth, "Bearer ") {
+					SendError(w, ErrForbidden, "Cross-site request rejected")
+					return
+				}
+			}
+			// Reject form-navigation CSRF targeting JSON API endpoints.
+			fetchMode := r.Header.Get("Sec-Fetch-Mode")
+			if fetchMode == "navigate" && strings.HasPrefix(r.URL.Path, "/api/") {
+				SendError(w, ErrForbidden, "Form navigation to API endpoint rejected")
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }

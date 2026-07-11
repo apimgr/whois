@@ -591,8 +591,9 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	handler = AllowlistMiddleware(handler)
 	// 4a. Request-language detection (project-specific, between security headers and allowlist).
 	handler = LanguageMiddleware(handler)
-	// 4. Security response headers.
-	handler = SecurityHeadersMiddleware(handler)
+	// 4. Security response headers + Sec-Fetch validation (AI.md PART 11).
+	handler = SecFetchValidationMiddleware(handler)
+	handler = SecurityHeadersMiddleware(s.config.FQDN, s.config.APIVersion, s.config.TLS.Enabled, s.config.Debug)(handler)
 	// 3. CORS headers for API paths — handles OPTIONS preflight before route handlers.
 	handler = CORSMiddleware(s.config.Web.CORS)(handler)
 	// 2. Path traversal check and normalization.
