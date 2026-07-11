@@ -167,18 +167,15 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=notify
-User=%s
-Group=%s
+Type=simple
 ExecStart=%s
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
-PIDFile=/var/run/`+constants.InternalOrg+`/%s.pid
 StandardOutput=journal
 StandardError=journal
 
-# Security hardening
+# Security hardening (binary drops privileges after port binding)
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
@@ -186,11 +183,10 @@ ReadWritePaths=/etc/`+constants.InternalOrg+`/%s
 ReadWritePaths=/var/lib/`+constants.InternalOrg+`/%s
 ReadWritePaths=/var/cache/`+constants.InternalOrg+`/%s
 ReadWritePaths=/var/log/`+constants.InternalOrg+`/%s
-ReadWritePaths=/var/run/`+constants.InternalOrg+`
 
 [Install]
 WantedBy=multi-user.target
-`, sm.DisplayName, sm.Name, sm.Name, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name)
+`, sm.DisplayName, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name)
 
 	if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing service file: %w", err)

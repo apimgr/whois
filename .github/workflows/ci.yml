@@ -46,7 +46,7 @@ jobs:
           go test -cover -coverprofile="$COVDIR/coverage.out" ./...
       - name: Enforce coverage threshold
         run: |
-          THRESHOLD=60
+          THRESHOLD=80
           PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
             echo "::error::coverage $PCT% < threshold $THRESHOLD%"

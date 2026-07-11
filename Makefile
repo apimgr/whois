@@ -232,6 +232,7 @@ dev:
 # LINT - Run staticcheck and golangci-lint inside Docker (AI.md PART 25)
 # =============================================================================
 lint:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@echo "Running linters..."
 	@$(GO_DOCKER) sh -c "go vet ./... && staticcheck ./... 2>/dev/null || true"
 
