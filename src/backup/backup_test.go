@@ -414,7 +414,7 @@ func retentionFilename(date time.Time, suffix string) string {
 
 func TestApplyRetentionPolicy_NoFiles(t *testing.T) {
 	dir := t.TempDir()
-	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2); err != nil {
+	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy on empty dir: %v", err)
 	}
 }
@@ -431,7 +431,7 @@ func TestApplyRetentionPolicy_KeepsAll_WhenWithinLimit(t *testing.T) {
 		}
 	}
 
-	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2); err != nil {
+	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy: %v", err)
 	}
 
@@ -461,7 +461,7 @@ func TestApplyRetentionPolicy_DeletesOldBackups(t *testing.T) {
 		}
 	}
 
-	if err := ApplyRetentionPolicy(dir, 3, 0, 0, 0); err != nil {
+	if err := ApplyRetentionPolicy(dir, 3, 0, 0, 0, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy: %v", err)
 	}
 
@@ -491,7 +491,7 @@ func TestApplyRetentionPolicy_SkipsIncrementals(t *testing.T) {
 		}
 	}
 
-	if err := ApplyRetentionPolicy(dir, 1, 0, 0, 0); err != nil {
+	if err := ApplyRetentionPolicy(dir, 1, 0, 0, 0, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy: %v", err)
 	}
 
@@ -516,7 +516,7 @@ func TestApplyRetentionPolicy_EncryptedFilesHandled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ApplyRetentionPolicy(dir, 1, 0, 0, 0); err != nil {
+	if err := ApplyRetentionPolicy(dir, 1, 0, 0, 0, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy with .enc file: %v", err)
 	}
 }
@@ -530,7 +530,7 @@ func TestApplyRetentionPolicy_ShortFilenameSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Must complete without error or panic.
-	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2); err != nil {
+	if err := ApplyRetentionPolicy(dir, 7, 4, 3, 2, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy with short filename: %v", err)
 	}
 }
@@ -557,7 +557,7 @@ func TestApplyRetentionPolicy_YearlyRetention(t *testing.T) {
 	}
 
 	// keepYearly=1 keeps the Jan 1 backup; keepMonthly=0, keepWeekly=0, keepDaily=2.
-	if err := ApplyRetentionPolicy(dir, 2, 0, 0, 1); err != nil {
+	if err := ApplyRetentionPolicy(dir, 2, 0, 0, 1, ""); err != nil {
 		t.Fatalf("ApplyRetentionPolicy yearly: %v", err)
 	}
 
@@ -1375,5 +1375,144 @@ func TestLoadManifest_InvalidJSON(t *testing.T) {
 	_, err := loadManifest(dir)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// ---- parseSizeCap tests ----
+
+func TestParseSizeCap_Empty(t *testing.T) {
+	n, err := parseSizeCap("", "")
+	if err != nil || n != 0 {
+		t.Fatalf("empty cap: got %d, %v; want 0, nil", n, err)
+	}
+}
+
+func TestParseSizeCap_Zero(t *testing.T) {
+	n, err := parseSizeCap("", "0")
+	if err != nil || n != 0 {
+		t.Fatalf("zero cap: got %d, %v; want 0, nil", n, err)
+	}
+}
+
+func TestParseSizeCap_AbsoluteBytes(t *testing.T) {
+	cases := []struct {
+		input string
+		want  int64
+	}{
+		{"100", 100},
+		{"1K", 1024},
+		{"2KB", 2 * 1024},
+		{"3M", 3 * 1024 * 1024},
+		{"4MB", 4 * 1024 * 1024},
+		{"1G", 1 << 30},
+		{"2GB", 2 * (1 << 30)},
+		{"1T", 1 << 40},
+		{"1TB", 1 << 40},
+		{"5B", 5},
+	}
+	for _, c := range cases {
+		got, err := parseSizeCap("", c.input)
+		if err != nil {
+			t.Errorf("parseSizeCap(%q): unexpected error: %v", c.input, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("parseSizeCap(%q): got %d, want %d", c.input, got, c.want)
+		}
+	}
+}
+
+func TestParseSizeCap_InvalidAbsolute(t *testing.T) {
+	_, err := parseSizeCap("", "notanumber")
+	if err == nil {
+		t.Fatal("expected error for invalid absolute cap")
+	}
+}
+
+func TestParseSizeCap_InvalidPercent(t *testing.T) {
+	_, err := parseSizeCap(t.TempDir(), "abc%")
+	if err == nil {
+		t.Fatal("expected error for invalid percent cap")
+	}
+}
+
+func TestParseSizeCap_PercentOfDevice(t *testing.T) {
+	dir := t.TempDir()
+	n, err := parseSizeCap(dir, "100%")
+	if err != nil {
+		t.Fatalf("parseSizeCap 100%%: %v", err)
+	}
+	if n <= 0 {
+		t.Fatalf("parseSizeCap 100%% returned %d; expected positive", n)
+	}
+}
+
+// ---- enforceSizeCap tests ----
+
+func TestEnforceSizeCap_NoFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := enforceSizeCap(dir, "1G"); err != nil {
+		t.Fatalf("enforceSizeCap on empty dir: %v", err)
+	}
+}
+
+func TestEnforceSizeCap_UnderCap(t *testing.T) {
+	dir := t.TempDir()
+	name := "caswhois_backup_2025-03-05.tar.gz"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("small"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// 1 TB cap — no files should be deleted.
+	if err := enforceSizeCap(dir, "1T"); err != nil {
+		t.Fatalf("enforceSizeCap under cap: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+		t.Fatalf("file was incorrectly deleted: %v", err)
+	}
+}
+
+func TestEnforceSizeCap_DeletesOldestWhenOverCap(t *testing.T) {
+	dir := t.TempDir()
+	// Two files, each 10 bytes. Cap = 1 byte so both should end up deleted
+	// (oldest first; after deleting oldest total goes to 10 which is still over 1,
+	// then second is deleted leaving 0).
+	for i, d := range []string{"2025-01-01", "2025-06-01"} {
+		name := "caswhois_backup_" + d + ".tar.gz"
+		payload := make([]byte, 10+i) // slightly different sizes to avoid flakiness
+		if err := os.WriteFile(filepath.Join(dir, name), payload, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 1-byte cap: all files should be deleted.
+	if err := enforceSizeCap(dir, "1B"); err != nil {
+		t.Fatalf("enforceSizeCap: %v", err)
+	}
+	remaining, _ := filepath.Glob(filepath.Join(dir, "caswhois_backup_*.tar.gz"))
+	if len(remaining) != 0 {
+		t.Fatalf("expected 0 files remaining, got %d: %v", len(remaining), remaining)
+	}
+}
+
+// TestApplyRetentionPolicy_SizeCap checks that ApplyRetentionPolicy enforces
+// the maxTotalSize cap through the integrated path.
+func TestApplyRetentionPolicy_SizeCap(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	// Create 5 backup files, each 100 bytes. Keep limit = 10 (won't trigger count
+	// limit). Size cap = 1B so all files will be deleted by size enforcement.
+	for i := 0; i < 5; i++ {
+		date := now.AddDate(0, 0, -i)
+		name := retentionFilename(date, ".tar.gz")
+		payload := make([]byte, 100)
+		if err := os.WriteFile(filepath.Join(dir, name), payload, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ApplyRetentionPolicy(dir, 10, 0, 0, 0, "1B"); err != nil {
+		t.Fatalf("ApplyRetentionPolicy with size cap: %v", err)
+	}
+	remaining, _ := filepath.Glob(filepath.Join(dir, "caswhois_backup_*.tar.gz"))
+	if len(remaining) != 0 {
+		t.Fatalf("expected 0 files after 1B cap, got %d", len(remaining))
 	}
 }

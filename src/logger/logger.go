@@ -7,6 +7,7 @@
 //   auth.log     — Syslog RFC 3164 format (authentication events)
 //   audit.log    — JSON format (security events; machine-parseable)
 //   security.log — Fail2ban format (security/auth events)
+//   debug.log    — Text format (verbose debug events; written only when debug mode enabled)
 //
 // All log files are raw text only: no ANSI codes, no emojis, one event per line.
 package logger
@@ -28,6 +29,9 @@ type Logger struct {
 	mu sync.Mutex
 
 	dir string
+	// debugEnabled controls whether Debug() writes to debug.log.
+	// Set to true when the server runs in debug/development mode.
+	debugEnabled bool
 
 	// File handles (nil when dir is empty or file could not be opened)
 	accessFile   *os.File
@@ -37,6 +41,7 @@ type Logger struct {
 	authFile     *os.File
 	auditFile    *os.File
 	securityFile *os.File
+	debugFile    *os.File
 
 	// slog handler writing to serverFile; swapped on Rotate.
 	serverHandler slog.Handler
@@ -44,11 +49,19 @@ type Logger struct {
 	errorHandler slog.Handler
 	// slog handler writing to appFile in logfmt format; swapped on Rotate.
 	appHandler slog.Handler
+	// slog handler writing to debugFile; swapped on Rotate.
+	debugHandler slog.Handler
 }
 
 // Open creates the log directory and opens all log files in append mode.
 // If dir is empty, Open is a no-op and all writes become no-ops.
 func Open(dir string) (*Logger, error) {
+	return OpenWithDebug(dir, false)
+}
+
+// OpenWithDebug creates the log directory and opens all log files.
+// When debugEnabled is true, debug.log is also opened and Debug() calls write to it.
+func OpenWithDebug(dir string, debugEnabled bool) (*Logger, error) {
 	if dir == "" {
 		return &Logger{}, nil
 	}
@@ -57,7 +70,7 @@ func Open(dir string) (*Logger, error) {
 		return nil, fmt.Errorf("logger: create log dir %s: %w", dir, err)
 	}
 
-	l := &Logger{dir: dir}
+	l := &Logger{dir: dir, debugEnabled: debugEnabled}
 	if err := l.openFiles(); err != nil {
 		l.Close()
 		return nil, err
@@ -90,6 +103,17 @@ func (l *Logger) openFiles() error {
 		*f.dest = fh
 	}
 
+	// debug.log is opened only in debug mode (AI.md PART 11).
+	if l.debugEnabled {
+		path := filepath.Join(l.dir, "debug.log")
+		fh, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+		if err != nil {
+			return fmt.Errorf("logger: open %s: %w", path, err)
+		}
+		l.debugFile = fh
+		l.debugHandler = newTextHandler(l.debugFile)
+	}
+
 	// Build slog handlers for server.log, error.log, and app.log (logfmt).
 	// Use the plain text (non-JSON) handler so lines match the spec format:
 	//   2024-10-10T13:55:36-04:00 [INFO] message key=value
@@ -106,7 +130,7 @@ func (l *Logger) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.appFile, l.authFile, l.auditFile, l.securityFile} {
+	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.appFile, l.authFile, l.auditFile, l.securityFile, l.debugFile} {
 		if fh != nil {
 			_ = fh.Close()
 		}
@@ -124,7 +148,7 @@ func (l *Logger) Rotate() error {
 	defer l.mu.Unlock()
 
 	// Close existing handles silently.
-	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.appFile, l.authFile, l.auditFile, l.securityFile} {
+	for _, fh := range []*os.File{l.accessFile, l.serverFile, l.errorFile, l.appFile, l.authFile, l.auditFile, l.securityFile, l.debugFile} {
 		if fh != nil {
 			_ = fh.Close()
 		}
@@ -136,6 +160,8 @@ func (l *Logger) Rotate() error {
 	l.authFile = nil
 	l.auditFile = nil
 	l.securityFile = nil
+	l.debugFile = nil
+	l.debugHandler = nil
 
 	return l.openFiles()
 }
@@ -281,6 +307,21 @@ func (l *Logger) App(msg string, args ...any) {
 // AppWarn writes a WARN-level event to app.log in logfmt format (AI.md PART 11).
 func (l *Logger) AppWarn(msg string, args ...any) {
 	l.writeText(l.appHandler, slog.LevelWarn, msg, args...)
+}
+
+// Debug writes a DEBUG-level event to debug.log (AI.md PART 11).
+// debug.log is only opened and written when the logger was created with debugEnabled = true.
+func (l *Logger) Debug(msg string, args ...any) {
+	l.writeText(l.debugHandler, slog.LevelDebug, msg, args...)
+}
+
+// SetDebugEnabled controls whether Debug() writes to debug.log.
+// Calling with true on a logger opened without debugEnabled is a no-op
+// (the file handle is nil; writes are silently discarded).
+func (l *Logger) SetDebugEnabled(enabled bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.debugEnabled = enabled
 }
 
 // WriteAuth appends a syslog RFC 3164 authentication event to auth.log (AI.md PART 11).

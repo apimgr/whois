@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" data-theme="{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{{call .T "graphql.subtitle"}}">
+<title>{{call .T "graphql.title"}} — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<style>
+.gql-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.gql-pane { display: flex; flex-direction: column; gap: 0.5rem; }
+.gql-textarea {
+  font-family: monospace;
+  font-size: 0.875rem;
+  width: 100%;
+  min-height: 12rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  background: var(--color-bg-secondary, #161b22);
+  color: var(--color-fg, #c9d1d9);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.gql-response {
+  font-family: monospace;
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--color-bg-secondary, #161b22);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  padding: 0.75rem;
+  min-height: 12rem;
+  overflow: auto;
+}
+.gql-meta { font-size: 0.8rem; color: var(--color-fg-muted, #8b949e); }
+.gql-run { margin-top: 0.5rem; }
+@media (max-width: 640px) {
+  .gql-layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{call .T "nav.about"}}</a></li>
+      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <div class="container" style="padding-top:2rem;padding-bottom:2rem">
+    <h1>{{call .T "graphql.title"}}</h1>
+    <p>{{call .T "graphql.subtitle"}}</p>
+    <p class="gql-meta">
+      {{call .T "graphql.endpoint_label"}}:
+      <code>{{.EndpointURL}}</code>
+    </p>
+
+    <form id="gql-form" action="{{.EndpointURL}}" method="POST"
+      data-endpoint="{{.EndpointURL}}">
+      <div class="gql-layout">
+        <div class="gql-pane">
+          <label for="gql-query"><strong>{{call .T "graphql.query_label"}}</strong></label>
+          <textarea
+            id="gql-query" name="query"
+            class="gql-textarea"
+            aria-label="{{call .T "graphql.query_label"}}"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="none"
+          >{{.Query}}</textarea>
+
+          <label for="gql-vars"><strong>{{call .T "graphql.variables_label"}}</strong></label>
+          <textarea
+            id="gql-vars" name="variables"
+            class="gql-textarea"
+            style="min-height:5rem"
+            aria-label="{{call .T "graphql.variables_label"}}"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="none"
+          >{{.Variables}}</textarea>
+
+          <label for="gql-op"><strong>{{call .T "graphql.operation_label"}}</strong></label>
+          <input
+            id="gql-op" name="operationName" type="text"
+            class="search-input"
+            aria-label="{{call .T "graphql.operation_label"}}"
+            value="{{.OperationName}}"
+            autocorrect="off" autocapitalize="none"
+            spellcheck="false"
+          >
+
+          <div class="gql-run">
+            <button type="submit" class="btn-primary">{{call .T "graphql.submit"}}</button>
+          </div>
+        </div>
+
+        <div class="gql-pane">
+          <label><strong>{{call .T "graphql.response_label"}}</strong></label>
+          {{if .ErrorMsg}}
+          <div class="state-box state-error" role="alert">{{.ErrorMsg}}</div>
+          {{end}}
+          <pre id="gql-response" class="gql-response" aria-label="{{call .T "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
+        </div>
+      </div>
+    </form>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <p>
+    <a href="/">{{.Name}}</a> &mdash;
+    <a href="/about">{{call .T "nav.about"}}</a> &middot;
+    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{call .T "footer.health"}}</a>
+  </p>
+</footer>
+
+<script src="/static/js/main.js" defer></script>
+<script>
+(function() {
+  var form = document.getElementById('gql-form');
+  var responseEl = document.getElementById('gql-response');
+  if (!form || !responseEl) return;
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var endpoint = form.dataset.endpoint;
+    var query = document.getElementById('gql-query').value.trim();
+    var varsRaw = document.getElementById('gql-vars').value.trim();
+    var opName = document.getElementById('gql-op').value.trim();
+
+    var variables = null;
+    if (varsRaw) {
+      try { variables = JSON.parse(varsRaw); }
+      catch (_) {
+        responseEl.textContent = '{{call .T "graphql.error_invalid_json"}}';
+        return;
+      }
+    }
+
+    var body = { query: query };
+    if (variables !== null) body.variables = variables;
+    if (opName) body.operationName = opName;
+
+    responseEl.textContent = '{{call .T "common.loading"}}';
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      responseEl.textContent = JSON.stringify(data, null, 2);
+    })
+    .catch(function(err) {
+      responseEl.textContent = '{{call .T "whois.error_network"}} ' + err.message;
+    });
+  });
+})();
+</script>
+</body>
+</html>

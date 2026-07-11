@@ -1,7 +1,7 @@
 (function(){
   var root=document.documentElement;
-  var stored=localStorage.getItem('theme');
-  if(stored){root.setAttribute('data-theme',stored)}
+  // Theme is set server-side via data-theme on <html> from the theme cookie (AI.md PART 16).
+  // JS only writes the cookie when the user toggles — the server applies it on every render.
   var toggle=document.getElementById('theme-toggle');
   if(toggle){
     toggle.addEventListener('click',function(){
@@ -9,7 +9,8 @@
       var isDark=(current==='dark')||(current===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);
       var next=isDark?'light':'dark';
       root.setAttribute('data-theme',next);
-      localStorage.setItem('theme',next);
+      // Persist in cookie so the server reads it on next request (SameSite=Lax, 1-year TTL).
+      document.cookie='theme='+next+'; path=/; max-age=31536000; SameSite=Lax';
     });
   }
 })();

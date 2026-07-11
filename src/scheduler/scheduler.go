@@ -33,6 +33,12 @@ type Scheduler struct {
 	GeoIPUpdateHook     func(context.Context) error
 	BlocklistUpdateHook func(context.Context) error
 	CVEUpdateHook       func(context.Context) error
+	// UpdateCheckHook checks the release channel for a newer version (AI.md PART 22).
+	UpdateCheckHook func(context.Context) error
+	// TokenCleanupHook removes expired API tokens and sessions from the DB (AI.md PART 18).
+	TokenCleanupHook func(context.Context) error
+	// HealthCheckSelfHook verifies server health and alerts if degraded (AI.md PART 18).
+	HealthCheckSelfHook func(context.Context) error
 	TorHealthHook       func(context.Context) error
 	// WhoisRefreshHook re-queries the supplied stale queries and upserts fresh records.
 	WhoisRefreshHook func(context.Context, []string) error

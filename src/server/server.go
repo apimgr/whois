@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/cache"
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/email"
@@ -109,7 +110,7 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		IncludeRuntime: cfg.Metrics.IncludeRuntime,
 		Token:          cfg.Metrics.Token,
 	}
-	metricsCollector := metrics.New("caswhois", metricsCfg)
+	metricsCollector := metrics.New(constants.InternalName, metricsCfg)
 	if metricsCollector != nil {
 		// Set application info from build variables (will be set by main.go)
 		metricsCollector.SetAppInfo("0.1.0", "dev", "unknown", "go1.21")
@@ -407,36 +408,8 @@ func (s *Server) Start() error {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	// SIGUSR1 reopens log files so external rotation tools (logrotate) can work.
-	rotateSig := make(chan os.Signal, 1)
-	signal.Notify(rotateSig, syscall.SIGUSR1)
-	go func() {
-		for range rotateSig {
-			if s.logger != nil {
-				if err := s.logger.Rotate(); err != nil {
-					log.Printf("ERROR: log rotation failed: %v", err)
-				} else {
-					log.Printf("Log files reopened (SIGUSR1)")
-				}
-			}
-		}
-	}()
-
-	// SIGHUP reloads configuration without restarting (AI.md PART 23).
-	reloadSig := make(chan os.Signal, 1)
-	signal.Notify(reloadSig, syscall.SIGHUP)
-	go func() {
-		for range reloadSig {
-			log.Printf("Received SIGHUP, reloading configuration...")
-			newCfg, err := config.LoadServerConfig(s.config.ConfigDir)
-			if err != nil {
-				log.Printf("ERROR: config reload failed: %v", err)
-				continue
-			}
-			s.config = newCfg
-			log.Printf("Configuration reloaded successfully")
-		}
-	}()
+	// SIGUSR1 (log rotation) and SIGHUP (config reload) — Unix only.
+	setupExtraSignals(s)
 
 	// Wait for shutdown signal or server error
 	select {
@@ -683,11 +656,11 @@ func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getPIDFilePath() string {
 	// System-wide PID file when running as root.
 	if os.Geteuid() == 0 {
-		return "/var/run/apimgr/caswhois.pid"
+		return "/var/run/" + constants.InternalOrg + "/" + constants.InternalName + ".pid"
 	}
 	// User-specific PID file otherwise.
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".local", "share", "apimgr", "caswhois", "caswhois.pid")
+	return filepath.Join(homeDir, ".local", "share", constants.InternalOrg, constants.InternalName, constants.InternalName+".pid")
 }
 
 

@@ -98,6 +98,17 @@
     "dark": "داكن",
     "auto": "تلقائي"
   },
+  "graphql": {
+    "title": "مستكشف GraphQL",
+    "subtitle": "واجهة استعلام GraphQL التفاعلية",
+    "query_label": "الاستعلام",
+    "variables_label": "المتغيرات (JSON)",
+    "operation_label": "اسم العملية",
+    "submit": "تشغيل",
+    "response_label": "الاستجابة",
+    "endpoint_label": "نقطة النهاية",
+    "error_invalid_json": "يجب أن تكون المتغيرات JSON صالحاً"
+  },
   "footer": {
     "health": "الصحة"
   }

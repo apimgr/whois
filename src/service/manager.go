@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // ServiceCommand represents a service management command
@@ -231,7 +233,7 @@ func (sm *ServiceManager) isSystemServiceInstalled() bool {
 		}
 	case "darwin":
 		// Check launchd
-		if _, err := os.Stat("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist"); err == nil {
+		if _, err := os.Stat("/Library/LaunchDaemons/io.github." + constants.InternalOrg + "." + sm.Name + ".plist"); err == nil {
 			return true
 		}
 	case "freebsd", "openbsd", "netbsd":

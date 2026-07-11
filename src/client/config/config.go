@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,7 +40,7 @@ func ConfigPath() string {
 			base = filepath.Join(home, ".config")
 		}
 	}
-	return filepath.Join(base, "apimgr", "caswhois", "cli.yml")
+	return filepath.Join(base, constants.InternalOrg, constants.InternalName, "cli.yml")
 }
 
 // Load reads the config file and returns a CLIConfig with defaults applied

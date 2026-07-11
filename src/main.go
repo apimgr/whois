@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/logger"
@@ -164,7 +165,7 @@ func run(args []string) int {
 
 	// Handle service management
 	if serviceCmd != "" {
-		sm, err := service.NewServiceManager("caswhois", "caswhois service", "WHOIS lookup service")
+		sm, err := service.NewServiceManager(constants.InternalName, constants.InternalName+" service", "WHOIS lookup service")
 		if err != nil {
 			log.Printf("Failed to create service manager: %v", err)
 			return 1
@@ -369,14 +370,14 @@ func launchClientBinary(args []string) int {
 	return 0
 }
 
-// findClientBinary locates the caswhois-cli binary in PATH.
+// findClientBinary locates the CLI companion binary in PATH.
 func findClientBinary() (string, error) {
-	return execLookPath("caswhois-cli")
+	return execLookPath(constants.InternalName + "-cli")
 }
 
 // runServiceSubcmd routes a service management subcommand to the service manager.
 func runServiceSubcmd(cmd string, _ []string) int {
-	sm, err := service.NewServiceManager("caswhois", "caswhois service", "WHOIS lookup service")
+	sm, err := service.NewServiceManager(constants.InternalName, constants.InternalName+" service", "WHOIS lookup service")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to create service manager: %v\n", err)
 		return 1
@@ -616,7 +617,7 @@ func initDatabase(cfg *config.ServerConfig) (*db.DB, error) {
 	// Parse connection string for libsql/Turso remote databases.
 	if url != "" {
 		// Default database name when the URL does not specify one.
-		dbCfg.Name = "caswhois"
+		dbCfg.Name = constants.InternalName
 
 		// Extract database name from URL if present.
 		if strings.Contains(url, "/") {
@@ -661,7 +662,7 @@ func getDefaultConfigDir() string {
 
 	// Running as root on Linux/Unix: use system-wide path
 	if os.Getuid() == 0 {
-		return "/etc/apimgr/caswhois"
+		return "/etc/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
 	// Non-root user: XDG-compatible per-user config directory
@@ -671,61 +672,61 @@ func getDefaultConfigDir() string {
 		return "."
 	}
 
-	return filepath.Join(home, ".config", "apimgr", "caswhois")
+	return filepath.Join(home, ".config", constants.InternalOrg, constants.InternalName)
 }
 
 // getDefaultDataDir returns the platform-specific data directory (AI.md PART 4).
 func getDefaultDataDir() string {
-	// Container path per AI.md PART 4: /data/caswhois/
+	// Container path per AI.md PART 4: /data/{internal_name}/
 	if config.IsContainer() {
-		return "/data/caswhois"
+		return "/data/" + constants.InternalName
 	}
 
 	if os.Getuid() == 0 {
-		return "/var/lib/apimgr/caswhois"
+		return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "share", "apimgr", "caswhois")
+	return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName)
 }
 
 // getDefaultLogDir returns the platform-specific log directory (AI.md PART 4).
 func getDefaultLogDir() string {
-	// Container path per AI.md PART 4: /data/log/caswhois/
+	// Container path per AI.md PART 4: /data/log/{internal_name}/
 	if config.IsContainer() {
-		return "/data/log/caswhois"
+		return "/data/log/" + constants.InternalName
 	}
 
 	if os.Getuid() == 0 {
-		return "/var/log/apimgr/caswhois"
+		return "/var/log/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "log", "apimgr", "caswhois")
+	return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
 }
 
 // getDefaultBackupDir returns the platform-specific backup directory (AI.md PART 4).
 func getDefaultBackupDir() string {
-	// Container path per AI.md PART 4: /data/backups/caswhois/
+	// Container path per AI.md PART 4: /data/backups/{internal_name}/
 	if config.IsContainer() {
-		return "/data/backups/caswhois"
+		return "/data/backups/" + constants.InternalName
 	}
 
 	if os.Getuid() == 0 {
-		return "/mnt/Backups/apimgr/caswhois"
+		return "/mnt/Backups/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "share", "Backups", "apimgr", "caswhois")
+	return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
 }
 
 func printStartupBanner(cfg *config.ServerConfig) {

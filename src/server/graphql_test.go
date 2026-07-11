@@ -156,7 +156,8 @@ func TestHandleGraphQLUnknownQuery(t *testing.T) {
 	}
 }
 
-// TestHandleGraphiQL verifies /server/docs/graphql returns HTML.
+// TestHandleGraphiQL verifies /server/docs/graphql returns a server-side HTML explorer page.
+// The page must use no external CDN or JS framework (AI.md PART 16).
 func TestHandleGraphiQL(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/server/docs/graphql", nil)
@@ -174,12 +175,59 @@ func TestHandleGraphiQL(t *testing.T) {
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "graphiql") {
-		t.Error("HTML should contain graphiql reference")
-	}
-
+	// Must reference the GraphQL API endpoint.
 	if !strings.Contains(body, "/api/graphql") {
 		t.Error("HTML should reference /api/graphql endpoint")
+	}
+	// Must be a form-based explorer (server-side rendered, no React/CDN).
+	if !strings.Contains(body, "gql-form") {
+		t.Error("HTML should contain gql-form (server-side form explorer)")
+	}
+	// Must not load React from any CDN (AI.md PART 16: no client-side rendering frameworks).
+	if strings.Contains(body, "react") || strings.Contains(body, "cdn.jsdelivr.net") {
+		t.Error("HTML must not load React or any external CDN")
+	}
+}
+
+// TestHandleGraphiQLPost verifies the no-JS POST path echoes the query and shows a response.
+func TestHandleGraphiQLPost(t *testing.T) {
+	s := newTestServer(t)
+	body := strings.NewReader("query=%7B+health+%7B+status+%7D+%7D&variables=&operationName=")
+	req := httptest.NewRequest(http.MethodPost, "/server/docs/graphql", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	s.handleGraphiQL(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	if !strings.Contains(rr.Header().Get("Content-Type"), "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", rr.Header().Get("Content-Type"))
+	}
+	// Response pane should contain a JSON result.
+	page := rr.Body.String()
+	if !strings.Contains(page, "gql-response") {
+		t.Error("HTML should contain gql-response pane")
+	}
+}
+
+// TestHandleGraphiQLPostInvalidVariables verifies the error path for bad JSON variables.
+func TestHandleGraphiQLPostInvalidVariables(t *testing.T) {
+	s := newTestServer(t)
+	body := strings.NewReader("query=%7B+health+%7B+status+%7D+%7D&variables=not-json&operationName=")
+	req := httptest.NewRequest(http.MethodPost, "/server/docs/graphql", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	s.handleGraphiQL(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	// Error message about invalid JSON must appear.
+	if !strings.Contains(rr.Body.String(), "JSON") {
+		t.Error("HTML should show JSON error message for invalid variables")
 	}
 }
 

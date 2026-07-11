@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/i18n"
 )
 
@@ -15,15 +16,35 @@ type translatablePageData struct {
 	Lang string
 	// Dir is the text direction ("ltr" or "rtl") used in the <html dir="…"> attribute.
 	Dir string
+	// Theme is the active theme name (dark/light/auto) read from the theme cookie.
+	// The server sets data-theme on <html> so the page renders correctly without JS.
+	Theme string
+}
+
+// themeFromRequest reads the theme cookie and returns the active theme.
+// Falls back to "dark" (the default per AI.md PART 16) when no cookie is present
+// or the value is not one of the allowed values.
+func themeFromRequest(r *http.Request) string {
+	c, err := r.Cookie("theme")
+	if err != nil {
+		return "dark"
+	}
+	switch c.Value {
+	case "dark", "light", "auto":
+		return c.Value
+	default:
+		return "dark"
+	}
 }
 
 // newPageData returns a translatablePageData populated from the request context.
 func newPageData(r *http.Request) translatablePageData {
 	lang := LangFromContext(r.Context())
 	return translatablePageData{
-		T:    newTranslatorFunc(r),
-		Lang: lang,
-		Dir:  i18n.Dir(lang),
+		T:     newTranslatorFunc(r),
+		Lang:  lang,
+		Dir:   i18n.Dir(lang),
+		Theme: themeFromRequest(r),
 	}
 }
 
@@ -59,7 +80,7 @@ var docsTmpl = mustParseTemplate("docs", "docs.html")
 func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 	name := s.config.Branding.Title
 	if name == "" {
-		name = "caswhois"
+		name = constants.InternalName
 	}
 	tagline := s.config.Branding.Tagline
 	if tagline == "" {
@@ -67,7 +88,7 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 	}
 	description := s.config.Branding.Description
 	if description == "" {
-		description = "caswhois is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
+		description = constants.InternalName + " is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
 	}
 	data := AboutPageData{
 		translatablePageData: newPageData(r),
@@ -90,7 +111,7 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDocsPage(w http.ResponseWriter, r *http.Request) {
 	name := s.config.Branding.Title
 	if name == "" {
-		name = "caswhois"
+		name = constants.InternalName
 	}
 	data := DocsPageData{
 		translatablePageData: newPageData(r),

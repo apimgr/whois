@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // start starts the service
@@ -22,11 +24,11 @@ func (sm *ServiceManager) start() error {
 		return exec.Command("systemctl", "--user", "start", sm.Name).Run()
 	case "launchd":
 		// Launchd services auto-start when loaded
-		plistPath := "/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist"
+		plistPath := "/Library/LaunchDaemons/io.github." + constants.InternalOrg + "." + sm.Name + ".plist"
 		if _, err := os.Stat(plistPath); err == nil {
-			return exec.Command("launchctl", "start", "io.github.apimgr."+sm.Name).Run()
+			return exec.Command("launchctl", "start", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
 		}
-		return exec.Command("launchctl", "start", "io.github.apimgr."+sm.Name).Run()
+		return exec.Command("launchctl", "start", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
 	case "runit":
 		return exec.Command("sv", "start", sm.Name).Run()
 	case "rcd":
@@ -47,7 +49,7 @@ func (sm *ServiceManager) stop() error {
 		}
 		return exec.Command("systemctl", "--user", "stop", sm.Name).Run()
 	case "launchd":
-		return exec.Command("launchctl", "stop", "io.github.apimgr."+sm.Name).Run()
+		return exec.Command("launchctl", "stop", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
 	case "runit":
 		return exec.Command("sv", "stop", sm.Name).Run()
 	case "rcd":
@@ -69,8 +71,8 @@ func (sm *ServiceManager) restart() error {
 		return exec.Command("systemctl", "--user", "restart", sm.Name).Run()
 	case "launchd":
 		// Launchd restart
-		exec.Command("launchctl", "stop", "io.github.apimgr."+sm.Name).Run()
-		return exec.Command("launchctl", "start", "io.github.apimgr."+sm.Name).Run()
+		exec.Command("launchctl", "stop", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
+		return exec.Command("launchctl", "start", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
 	case "runit":
 		return exec.Command("sv", "restart", sm.Name).Run()
 	case "rcd":
@@ -135,7 +137,7 @@ func (sm *ServiceManager) status() error {
 		}
 		lines := strings.Split(string(output), "\n")
 		for _, line := range lines {
-			if strings.Contains(line, "io.github.apimgr."+sm.Name) {
+			if strings.Contains(line, "io.github." + constants.InternalOrg + "." + sm.Name) {
 				fmt.Println(line)
 			}
 		}

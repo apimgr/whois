@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/backup"
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/update"
 )
@@ -140,24 +141,24 @@ func getConfigDir(configDir string) string {
 
 	// Check if running as root
 	if os.Geteuid() == 0 {
-		return "/etc/apimgr/caswhois"
+		return "/etc/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
 	// User mode
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".config", "apimgr", "caswhois")
+	return filepath.Join(homeDir, ".config", constants.InternalOrg, constants.InternalName)
 }
 
 // getDataDir returns the data directory
 func getDataDir(configDir string) string {
 	// Check if running as root
 	if os.Geteuid() == 0 {
-		return "/var/lib/apimgr/caswhois"
+		return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
 	// User mode
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".local", "share", "apimgr", "caswhois")
+	return filepath.Join(homeDir, ".local", "share", constants.InternalOrg, constants.InternalName)
 }
 
 // handleMaintenance processes --maintenance commands (PART 22)

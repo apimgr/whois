@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // HealthResponse represents the /healthz response (per AI.md PART 13).
@@ -127,7 +129,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	// Build response
 	name := s.config.Branding.Title
 	if name == "" {
-		name = "caswhois"
+		name = constants.InternalName
 	}
 	tagline := s.config.Branding.Tagline
 	if tagline == "" {

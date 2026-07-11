@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/i18n"
 	"github.com/apimgr/whois/src/whois"
 )
@@ -26,6 +27,8 @@ var whoisPageTmpl = mustParseTemplate("whois-page", "whois.html")
 // homePageData holds template data for the homepage.
 type homePageData struct {
 	translatablePageData
+	// Name is the operator-configured brand name, falling back to the internal binary name.
+	Name   string
 	Query  string
 	Result *whoisResultView
 	Err    string
@@ -43,9 +46,19 @@ type whoisResultView struct {
 // whoisPageData holds template data for the /whois result page.
 type whoisPageData struct {
 	translatablePageData
+	// Name is the operator-configured brand name, falling back to the internal binary name.
+	Name   string
 	Query  string
 	Result *whoisResultView
 	Err    string
+}
+
+// brandName returns the operator-configured brand title, falling back to InternalName.
+func (s *Server) brandName() string {
+	if s.config.Branding.Title != "" {
+		return s.config.Branding.Title
+	}
+	return constants.InternalName
 }
 
 // handlePublicWHOISPage serves the public WHOIS lookup homepage at /.
@@ -63,7 +76,7 @@ func (s *Server) handlePublicWHOISPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := homePageData{translatablePageData: newPageData(r)}
+	data := homePageData{translatablePageData: newPageData(r), Name: s.brandName()}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := homepageTmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
@@ -120,7 +133,7 @@ func (s *Server) handleWHOISPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// HTML clients — render the server-side result page.
-	data := whoisPageData{translatablePageData: newPageData(r), Query: q}
+	data := whoisPageData{translatablePageData: newPageData(r), Name: s.brandName(), Query: q}
 
 	if q != "" {
 		result, err := whois.QueryWHOISWithCache(r.Context(), q, s.cache)
@@ -146,7 +159,7 @@ func (s *Server) handleWHOISPage(w http.ResponseWriter, r *http.Request) {
 // handleRootAPI returns API information for root endpoint when Accept: application/json.
 func (s *Server) handleRootAPI(w http.ResponseWriter, r *http.Request) {
 	SendSuccess(w, map[string]interface{}{
-		"service":     "caswhois",
+		"service":     constants.InternalName,
 		"description": "WHOIS lookup service — query domains, IPs, and ASNs",
 		"version":     "0.1.0",
 		"endpoints": []string{

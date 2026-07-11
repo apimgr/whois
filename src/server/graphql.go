@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // GraphQLRequest represents a GraphQL query request.
@@ -259,6 +261,29 @@ func (s *Server) resolveWhoisQuery(query string) GraphQLResponse {
 	}
 }
 
+// graphqlTmpl is the server-side template for the GraphQL explorer UI (AI.md PART 16).
+// No external CDN or JavaScript framework — progressive enhancement only.
+var graphqlTmpl = mustParseTemplate("graphql", "graphql.html")
+
+// graphqlPageData is the view model for the GraphQL explorer template.
+type graphqlPageData struct {
+	translatablePageData
+	// Name is the operator-configured brand name (falls back to constants.InternalName).
+	Name string
+	// EndpointURL is the absolute URL of the GraphQL API endpoint.
+	EndpointURL string
+	// Query is the GraphQL query pre-filled in the editor (from ?query= param or server-side POST echo).
+	Query string
+	// Variables is the JSON variables string echoed back after a POST submission.
+	Variables string
+	// OperationName is the operation name echoed back after a POST submission.
+	OperationName string
+	// Response is the raw JSON response string shown in the response pane after a no-JS POST.
+	Response string
+	// ErrorMsg is a user-visible error message (e.g. invalid JSON variables).
+	ErrorMsg string
+}
+
 // writeGraphQLError writes a GraphQL error response.
 func (s *Server) writeGraphQLError(w http.ResponseWriter, status int, message string) {
 	resp := GraphQLResponse{
@@ -271,57 +296,63 @@ func (s *Server) writeGraphQLError(w http.ResponseWriter, status int, message st
 	w.Write([]byte("\n"))
 }
 
-// handleGraphiQL serves the GraphiQL UI HTML page.
+// handleGraphiQL serves the GraphQL explorer page (server-side Go template, no external CDN).
 // Route: /server/docs/graphql (AI.md PART 14)
+// Supports both GET (display form) and POST (no-JS query submission).
 func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 	baseURL := fmt.Sprintf("http://localhost:%d", s.config.Port)
 	if s.config.FQDN != "" {
 		baseURL = "https://" + s.config.FQDN
 	}
+	endpointURL := baseURL + "/api/graphql"
 
-	// GraphiQL HTML with dark theme support (AI.md PART 16)
-	// Using pinned versions with SRI hashes for security
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en" data-theme="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>caswhois API - GraphiQL</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/graphiql@3.7.2/graphiql.min.css" integrity="sha384-pHBPy9LqsJcOWdD8C+LVN3mIGU48E5KPx9EZlQPOy1AkjKCRGPLl6C0KWXlDwKXB" crossorigin="anonymous">
-  <style>
-    :root {
-      --color-bg: #0d1117;
-      --color-fg: #c9d1d9;
-    }
-    body { margin: 0; height: 100vh; }
-    #graphiql { height: 100vh; }
-    [data-theme="dark"] .graphiql-container {
-      --color-base: #0d1117;
-      --color-primary: #58a6ff;
-    }
-  </style>
-</head>
-<body>
-  <div id="graphiql"></div>
-  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" integrity="sha384-bVWBxVIpPVJkJpjjBfB6Ur4RjkL7XpKa5y9Vz8T1l8dPqVZgAZ6e9hZFKGJZZmXh" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-ZCsJJzQTu9FsGS8IaXMc3WfF4ER0MZkKD+kJSALRjhPV4Eh7fvEPa2F/D8PSwc3B" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/graphiql@3.7.2/graphiql.min.js" integrity="sha384-TLW7JKKD8BfYjVPLPiD6qTvvMXhLl9PdXr1uBVDRdRlPOgvlAFfJGXV7CVKJDJh4" crossorigin="anonymous"></script>
-  <script>
-    const fetcher = GraphiQL.createFetcher({
-      url: "%s/api/graphql",
-    });
-    ReactDOM.createRoot(document.getElementById("graphiql")).render(
-      React.createElement(GraphiQL, {
-        fetcher: fetcher,
-        defaultEditorToolsVisibility: true,
-      })
-    );
-  </script>
-</body>
-</html>
-`, baseURL)
+	brandName := s.config.Branding.Title
+	if brandName == "" {
+		brandName = constants.InternalName
+	}
+
+	pd := graphqlPageData{
+		translatablePageData: newPageData(r),
+		Name:                 brandName,
+		EndpointURL:          endpointURL,
+	}
+
+	// No-JS POST: forward the form submission to the GraphQL endpoint and echo the response.
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			pd.ErrorMsg = "Bad request: " + err.Error()
+		} else {
+			pd.Query = r.FormValue("query")
+			pd.Variables = r.FormValue("variables")
+			pd.OperationName = r.FormValue("operationName")
+
+			gqlReq := GraphQLRequest{
+				Query:         pd.Query,
+				OperationName: pd.OperationName,
+			}
+			if pd.Variables != "" {
+				if err := json.Unmarshal([]byte(pd.Variables), &gqlReq.Variables); err != nil {
+					pd.ErrorMsg = "Variables must be valid JSON: " + err.Error()
+				}
+			}
+
+			if pd.ErrorMsg == "" {
+				_, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+				defer cancel()
+				gqlResp := s.executeGraphQL(gqlReq)
+				out, _ := json.MarshalIndent(gqlResp, "", "  ")
+				pd.Response = string(out)
+			}
+		}
+	} else {
+		pd.Query = r.URL.Query().Get("query")
+		pd.Variables = r.URL.Query().Get("variables")
+		pd.OperationName = r.URL.Query().Get("operationName")
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, html)
+	if err := graphqlTmpl.Execute(w, pd); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
 }

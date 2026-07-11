@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -29,7 +31,7 @@ func GenerateToken() (string, error) {
 // ServerConfig yaml tags. All comments go ABOVE their setting (PART 5 rule).
 func defaultConfigTemplate() string {
 	return `# =============================================================================
-# caswhois — Server Configuration (AI.md PART 5)
+# {{INTERNAL_NAME}} — Server Configuration (AI.md PART 5)
 # =============================================================================
 # Auto-generated on first run. Edit this file to change settings.
 # All changes require a server restart.
@@ -68,7 +70,7 @@ server:
   # ===========================================================================
 
   branding:
-    title: "caswhois"
+    title: "{{INTERNAL_NAME}}"
     tagline: "WHOIS Lookup Service"
     description: "Domain, IP, and ASN WHOIS lookup service"
     # Theme: auto, light, dark
@@ -181,6 +183,7 @@ server:
       keep_weekly: 0
       keep_monthly: 0
       keep_yearly: 0
+      max_total_size: "10%"
 
   compliance:
     enabled: false
@@ -216,6 +219,76 @@ server:
   scheduler:
     timezone: "America/New_York"
     catch_up_window: "1h"
+
+    # Built-in tasks — adjust schedule and enabled per PART 18; critical tasks cannot be disabled
+    tasks:
+
+      # Daily at 03:00 — renew certs 7 days before expiry
+      ssl_renewal:
+        schedule: "0 3 * * *"
+        enabled: true
+
+      # Weekly Sunday at 03:00 — download/update GeoIP databases
+      geoip_update:
+        schedule: "0 3 * * 0"
+        enabled: true
+
+      # Daily at 04:00 — download/update IP/domain blocklists
+      blocklist_update:
+        schedule: "0 4 * * *"
+        enabled: true
+        retry_on_fail: true
+        retry_delay: "1h"
+
+      # Daily at 05:00 — download/update CVE/security databases
+      cve_update:
+        schedule: "0 5 * * *"
+        enabled: true
+        retry_on_fail: true
+        retry_delay: "1h"
+
+      # Daily at 06:00 — check release channel; auto-install only if update.auto_install is true
+      update_check:
+        schedule: "0 6 * * *"
+        enabled: true
+
+      # Every 15 minutes — remove expired API tokens and sessions (critical — cannot disable)
+      token_cleanup:
+        schedule: "@every 15m"
+        enabled: true
+
+      # Daily at midnight — rotate and compress old logs (critical — cannot disable)
+      log_rotation:
+        schedule: "0 0 * * *"
+        enabled: true
+
+      # Daily at 02:00 — full backup (operator can disable in server.yml)
+      backup_daily:
+        schedule: "0 2 * * *"
+        enabled: true
+        verify: true
+        retention:
+          max_backups: 1
+          keep_weekly: 0
+          keep_monthly: 0
+          keep_yearly: 0
+          max_total_size: "10%"
+
+      # Hourly incremental backup (disabled by default)
+      backup_hourly:
+        schedule: "@hourly"
+        enabled: false
+
+      # Every 5 minutes — self-health verification (critical — cannot disable)
+      healthcheck_self:
+        schedule: "@every 5m"
+        enabled: true
+
+      # Every 10 minutes — check Tor connectivity, restart if needed
+      tor_health:
+        schedule: "@every 10m"
+        enabled: true
+        restart_on_fail: true
 
 # =============================================================================
 # WEB LAYER (PART 16)
@@ -257,6 +330,7 @@ func GenerateDefaultConfig(configDir string) error {
 	config := defaultConfigTemplate()
 	config = strings.Replace(config, "{{PORT}}", fmt.Sprintf("%d", port), 1)
 	config = strings.Replace(config, "{{TOKEN}}", token, 1)
+	config = strings.ReplaceAll(config, "{{INTERNAL_NAME}}", constants.InternalName)
 
 	// Write config file with restrictive permissions (contains token)
 	if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {

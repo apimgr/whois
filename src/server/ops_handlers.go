@@ -51,6 +51,7 @@ func (s *Server) runBackup(prefix string) (string, error) {
 		s.config.Backup.Retention.KeepWeekly,
 		s.config.Backup.Retention.KeepMonthly,
 		s.config.Backup.Retention.KeepYearly,
+		s.config.Backup.Retention.MaxTotalSize,
 	); err != nil {
 		log.Printf("WARN: backup retention failed: %v", err)
 	}

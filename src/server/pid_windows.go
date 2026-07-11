@@ -10,8 +10,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"golang.org/x/sys/windows"
 )
+
+// stillActive is the Windows STILL_ACTIVE exit code (259 / 0x103).
+const stillActive = 259
 
 // CheckPIDFile checks if PID file exists and if the process is still running
 // Returns: (isRunning bool, pid int, err error)
@@ -64,7 +68,7 @@ func isProcessRunning(pid int) bool {
 	// Get exit code - STILL_ACTIVE (259) means process is still running
 	var exitCode uint32
 	err = windows.GetExitCodeProcess(handle, &exitCode)
-	return err == nil && exitCode == windows.STILL_ACTIVE
+	return err == nil && exitCode == stillActive
 }
 
 // isOurProcess verifies the process is actually our binary (Windows)
@@ -84,7 +88,7 @@ func isOurProcess(pid int) bool {
 	}
 	exePath := windows.UTF16ToString(buf[:size])
 	baseName := strings.ToLower(filepath.Base(exePath))
-	return strings.Contains(baseName, "caswhois") || strings.Contains(baseName, "whois")
+	return strings.Contains(baseName, constants.InternalName) || strings.Contains(baseName, "whois")
 }
 
 // WritePIDFile writes current process PID to file (with optional port)

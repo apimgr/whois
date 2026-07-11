@@ -98,6 +98,17 @@
     "dark": "ダーク",
     "auto": "自動"
   },
+  "graphql": {
+    "title": "GraphQL エクスプローラー",
+    "subtitle": "インタラクティブな GraphQL クエリインターフェース",
+    "query_label": "クエリ",
+    "variables_label": "変数（JSON）",
+    "operation_label": "オペレーション名",
+    "submit": "実行",
+    "response_label": "レスポンス",
+    "endpoint_label": "エンドポイント",
+    "error_invalid_json": "変数は有効な JSON でなければなりません"
+  },
   "footer": {
     "health": "ヘルス"
   }

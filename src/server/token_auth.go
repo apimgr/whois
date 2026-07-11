@@ -4,9 +4,12 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // serverTokenHash caches SHA-256(config.ServerToken) at startup so we never
@@ -32,7 +35,7 @@ func (s *Server) requireToken(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := extractBearerToken(r)
 		if token == "" {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="caswhois"`)
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm=%q`, constants.InternalName))
 			SendError(w, ErrUnauthorized, "Authorization required")
 			return
 		}
@@ -44,7 +47,7 @@ func (s *Server) requireToken(next http.HandlerFunc) http.HandlerFunc {
 		expected := s.getServerTokenHash()
 		if subtle.ConstantTimeCompare(incoming[:], expected) != 1 {
 			// Token format valid but hash does not match — 401 with generic message
-			w.Header().Set("WWW-Authenticate", `Bearer realm="caswhois"`)
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm=%q`, constants.InternalName))
 			SendError(w, ErrUnauthorized, "Invalid token")
 			return
 		}

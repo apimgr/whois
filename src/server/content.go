@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // HTTPClientType represents the type of client making the request
@@ -114,6 +116,8 @@ var htmlResponseTmpl = mustParseTemplate("response", "response.html")
 // responsePageData is the data model for the generic response.html template.
 type responsePageData struct {
 	translatablePageData
+	// Name is the brand name shown in the page title.
+	Name    string
 	Content string
 }
 
@@ -124,6 +128,7 @@ func respondHTML(w http.ResponseWriter, r *http.Request, status int, data interf
 	w.WriteHeader(status)
 	pd := responsePageData{
 		translatablePageData: newPageData(r),
+		Name:                 constants.InternalName,
 		Content:              fmt.Sprintf("%v", data),
 	}
 	if err := htmlResponseTmpl.Execute(w, pd); err != nil {

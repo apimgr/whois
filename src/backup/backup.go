@@ -13,6 +13,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/argon2"
@@ -675,9 +678,11 @@ func decryptBackupData(data []byte, password string) ([]byte, error) {
 	return plaintext, nil
 }
 
-// ApplyRetentionPolicy deletes old backups based on retention settings
-// Per AI.md PART 21 specification
-func ApplyRetentionPolicy(backupDir string, maxBackups, keepWeekly, keepMonthly, keepYearly int) error {
+// ApplyRetentionPolicy deletes old backups based on retention settings.
+// maxTotalSize is a hard cap expressed as a percent of the backup device ("10%")
+// or an absolute size ("50G", "500M"); "0" or empty disables the cap.
+// Per AI.md PART 21 specification.
+func ApplyRetentionPolicy(backupDir string, maxBackups, keepWeekly, keepMonthly, keepYearly int, maxTotalSize string) error {
 	// List all backup files (exclude incrementals: -daily, -hourly)
 	files, err := filepath.Glob(filepath.Join(backupDir, "caswhois_backup_*.tar.gz*"))
 	if err != nil {
@@ -777,7 +782,140 @@ func ApplyRetentionPolicy(backupDir string, maxBackups, keepWeekly, keepMonthly,
 		}
 	}
 
+	// Enforce hard size cap — oldest backups first until total is under cap.
+	if maxTotalSize != "" && maxTotalSize != "0" {
+		if err := enforceSizeCap(backupDir, maxTotalSize); err != nil {
+			return fmt.Errorf("enforce size cap: %w", err)
+		}
+	}
+
 	return nil
+}
+
+// enforceSizeCap deletes oldest backup files until total size is under the cap.
+// cap may be a percent of the backup volume ("10%") or an absolute byte count
+// with optional suffix: B, K/KB, M/MB, G/GB, T/TB.
+func enforceSizeCap(backupDir, cap string) error {
+	capBytes, err := parseSizeCap(backupDir, cap)
+	if err != nil || capBytes == 0 {
+		return err
+	}
+
+	// Collect backup files sorted oldest first.
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		return fmt.Errorf("read backup dir: %w", err)
+	}
+
+	type sizedFile struct {
+		path string
+		size int64
+		mod  time.Time
+	}
+	var files []sizedFile
+	var totalBytes int64
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, "caswhois_backup_") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, sizedFile{
+			path: filepath.Join(backupDir, name),
+			size: info.Size(),
+			mod:  info.ModTime(),
+		})
+		totalBytes += info.Size()
+	}
+
+	if totalBytes <= capBytes {
+		return nil
+	}
+
+	// Sort oldest first (ascending mod time).
+	for i := 0; i < len(files); i++ {
+		for j := i + 1; j < len(files); j++ {
+			if files[i].mod.After(files[j].mod) {
+				files[i], files[j] = files[j], files[i]
+			}
+		}
+	}
+
+	for _, f := range files {
+		if totalBytes <= capBytes {
+			break
+		}
+		if err := os.Remove(f.path); err != nil {
+			return fmt.Errorf("remove %s: %w", f.path, err)
+		}
+		totalBytes -= f.size
+	}
+	return nil
+}
+
+// parseSizeCap converts a size-cap string to bytes.
+// Percent values (e.g. "10%") are resolved against the device holding backupDir.
+func parseSizeCap(backupDir, cap string) (int64, error) {
+	cap = strings.TrimSpace(cap)
+	if cap == "" || cap == "0" {
+		return 0, nil
+	}
+
+	if strings.HasSuffix(cap, "%") {
+		pctStr := strings.TrimSuffix(cap, "%")
+		pct, err := strconv.ParseFloat(pctStr, 64)
+		if err != nil || pct <= 0 {
+			return 0, fmt.Errorf("invalid percent size cap %q", cap)
+		}
+
+		var st syscall.Statfs_t
+		if err := syscall.Statfs(backupDir, &st); err != nil {
+			return 0, fmt.Errorf("statfs %s: %w", backupDir, err)
+		}
+		totalBytes := int64(st.Blocks) * int64(st.Bsize)
+		return int64(float64(totalBytes) * pct / 100.0), nil
+	}
+
+	// Absolute size with optional unit suffix.
+	upper := strings.ToUpper(cap)
+	units := []struct {
+		suffix string
+		mult   int64
+	}{
+		{"TB", 1 << 40},
+		{"GB", 1 << 30},
+		{"MB", 1 << 20},
+		{"KB", 1 << 10},
+		{"T", 1 << 40},
+		{"G", 1 << 30},
+		{"M", 1 << 20},
+		{"K", 1 << 10},
+		{"B", 1},
+	}
+	for _, u := range units {
+		if strings.HasSuffix(upper, u.suffix) {
+			numStr := upper[:len(upper)-len(u.suffix)]
+			n, err := strconv.ParseFloat(strings.TrimSpace(numStr), 64)
+			if err != nil {
+				return 0, fmt.Errorf("invalid size cap %q", cap)
+			}
+			return int64(n * float64(u.mult)), nil
+		}
+	}
+
+	// Plain integer = bytes.
+	n, err := strconv.ParseInt(cap, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size cap %q", cap)
+	}
+	return n, nil
 }
 
 // CreateIncremental creates an incremental backup (daily or hourly)

@@ -98,6 +98,17 @@
     "dark": "Sombre",
     "auto": "Automatique"
   },
+  "graphql": {
+    "title": "Explorateur GraphQL",
+    "subtitle": "Interface de requête GraphQL interactive",
+    "query_label": "Requête",
+    "variables_label": "Variables (JSON)",
+    "operation_label": "Nom d'opération",
+    "submit": "Exécuter",
+    "response_label": "Réponse",
+    "endpoint_label": "Point de terminaison",
+    "error_invalid_json": "Les variables doivent être du JSON valide"
+  },
   "footer": {
     "health": "Santé"
   }

@@ -98,6 +98,17 @@
     "dark": "Dunkel",
     "auto": "Automatisch"
   },
+  "graphql": {
+    "title": "GraphQL-Explorer",
+    "subtitle": "Interaktive GraphQL-Abfrageschnittstelle",
+    "query_label": "Abfrage",
+    "variables_label": "Variablen (JSON)",
+    "operation_label": "Operationsname",
+    "submit": "Ausführen",
+    "response_label": "Antwort",
+    "endpoint_label": "Endpunkt",
+    "error_invalid_json": "Variablen müssen gültiges JSON sein"
+  },
   "footer": {
     "health": "Gesundheit"
   }

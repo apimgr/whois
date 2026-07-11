@@ -98,6 +98,17 @@
     "dark": "深色",
     "auto": "自动"
   },
+  "graphql": {
+    "title": "GraphQL 浏览器",
+    "subtitle": "交互式 GraphQL 查询界面",
+    "query_label": "查询",
+    "variables_label": "变量（JSON）",
+    "operation_label": "操作名称",
+    "submit": "运行",
+    "response_label": "响应",
+    "endpoint_label": "端点",
+    "error_invalid_json": "变量必须是有效的 JSON"
+  },
   "footer": {
     "health": "健康"
   }

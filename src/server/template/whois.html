@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{.Lang}}" dir="{{.Dir}}">
+<html lang="{{.Lang}}" dir="{{.Dir}}" data-theme="{{.Theme}}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="WHOIS result for {{.Query}}">
-<title>{{.Query}} — caswhois</title>
+<title>{{.Query}} — {{.Name}}</title>
 <link rel="stylesheet" href="/static/css/main.css">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#007bff">
@@ -16,7 +16,7 @@
 
 <nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
   <div class="nav-inner">
-    <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
       <li><a href="/about">{{call .T "nav.about"}}</a></li>
       <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
@@ -85,7 +85,7 @@
 
 <footer class="site-footer">
   <p>
-    <a href="/">caswhois</a> &mdash;
+    <a href="/">{{.Name}}</a> &mdash;
     <a href="/about">{{call .T "nav.about"}}</a> &middot;
     <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
     <a href="/server/healthz">{{call .T "footer.health"}}</a>

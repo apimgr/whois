@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,10 +28,12 @@ type LogFileConfig struct {
 // LogsConfig mirrors the server.logs block in server.yml (AI.md PART 11).
 type LogsConfig struct {
 	// Level is the global log level: debug, info, warn, error.
-	Level    string       `yaml:"level"`
+	Level    string        `yaml:"level"`
 	Access   LogFileConfig `yaml:"access"`
 	Server   LogFileConfig `yaml:"server"`
 	Error    LogFileConfig `yaml:"error"`
+	App      LogFileConfig `yaml:"app"`
+	Auth     LogFileConfig `yaml:"auth"`
 	Audit    LogFileConfig `yaml:"audit"`
 	Security LogFileConfig `yaml:"security"`
 	Debug    LogFileConfig `yaml:"debug"`
@@ -58,6 +61,20 @@ func DefaultLogsConfig() LogsConfig {
 			Enabled:  true,
 			Filename: "error.log",
 			Format:   "text",
+			Rotate:   "weekly,50MB",
+			Keep:     "none",
+		},
+		App: LogFileConfig{
+			Enabled:  true,
+			Filename: "app.log",
+			Format:   "logfmt",
+			Rotate:   "weekly,50MB",
+			Keep:     "none",
+		},
+		Auth: LogFileConfig{
+			Enabled:  true,
+			Filename: "auth.log",
+			Format:   "syslog",
 			Rotate:   "weekly,50MB",
 			Keep:     "none",
 		},
@@ -206,6 +223,10 @@ type BackupRetentionConfig struct {
 	KeepMonthly int `yaml:"keep_monthly"`
 	// KeepYearly is the number of January-1st backups to retain (0 = disabled).
 	KeepYearly int `yaml:"keep_yearly"`
+	// MaxTotalSize is a hard cap on total backup volume: percent of device ("10%")
+	// or absolute size ("50G", "500M"). "0" or empty disables the cap.
+	// Overrides count limits: oldest backups are deleted first until under cap.
+	MaxTotalSize string `yaml:"max_total_size"`
 }
 
 // BackupConfig holds backup settings (AI.md PART 21 — server.backup.*).
@@ -506,8 +527,8 @@ func Default() *ServerConfig {
 		Daemonize:           false,
 		PIDFile:             true,
 		APIVersion:          "v1",
-		User:                "caswhois",
-		Group:               "caswhois",
+		User:                constants.InternalName,
+		Group:               constants.InternalName,
 		// ConfigDir, DataDir, LogDir are resolved to OS-appropriate paths at runtime
 		ConfigDir:           "",
 		DataDir:             "",
@@ -530,7 +551,7 @@ func Default() *ServerConfig {
 			CORS: "*",
 		},
 		Branding: BrandingConfig{
-			Title:       "caswhois",
+			Title:       constants.InternalName,
 			Tagline:     "",
 			Description: "",
 			Theme:       "auto",
@@ -600,7 +621,8 @@ func Default() *ServerConfig {
 				// 0 = disabled
 				KeepMonthly: 0,
 				// 0 = disabled
-				KeepYearly:  0,
+				KeepYearly:     0,
+				MaxTotalSize:   "10%",
 			},
 		},
 		Compliance: ComplianceConfig{Enabled: false},
@@ -819,17 +841,17 @@ func (c *ServerConfig) GetDatabaseDir() string {
 		return filepath.Join(c.DataDir, "db")
 	}
 
-	// 5. Root native: /var/lib/apimgr/caswhois/db (AI.md PART 4)
+	// 5. Root native: /var/lib/{internal_org}/{internal_name}/db (AI.md PART 4)
 	if os.Getuid() == 0 {
-		return "/var/lib/apimgr/caswhois/db"
+		return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName + "/db"
 	}
 
-	// 6. User native: ~/.local/share/apimgr/caswhois/db (AI.md PART 4)
+	// 6. User native: ~/.local/share/{internal_org}/{internal_name}/db (AI.md PART 4)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./db"
 	}
-	return filepath.Join(home, ".local", "share", "apimgr", "caswhois", "db")
+	return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName, "db")
 }
 
 // GetBackupDir returns the backup directory per AI.md PART 4.
@@ -845,17 +867,17 @@ func (c *ServerConfig) GetBackupDir() string {
 		return "/data/backups/caswhois"
 	}
 
-	// 3. Root native: /mnt/Backups/apimgr/caswhois (AI.md PART 4)
+	// 3. Root native: /mnt/Backups/{internal_org}/{internal_name} (AI.md PART 4)
 	if os.Getuid() == 0 {
-		return "/mnt/Backups/apimgr/caswhois"
+		return "/mnt/Backups/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
-	// 4. User native: ~/.local/share/Backups/apimgr/caswhois (AI.md PART 4)
+	// 4. User native: ~/.local/share/Backups/{internal_org}/{internal_name} (AI.md PART 4)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./backups"
 	}
-	return filepath.Join(home, ".local", "share", "Backups", "apimgr", "caswhois")
+	return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
 }
 
 // GetLogDir returns the log directory per AI.md PART 4.
@@ -871,17 +893,17 @@ func (c *ServerConfig) GetLogDir() string {
 		return "/data/log/caswhois"
 	}
 
-	// 3. Root native: /var/log/apimgr/caswhois (AI.md PART 4)
+	// 3. Root native: /var/log/{internal_org}/{internal_name} (AI.md PART 4)
 	if os.Getuid() == 0 {
-		return "/var/log/apimgr/caswhois"
+		return "/var/log/" + constants.InternalOrg + "/" + constants.InternalName
 	}
 
-	// 4. User native: ~/.local/log/apimgr/caswhois (AI.md PART 4)
+	// 4. User native: ~/.local/log/{internal_org}/{internal_name} (AI.md PART 4)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "./logs"
 	}
-	return filepath.Join(home, ".local", "log", "apimgr", "caswhois")
+	return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
 }
 
 // GetDatabaseConfig returns database configuration from environment and config

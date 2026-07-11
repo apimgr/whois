@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/whois/src/client/lookup"
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/theme"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -130,7 +131,7 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the full-screen TUI
 func (m TUIModel) View() string {
-	title := styleTitle.Render("caswhois")
+	title := styleTitle.Render(constants.InternalName)
 
 	queryLabel := styleLabel.Render("Query: ")
 	inputField := m.input.View()

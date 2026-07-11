@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 package server
 
 import (
@@ -8,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // CheckPIDFile checks if PID file exists and if the process is still running
@@ -68,9 +73,9 @@ func isOurProcess(pid int) bool {
 		// On macOS/BSD, use ps command
 		return isOurProcessDarwin(pid)
 	}
-	// Check if executable name contains "caswhois"
+	// Check if executable name contains the internal binary name.
 	baseName := filepath.Base(exePath)
-	return strings.Contains(baseName, "caswhois") || strings.Contains(baseName, "whois")
+	return strings.Contains(baseName, constants.InternalName) || strings.Contains(baseName, "whois")
 }
 
 // isOurProcessDarwin checks process on macOS/BSD
@@ -81,7 +86,7 @@ func isOurProcessDarwin(pid int) bool {
 		return false
 	}
 	cmdName := strings.ToLower(string(output))
-	return strings.Contains(cmdName, "caswhois") || strings.Contains(cmdName, "whois")
+	return strings.Contains(cmdName, constants.InternalName) || strings.Contains(cmdName, "whois")
 }
 
 // WritePIDFile writes current process PID to file (with optional port)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/i18n"
 )
 
@@ -11,7 +12,7 @@ import (
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	name := s.config.Branding.Title
 	if name == "" {
-		name = "caswhois"
+		name = constants.InternalName
 	}
 	desc := s.config.Branding.Description
 	if desc == "" {
@@ -57,7 +58,7 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 	appName := s.config.Branding.Title
 	if appName == "" {
-		appName = "caswhois"
+		appName = constants.InternalName
 	}
 
 	sw := fmt.Sprintf(`// Service Worker for %s (AI.md PART 16 PWA support)
@@ -126,7 +127,7 @@ self.addEventListener('message', event => {
 func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
 	name := s.config.Branding.Title
 	if name == "" {
-		name = "caswhois"
+		name = constants.InternalName
 	}
 
 	lang := LangFromContext(r.Context())

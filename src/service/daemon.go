@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // detectServiceManagerFn is the service-manager detection implementation.
@@ -57,7 +59,7 @@ func IsContainer() bool {
 	switch parentName {
 	case "tini", "dumb-init", "s6-svscan", "runsv", "runsvdir", "catatonit":
 		return true
-	case "caswhois":
+	case constants.InternalName:
 		// Parent is our own binary - likely container entrypoint
 		return true
 	}
