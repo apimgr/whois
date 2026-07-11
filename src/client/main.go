@@ -58,7 +58,7 @@ func run(args []string) int {
 	fs.StringVar(&flagFormat, "format", "", "Output format alias for --output")
 	fs.BoolVar(&flagNoColor, "no-color", false, "Disable color output")
 	fs.StringVar(&flagLang, "lang", "", "Language code (en, es, zh, fr, ar, de, ja)")
-	fs.StringVar(&flagColor, "color", "", "Color output: always/never/auto (default: auto)")
+	fs.StringVar(&flagColor, "color", "auto", "Color output: always/never/auto (default: auto)")
 	fs.StringVar(&flagUpdate, "update", "", "Update command: check/yes/branch=<name>")
 	fs.BoolVar(&flagDebug, "debug", false, "Debug mode")
 	fs.BoolVar(&flagVersion, "version", false, "Show version information")

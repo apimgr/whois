@@ -12,15 +12,17 @@ import (
 type ServiceCommand string
 
 const (
-	ServiceInstall   ServiceCommand = "install"
-	ServiceUninstall ServiceCommand = "uninstall"
-	ServiceDisable   ServiceCommand = "disable"
-	ServiceStart     ServiceCommand = "start"
-	ServiceStop      ServiceCommand = "stop"
-	ServiceRestart   ServiceCommand = "restart"
-	ServiceReload    ServiceCommand = "reload"
-	ServiceStatus    ServiceCommand = "status"
-	ServiceHelp      ServiceCommand = "help"
+	// Install, uninstall, disable, and help use the --flag form per AI.md PART 8.
+	ServiceInstall   ServiceCommand = "--install"
+	ServiceUninstall ServiceCommand = "--uninstall"
+	ServiceDisable   ServiceCommand = "--disable"
+	ServiceHelp      ServiceCommand = "--help"
+	// Operational commands use plain words (no dashes) per AI.md PART 8.
+	ServiceStart   ServiceCommand = "start"
+	ServiceStop    ServiceCommand = "stop"
+	ServiceRestart ServiceCommand = "restart"
+	ServiceReload  ServiceCommand = "reload"
+	ServiceStatus  ServiceCommand = "status"
 )
 
 // ServiceManager provides service management functionality.

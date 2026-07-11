@@ -20,6 +20,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -111,15 +113,16 @@ func (l *Logger) openFiles() error {
 			return fmt.Errorf("logger: open %s: %w", path, err)
 		}
 		l.debugFile = fh
-		l.debugHandler = newTextHandler(l.debugFile)
+		// debug.log uses bracket text format like server.log per AI.md PART 11.
+		l.debugHandler = newBracketTextHandler(l.debugFile)
 	}
 
-	// Build slog handlers for server.log, error.log, and app.log (logfmt).
-	// Use the plain text (non-JSON) handler so lines match the spec format:
+	// server.log and error.log use bracket text format per AI.md PART 11:
 	//   2024-10-10T13:55:36-04:00 [INFO] message key=value
-	l.serverHandler = newTextHandler(l.serverFile)
-	l.errorHandler = newTextHandler(l.errorFile)
-	// app.log uses slog default text (logfmt) format per AI.md PART 11.
+	l.serverHandler = newBracketTextHandler(l.serverFile)
+	l.errorHandler = newBracketTextHandler(l.errorFile)
+	// app.log uses logfmt per AI.md PART 11:
+	//   time=2026-05-13T10:58:00-04:00 level=INFO msg="user created" id=abc123 ip=1.2.3.4
 	l.appHandler = newTextHandler(l.appFile)
 
 	return nil
@@ -348,12 +351,10 @@ func (l *Logger) WriteAuth(user, ip, result, reason string) {
 	}
 }
 
-// newTextHandler builds a slog.Handler whose output matches the spec text format:
+// newTextHandler builds a slog.Handler that writes logfmt output per AI.md PART 11.
+// Used for app.log:
 //
-//	2024-10-10T13:55:36-04:00 [INFO] message key=value
-//
-// slog.NewTextHandler produces key=value logfmt which is close; we wrap it to
-// replace the default time key layout with the spec-required format.
+//	time=2026-05-13T10:58:00-04:00 level=INFO msg="user created" id=abc123 ip=1.2.3.4
 func newTextHandler(w io.Writer) slog.Handler {
 	opts := &slog.HandlerOptions{
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
@@ -365,4 +366,46 @@ func newTextHandler(w io.Writer) slog.Handler {
 		},
 	}
 	return slog.NewTextHandler(w, opts)
+}
+
+// bracketTextHandler is a slog.Handler for server.log, error.log, and debug.log.
+// Produces the bracket text format required by AI.md PART 11:
+//
+//	2024-10-10T13:55:36-04:00 [INFO] message key=value key2=value2
+type bracketTextHandler struct {
+	w io.Writer
+}
+
+func newBracketTextHandler(w io.Writer) slog.Handler {
+	return &bracketTextHandler{w: w}
+}
+
+func (h *bracketTextHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *bracketTextHandler) WithAttrs(_ []slog.Attr) slog.Handler         { return h }
+func (h *bracketTextHandler) WithGroup(_ string) slog.Handler              { return h }
+
+// Handle formats and writes a single log record.
+func (h *bracketTextHandler) Handle(_ context.Context, r slog.Record) error {
+	var b strings.Builder
+	b.WriteString(r.Time.Format(time.RFC3339))
+	b.WriteString(" [")
+	b.WriteString(r.Level.String())
+	b.WriteString("] ")
+	b.WriteString(r.Message)
+	r.Attrs(func(a slog.Attr) bool {
+		b.WriteByte(' ')
+		b.WriteString(a.Key)
+		b.WriteByte('=')
+		v := a.Value.String()
+		// Quote values containing whitespace or '=' to keep lines parseable.
+		if strings.ContainsAny(v, " \t\n=") {
+			b.WriteString(strconv.Quote(v))
+		} else {
+			b.WriteString(v)
+		}
+		return true
+	})
+	b.WriteByte('\n')
+	_, err := io.WriteString(h.w, b.String())
+	return err
 }

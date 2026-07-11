@@ -17,15 +17,17 @@ func TestServiceCommandConstants(t *testing.T) {
 		got  ServiceCommand
 		want string
 	}{
-		{"Install", ServiceInstall, "install"},
-		{"Uninstall", ServiceUninstall, "uninstall"},
-		{"Disable", ServiceDisable, "disable"},
+		// Install, uninstall, disable, and help use the --flag form per AI.md PART 8.
+		{"Install", ServiceInstall, "--install"},
+		{"Uninstall", ServiceUninstall, "--uninstall"},
+		{"Disable", ServiceDisable, "--disable"},
+		{"Help", ServiceHelp, "--help"},
+		// Operational commands use plain words per AI.md PART 8.
 		{"Start", ServiceStart, "start"},
 		{"Stop", ServiceStop, "stop"},
 		{"Restart", ServiceRestart, "restart"},
 		{"Reload", ServiceReload, "reload"},
 		{"Status", ServiceStatus, "status"},
-		{"Help", ServiceHelp, "help"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

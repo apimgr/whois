@@ -1046,16 +1046,17 @@ func TestRun_Status_NoPID(t *testing.T) {
 	}
 }
 
-// TestRun_Service_Help verifies --service help exits 0.
+// TestRun_Service_Help verifies --service --help exits 0.
+// The --help flag form is required by AI.md PART 8 for install/uninstall/disable/help.
 func TestRun_Service_Help(t *testing.T) {
 	out := captureStdout(t, func() {
-		code := run([]string{"--service", "help"})
+		code := run([]string{"--service", "--help"})
 		if code != 0 {
-			t.Errorf("run(--service help) = %d, want 0", code)
+			t.Errorf("run(--service --help) = %d, want 0", code)
 		}
 	})
 	if out == "" {
-		t.Error("run(--service help) produced no output")
+		t.Error("run(--service --help) produced no output")
 	}
 }
 

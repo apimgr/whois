@@ -120,7 +120,7 @@ func run(args []string) int {
 	fs.StringVar(&colorFlag, "color", "auto", "Color output (auto|yes|no)")
 	fs.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
 	fs.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
-	fs.StringVar(&serviceCmd, "service", "", "Service management (install|uninstall|disable|start|stop|restart|reload|status|help)")
+	fs.StringVar(&serviceCmd, "service", "", "Service management (--install|--uninstall|--disable|start|stop|restart|reload|status|--help)")
 	fs.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|mode|setup|update|help)")
 	fs.StringVar(&updateCmd, "update", "", "Update operations (check|yes|branch|help)")
 
@@ -295,9 +295,9 @@ func runSubcommand(subcmd, binaryName string, remainingArgs []string) int {
 	// Service management subcommands (service-rules.md PART 23, 24).
 	// Each maps to the equivalent --service flag value.
 	case "install":
-		return runServiceSubcmd("install", remainingArgs)
+		return runServiceSubcmd("--install", remainingArgs)
 	case "uninstall":
-		return runServiceSubcmd("uninstall", remainingArgs)
+		return runServiceSubcmd("--uninstall", remainingArgs)
 	case "start":
 		return runServiceSubcmd("start", remainingArgs)
 	case "stop":
@@ -535,7 +535,7 @@ func printHelp(binaryName string) {
 	fmt.Printf("      --color {auto|yes|no}         Color output (default: auto)\n")
 	fmt.Printf("      --lang CODE                   Language for output (default: auto)\n\n")
 	fmt.Printf("Service Management:\n")
-	fmt.Printf("      --service CMD                 Service management (install|uninstall|start|stop|restart|reload|status|help)\n\n")
+	fmt.Printf("      --service CMD                 Service management (--install|--uninstall|--disable|start|stop|restart|reload|status|--help)\n\n")
 	fmt.Printf("Maintenance:\n")
 	fmt.Printf("      --maintenance CMD             Maintenance operations (backup|restore|mode|setup|update|help)\n\n")
 	fmt.Printf("Update:\n")
