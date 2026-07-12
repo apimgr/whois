@@ -3,6 +3,7 @@ package rdap
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -190,5 +191,172 @@ func TestQueryASN_AllEndpointsFail(t *testing.T) {
 	_, _, err := c.QueryASN(context.Background(), 15169)
 	if err == nil {
 		t.Error("QueryASN() with failing endpoint should return error")
+	}
+}
+
+// TestQueryDomain_Success verifies QueryDomain returns a valid DomainResponse from a mock server.
+func TestQueryDomain_Success(t *testing.T) {
+	t.Parallel()
+	resp := DomainResponse{
+		ObjectClassName: "domain",
+		LDHName:         "example.com",
+		Handle:          "2336799_DOMAIN_COM-VRSN",
+	}
+	body, _ := json.Marshal(resp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rdap+json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	b := NewBootstrap(t.TempDir())
+	b.dnsServices["com"] = []string{srv.URL + "/"}
+	c := NewClient(b)
+
+	got, endpoint, err := c.QueryDomain(context.Background(), "example.com")
+	if err != nil {
+		t.Fatalf("QueryDomain() error = %v", err)
+	}
+	if got.LDHName != "example.com" {
+		t.Errorf("LDHName = %q, want %q", got.LDHName, "example.com")
+	}
+	if endpoint == "" {
+		t.Error("QueryDomain() returned empty endpoint")
+	}
+}
+
+// TestQueryIP_Success_IPv4 verifies QueryIP succeeds for an IPv4 address injected
+// into the bootstrap directly.
+func TestQueryIP_Success_IPv4(t *testing.T) {
+	t.Parallel()
+	resp := IPResponse{
+		ObjectClassName: "ip network",
+		Name:            "ARIN-NET",
+		StartAddress:    "8.0.0.0",
+		EndAddress:      "8.255.255.255",
+	}
+	body, _ := json.Marshal(resp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rdap+json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	_, network, _ := net.ParseCIDR("8.0.0.0/8")
+	b := NewBootstrap(t.TempDir())
+	b.ipv4Services = append(b.ipv4Services, ipv4Range{network: network, services: []string{srv.URL + "/"}})
+	c := NewClient(b)
+
+	got, _, err := c.QueryIP(context.Background(), "8.8.8.8", false)
+	if err != nil {
+		t.Fatalf("QueryIP(IPv4) error = %v", err)
+	}
+	if got.Name != "ARIN-NET" {
+		t.Errorf("Name = %q, want %q", got.Name, "ARIN-NET")
+	}
+}
+
+// TestQueryIP_Success_IPv6 verifies QueryIP succeeds for an IPv6 address injected
+// into the bootstrap directly.
+func TestQueryIP_Success_IPv6(t *testing.T) {
+	t.Parallel()
+	resp := IPResponse{
+		ObjectClassName: "ip network",
+		Name:            "APNIC-V6",
+		IPVersion:       "v6",
+	}
+	body, _ := json.Marshal(resp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rdap+json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	_, network, _ := net.ParseCIDR("2001:4860::/32")
+	b := NewBootstrap(t.TempDir())
+	b.ipv6Services = append(b.ipv6Services, ipv6Range{network: network, services: []string{srv.URL + "/"}})
+	c := NewClient(b)
+
+	got, _, err := c.QueryIP(context.Background(), "2001:4860::1", true)
+	if err != nil {
+		t.Fatalf("QueryIP(IPv6) error = %v", err)
+	}
+	if got.Name != "APNIC-V6" {
+		t.Errorf("Name = %q, want %q", got.Name, "APNIC-V6")
+	}
+}
+
+// TestQueryASN_Success verifies QueryASN succeeds when an ASN range is injected.
+func TestQueryASN_Success(t *testing.T) {
+	t.Parallel()
+	resp := ASNResponse{
+		ObjectClassName: "autnum",
+		StartAutnum:     15169,
+		EndAutnum:       15169,
+		Name:            "GOOGLE",
+	}
+	body, _ := json.Marshal(resp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rdap+json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	b := NewBootstrap(t.TempDir())
+	b.asnServices = append(b.asnServices, asnRange{start: 15169, end: 15169, services: []string{srv.URL + "/"}})
+	c := NewClient(b)
+
+	got, _, err := c.QueryASN(context.Background(), 15169)
+	if err != nil {
+		t.Fatalf("QueryASN() error = %v", err)
+	}
+	if got.Name != "GOOGLE" {
+		t.Errorf("Name = %q, want %q", got.Name, "GOOGLE")
+	}
+}
+
+// TestQueryIP_AllEndpointsFail_IPv4 verifies the "all endpoints failed" error path for IPv4.
+func TestQueryIP_AllEndpointsFail_IPv4(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, network, _ := net.ParseCIDR("8.0.0.0/8")
+	b := NewBootstrap(t.TempDir())
+	b.ipv4Services = append(b.ipv4Services, ipv4Range{network: network, services: []string{srv.URL + "/"}})
+	c := NewClient(b)
+
+	_, _, err := c.QueryIP(context.Background(), "8.8.8.8", false)
+	if err == nil {
+		t.Error("QueryIP(IPv4) with failing endpoint should return error")
+	}
+}
+
+// TestQueryIP_AllEndpointsFail_IPv6 verifies the "all endpoints failed" error path for IPv6.
+func TestQueryIP_AllEndpointsFail_IPv6(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, network, _ := net.ParseCIDR("2001:4860::/32")
+	b := NewBootstrap(t.TempDir())
+	b.ipv6Services = append(b.ipv6Services, ipv6Range{network: network, services: []string{srv.URL + "/"}})
+	c := NewClient(b)
+
+	_, _, err := c.QueryIP(context.Background(), "2001:4860::1", true)
+	if err == nil {
+		t.Error("QueryIP(IPv6) with failing endpoint should return error")
 	}
 }

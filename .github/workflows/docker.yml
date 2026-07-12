@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
 
 env:
-  PROJECTNAME: caswhois
+  PROJECTNAME: ${{ github.event.repository.name }}
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 

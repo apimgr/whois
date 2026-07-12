@@ -262,3 +262,204 @@ func TestItoa(t *testing.T) {
 
 // Dummy import to ensure time is used
 var _ = time.Now
+
+// TestDetectRIRFromEndpoint covers the endpoint-based RIR detection fallback used
+// in ParseIPResponse and ParseASNResponse when Port43 is empty.
+func TestDetectRIRFromEndpoint(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		endpoint string
+		want     string
+	}{
+		{"https://rdap.arin.net/registry/", "ARIN"},
+		{"https://rdap.db.ripe.net/", "RIPE"},
+		{"https://rdap.apnic.net/", "APNIC"},
+		{"https://rdap.lacnic.net/rdap/", "LACNIC"},
+		{"https://rdap.afrinic.net/whois/rdap/", "AFRINIC"},
+		{"https://rdap.verisign.com/com/v1/", ""},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.endpoint, func(t *testing.T) {
+			t.Parallel()
+			got := detectRIRFromEndpoint(tt.endpoint)
+			if got != tt.want {
+				t.Errorf("detectRIRFromEndpoint(%q) = %q, want %q", tt.endpoint, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseIPResponse_CIDR verifies the Cidr0Cidrs path in ParseIPResponse,
+// which takes priority over StartAddress/EndAddress when present.
+func TestParseIPResponse_CIDR(t *testing.T) {
+	t.Parallel()
+	resp := &IPResponse{
+		ObjectClassName: "ip network",
+		Name:            "ARIN-NET",
+		Cidr0Cidrs: []struct {
+			V4Prefix string `json:"v4prefix,omitempty"`
+			V6Prefix string `json:"v6prefix,omitempty"`
+			Length   int    `json:"length"`
+		}{
+			{V4Prefix: "8.0.0.0", Length: 8},
+			{V4Prefix: "8.8.0.0", Length: 16},
+		},
+	}
+
+	rawJSON, _ := json.Marshal(resp)
+	result := ParseIPResponse(resp, "8.8.8.8", "https://rdap.arin.net/registry/", rawJSON, false)
+
+	if result.QueryType != "ipv4" {
+		t.Errorf("QueryType = %q, want %q", result.QueryType, "ipv4")
+	}
+	wantRange := "8.0.0.0/8, 8.8.0.0/16"
+	if result.NetworkRange != wantRange {
+		t.Errorf("NetworkRange = %q, want %q", result.NetworkRange, wantRange)
+	}
+	if result.RIR != "ARIN" {
+		t.Errorf("RIR = %q, want ARIN (from endpoint fallback)", result.RIR)
+	}
+}
+
+// TestParseIPResponse_IPv6CIDR covers the isIPv6=true path and V6Prefix CIDR
+// notation.
+func TestParseIPResponse_IPv6CIDR(t *testing.T) {
+	t.Parallel()
+	resp := &IPResponse{
+		ObjectClassName: "ip network",
+		Name:            "APNIC-V6",
+		Cidr0Cidrs: []struct {
+			V4Prefix string `json:"v4prefix,omitempty"`
+			V6Prefix string `json:"v6prefix,omitempty"`
+			Length   int    `json:"length"`
+		}{
+			{V6Prefix: "2001:4860::", Length: 32},
+		},
+		Port43: "whois.apnic.net",
+	}
+
+	rawJSON, _ := json.Marshal(resp)
+	result := ParseIPResponse(resp, "2001:4860::1", "https://rdap.apnic.net/", rawJSON, true)
+
+	if result.QueryType != "ipv6" {
+		t.Errorf("QueryType = %q, want %q", result.QueryType, "ipv6")
+	}
+	wantRange := "2001:4860::/32"
+	if result.NetworkRange != wantRange {
+		t.Errorf("NetworkRange = %q, want %q", result.NetworkRange, wantRange)
+	}
+	if result.RIR != "APNIC" {
+		t.Errorf("RIR = %q, want APNIC (from port43)", result.RIR)
+	}
+}
+
+// TestParseVCard_OrgAsArray verifies parseVCard handles org as []interface{}
+// (the jCard spec allows both string and array for the org property).
+func TestParseVCard_OrgAsArray(t *testing.T) {
+	t.Parallel()
+	vcard := VCardArray{
+		"vcard",
+		[]interface{}{
+			[]interface{}{"fn", struct{}{}, "text", "John Doe"},
+			[]interface{}{"org", struct{}{}, "text", []interface{}{"Example Corp", "Engineering"}},
+		},
+	}
+
+	name, org, _ := parseVCard(vcard)
+	if name != "John Doe" {
+		t.Errorf("name = %q, want %q", name, "John Doe")
+	}
+	if org != "Example Corp" {
+		t.Errorf("org = %q, want %q (first element of array)", org, "Example Corp")
+	}
+}
+
+// TestParseVCard_OrgAsArrayEmpty verifies parseVCard handles an empty org array
+// without panicking.
+func TestParseVCard_OrgAsArrayEmpty(t *testing.T) {
+	t.Parallel()
+	vcard := VCardArray{
+		"vcard",
+		[]interface{}{
+			[]interface{}{"org", struct{}{}, "text", []interface{}{}},
+		},
+	}
+
+	_, org, _ := parseVCard(vcard)
+	if org != "" {
+		t.Errorf("org = %q, want empty string for empty org array", org)
+	}
+}
+
+// TestParseEntity_RegistrarFallbackToOrg verifies that when a registrar entity has
+// no FN (name) but has an ORG, the org name is used as the registrar.
+func TestParseEntity_RegistrarFallbackToOrg(t *testing.T) {
+	t.Parallel()
+	entity := Entity{
+		Roles: []string{"registrar"},
+		VCardArray: VCardArray{
+			"vcard",
+			[]interface{}{
+				// No "fn" property — only org
+				[]interface{}{"org", struct{}{}, "text", "NameCheap Inc."},
+				[]interface{}{"email", struct{}{}, "text", "abuse@namecheap.com"},
+			},
+		},
+	}
+
+	result := &ParsedResult{}
+	parseEntity(&entity, result)
+
+	if result.Registrar != "NameCheap Inc." {
+		t.Errorf("Registrar = %q, want %q (org fallback when name is empty)", result.Registrar, "NameCheap Inc.")
+	}
+}
+
+// TestParseEntity_NestedEntities verifies parseEntity recurses into entity.Entities
+// and sets registrar info found in a nested entity.
+func TestParseEntity_NestedEntities(t *testing.T) {
+	t.Parallel()
+	nested := Entity{
+		Roles: []string{"registrar"},
+		VCardArray: VCardArray{
+			"vcard",
+			[]interface{}{
+				[]interface{}{"fn", struct{}{}, "text", "NestedRegistrar"},
+			},
+		},
+	}
+	outer := Entity{
+		Roles:    []string{"technical"},
+		Entities: []Entity{nested},
+	}
+
+	result := &ParsedResult{}
+	parseEntity(&outer, result)
+
+	if result.Registrar != "NestedRegistrar" {
+		t.Errorf("Registrar = %q, want %q (from nested entity)", result.Registrar, "NestedRegistrar")
+	}
+}
+
+// TestParseASNResponse_EndpointRIRFallback verifies RIR detection falls back to
+// the RDAP endpoint URL when Port43 is empty.
+func TestParseASNResponse_EndpointRIRFallback(t *testing.T) {
+	t.Parallel()
+	resp := &ASNResponse{
+		ObjectClassName: "autnum",
+		StartAutnum:     12345,
+		EndAutnum:       12345,
+		Name:            "RIPE-TEST",
+		// Port43 is intentionally empty
+	}
+
+	rawJSON, _ := json.Marshal(resp)
+	result := ParseASNResponse(resp, 12345, "https://rdap.db.ripe.net/autnum/12345", rawJSON)
+
+	if result.RIR != "RIPE" {
+		t.Errorf("RIR = %q, want RIPE (from endpoint fallback)", result.RIR)
+	}
+}

@@ -2,6 +2,8 @@ package rdap
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -219,6 +221,101 @@ func TestBootstrap_Load_ASN(t *testing.T) {
 	endpoints = b.GetASNEndpoints(999999)
 	if len(endpoints) != 0 {
 		t.Errorf("GetASNEndpoints(999999) = %v, want empty", endpoints)
+	}
+}
+
+// TestBootstrap_Load_IPv6 verifies that IPv6 bootstrap data is loaded and
+// endpoint lookup works for an IPv6 address within the loaded range.
+func TestBootstrap_Load_IPv6(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	rdapDir := filepath.Join(dataDir, "rdap")
+	if err := os.MkdirAll(rdapDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	ipv6JSON := `{
+		"version": "1.0",
+		"publication": "2025-01-01T00:00:00Z",
+		"services": [
+			[["2001:4860::/32"], ["https://rdap.arin.net/registry/"]]
+		]
+	}`
+	if err := os.WriteFile(filepath.Join(rdapDir, "ipv6.json"), []byte(ipv6JSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	b := NewBootstrap(dataDir)
+	if err := b.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	endpoints := b.GetIPv6Endpoints("2001:4860::1")
+	if len(endpoints) == 0 {
+		t.Error("GetIPv6Endpoints(2001:4860::1) returned empty, want ARIN endpoint")
+	}
+
+	// Non-matching IPv6 should return nothing
+	endpoints = b.GetIPv6Endpoints("2002::1")
+	if len(endpoints) != 0 {
+		t.Errorf("GetIPv6Endpoints(2002::1) = %v, want empty", endpoints)
+	}
+}
+
+// TestBootstrap_DownloadFile verifies downloadFile writes the response body to
+// disk atomically and leaves no leftover .tmp file.
+func TestBootstrap_DownloadFile(t *testing.T) {
+	t.Parallel()
+
+	want := `{"version":"1.0","publication":"2025-01-01T00:00:00Z","services":[]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(want))
+	}))
+	defer srv.Close()
+
+	dataDir := t.TempDir()
+	dest := filepath.Join(dataDir, "dns.json")
+
+	b := NewBootstrap(dataDir)
+	ctx := context.Background()
+	if err := b.downloadFile(ctx, &http.Client{}, srv.URL, dest); err != nil {
+		t.Fatalf("downloadFile() error = %v", err)
+	}
+
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("file content = %q, want %q", string(got), want)
+	}
+
+	// Temp file must be gone
+	if _, err := os.Stat(dest + ".tmp"); !os.IsNotExist(err) {
+		t.Error("downloadFile() left behind .tmp file")
+	}
+}
+
+// TestBootstrap_DownloadFile_HTTPError verifies downloadFile returns an error
+// when the server responds with a non-200 status code.
+func TestBootstrap_DownloadFile_HTTPError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	dataDir := t.TempDir()
+	dest := filepath.Join(dataDir, "dns.json")
+
+	b := NewBootstrap(dataDir)
+	ctx := context.Background()
+	err := b.downloadFile(ctx, &http.Client{}, srv.URL, dest)
+	if err == nil {
+		t.Error("downloadFile() with 404 response should return error")
 	}
 }
 
