@@ -514,6 +514,12 @@ type ServerConfig struct {
 	// Validated by SHA-256-hashing the inbound bearer and using subtle.ConstantTimeCompare.
 	// NEVER written to the DB. Config yaml key is "token" (server.token per spec).
 	ServerToken string `yaml:"token"`
+
+	// InstallationSecret is the root secret from which all derived material hangs (AI.md PART 11).
+	// Auto-generated on first run as 64 random hex chars; stored in server.yml as "installation_secret:".
+	// Used as the KDF input for PGP private-key encryption and future derived material.
+	// Loss of this field makes encrypted PGP private keys unrecoverable.
+	InstallationSecret string `yaml:"installation_secret"`
 }
 
 // Default returns a ServerConfig with sane defaults
@@ -702,6 +708,11 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 		if genErr == nil {
 			cfg.ServerToken = tok
 		}
+		// Generate installation secret on first run (AI.md PART 11).
+		secret, genErr := GenerateInstallationSecret()
+		if genErr == nil {
+			cfg.InstallationSecret = secret
+		}
 		// Write the default config so the operator can inspect and edit it.
 		if saveErr := cfg.Save(configDir); saveErr != nil {
 			fmt.Printf("WARNING: could not write default config to %s: %v\n", configPath, saveErr)
@@ -753,6 +764,18 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 		if saveErr := cfg.Save(configDir); saveErr != nil {
 			// Non-fatal: token still works this session but won't persist
 			fmt.Printf("WARNING: could not persist server token: %v\n", saveErr)
+		}
+	}
+
+	// Auto-generate installation secret on first run if absent (AI.md PART 11)
+	if cfg.InstallationSecret == "" {
+		secret, err := GenerateInstallationSecret()
+		if err != nil {
+			return nil, fmt.Errorf("generate installation secret: %w", err)
+		}
+		cfg.InstallationSecret = secret
+		if saveErr := cfg.Save(configDir); saveErr != nil {
+			fmt.Printf("WARNING: could not persist installation secret: %v\n", saveErr)
 		}
 	}
 

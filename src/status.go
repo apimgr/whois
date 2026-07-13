@@ -14,6 +14,7 @@ import (
 	"github.com/apimgr/whois/src/backup"
 	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/security"
 	"github.com/apimgr/whois/src/update"
 )
 
@@ -236,25 +237,204 @@ func handleMaintenance(cmd, configDir, dataDir string) int {
 		fmt.Println("Server configuration reset to defaults.")
 		fmt.Printf("Edit %s/server.yml to customize, then restart.\n", configDir)
 
-	case "help":
-		fmt.Println("Maintenance Commands (AI.md PART 22):")
+	case "pgp":
+		// --maintenance pgp <action> — manage the project-level GPG keypair (PART 11)
+		return handlePGP(args[1:], configDir)
+
+	case "--help":
+		fmt.Println("Maintenance Commands:")
 		fmt.Println()
 		fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
 		fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
+		fmt.Println("  update             Alias for --update yes (in-place binary replacement)")
 		fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
 		fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
-		fmt.Println("  update             Alias for --update yes (in-place binary replacement)")
-		fmt.Println("  help               Show this help message")
+		fmt.Println("  pgp ACTION         Manage the project GPG keypair (security reports / security.txt)")
+		fmt.Println("  --help             Show this help message")
 		fmt.Println()
 		fmt.Println("Examples:")
 		fmt.Println("  caswhois --maintenance backup")
 		fmt.Println("  caswhois --maintenance 'restore /path/to/backup.tar.gz'")
 		fmt.Println("  sudo caswhois --maintenance 'mode development'")
 		fmt.Println("  sudo caswhois --maintenance setup")
+		fmt.Println("  caswhois --maintenance 'pgp generate'")
+		fmt.Println("  caswhois --maintenance 'pgp --help'")
+
+	case "help":
+		fmt.Println("Maintenance Commands:")
+		fmt.Println()
+		fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
+		fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
+		fmt.Println("  update             Alias for --update yes (in-place binary replacement)")
+		fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
+		fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
+		fmt.Println("  pgp ACTION         Manage the project GPG keypair (security reports / security.txt)")
+		fmt.Println("  --help             Show this help message")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  caswhois --maintenance backup")
+		fmt.Println("  caswhois --maintenance 'restore /path/to/backup.tar.gz'")
+		fmt.Println("  sudo caswhois --maintenance 'mode development'")
+		fmt.Println("  sudo caswhois --maintenance setup")
+		fmt.Println("  caswhois --maintenance 'pgp generate'")
+		fmt.Println("  caswhois --maintenance 'pgp --help'")
 
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown maintenance command: %s\n", operation)
 		fmt.Fprintf(os.Stderr, "Use: --maintenance help\n")
+		return 1
+	}
+	return 0
+}
+
+// handlePGP dispatches --maintenance pgp <action> sub-commands (AI.md PART 11).
+func handlePGP(args []string, configDir string) int {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "help" {
+		fmt.Println("PGP Keypair Management (caswhois --maintenance pgp <action>):")
+		fmt.Println()
+		fmt.Println("  generate                   Generate Ed25519+Curve25519 keypair")
+		fmt.Println("  rotate                     Rotate to a new keypair (old kept 30 days)")
+		fmt.Println("  publish [URL...]            Publish public key to keyservers")
+		fmt.Println("  export public [path]        Write public key to path (or stdout if omitted)")
+		fmt.Println("  export private <path>       Decrypt and write private key to path")
+		fmt.Println("  import <file>              Import private key from file")
+		fmt.Println("  delete                     Delete keypair (requires confirmation)")
+		fmt.Println("  --help                     Show this help")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  sudo caswhois --maintenance 'pgp generate'")
+		fmt.Println("  caswhois --maintenance 'pgp export public /tmp/pubkey.asc'")
+		fmt.Println("  caswhois --maintenance 'pgp publish'")
+		return 0
+	}
+
+	action := args[0]
+
+	// Load config to get installationSecret and branding info
+	cfg, err := config.LoadServerConfig(configDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not load config: %v\n", err)
+		return 1
+	}
+
+	appName := cfg.Branding.Title
+	if appName == "" {
+		appName = constants.InternalName
+	}
+	contactEmail := cfg.Contact.Security.Email
+
+	switch action {
+	case "generate":
+		if security.PGPKeypairExists(configDir) {
+			fmt.Fprintf(os.Stderr, "Error: keypair already exists. Use 'pgp rotate' to replace it.\n")
+			return 1
+		}
+		if err := security.GeneratePGPKeypair(configDir, appName, contactEmail, cfg.InstallationSecret); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: generate keypair: %v\n", err)
+			return 1
+		}
+		fp := security.PGPPublicKeyFingerprint(configDir)
+		fmt.Printf("%s PGP keypair generated\n", okMark())
+		fmt.Printf("  Fingerprint: %s\n", fp)
+		fmt.Printf("  Public key:  %s/security/%s\n", configDir, security.PGPPublicKeyFile)
+		fmt.Printf("  Private key: %s/security/%s (encrypted)\n", configDir, security.PGPPrivateKeyFile)
+
+	case "rotate":
+		if err := security.RotatePGPKeypair(configDir, appName, contactEmail, cfg.InstallationSecret); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: rotate keypair: %v\n", err)
+			return 1
+		}
+		fp := security.PGPPublicKeyFingerprint(configDir)
+		fmt.Printf("%s PGP keypair rotated\n", okMark())
+		fmt.Printf("  New fingerprint: %s\n", fp)
+
+	case "publish":
+		var keyservers []string
+		if len(args) > 1 {
+			keyservers = args[1:]
+		}
+		if err := security.PublishPGPKey(configDir, keyservers); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: publish key: %v\n", err)
+			return 1
+		}
+		fmt.Printf("%s PGP public key published to keyservers\n", okMark())
+
+	case "export":
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Error: export requires 'public' or 'private'\n")
+			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'pgp export public [path]'\n")
+			fmt.Fprintf(os.Stderr, "       --maintenance 'pgp export private <path>'\n")
+			return 1
+		}
+		switch args[1] {
+		case "public":
+			outPath := ""
+			if len(args) > 2 {
+				outPath = args[2]
+			}
+			if err := security.ExportPGPPublicKey(configDir, outPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: export public key: %v\n", err)
+				return 1
+			}
+		case "private":
+			if len(args) < 3 {
+				fmt.Fprintf(os.Stderr, "Error: export private requires output path\n")
+				fmt.Fprintf(os.Stderr, "Usage: --maintenance 'pgp export private /path/to/output.asc'\n")
+				return 1
+			}
+			outPath := args[2]
+			if err := security.ExportPGPPrivateKey(configDir, outPath, cfg.InstallationSecret); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: export private key: %v\n", err)
+				return 1
+			}
+			fmt.Printf("%s Private key exported to %s\n", okMark(), outPath)
+			fmt.Println("  WARNING: Keep this file secure — it contains your private key.")
+		default:
+			fmt.Fprintf(os.Stderr, "Error: export requires 'public' or 'private', got %q\n", args[1])
+			return 1
+		}
+
+	case "import":
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Error: import requires key file path\n")
+			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'pgp import /path/to/key.asc'\n")
+			return 1
+		}
+		keyFile := args[1]
+		if err := security.ImportPGPPrivateKey(configDir, keyFile, cfg.InstallationSecret); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: import key: %v\n", err)
+			return 1
+		}
+		fp := security.PGPPublicKeyFingerprint(configDir)
+		fmt.Printf("%s PGP keypair imported\n", okMark())
+		fmt.Printf("  Fingerprint: %s\n", fp)
+
+	case "delete":
+		if !security.PGPKeypairExists(configDir) {
+			fmt.Fprintln(os.Stderr, "Error: no keypair exists — nothing to delete")
+			return 1
+		}
+		fmt.Println("WARNING: Deleting the PGP keypair makes in-flight encrypted security reports unrecoverable.")
+		fmt.Print("Type 'delete keypair' to confirm: ")
+		var confirm string
+		if _, err := fmt.Fscan(os.Stdin, &confirm); err != nil || confirm != "delete" {
+			fmt.Println("Aborted.")
+			return 1
+		}
+		var confirm2 string
+		if _, err := fmt.Fscan(os.Stdin, &confirm2); err != nil || confirm2 != "keypair" {
+			fmt.Println("Aborted.")
+			return 1
+		}
+		if err := security.DeletePGPKeypair(configDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: delete keypair: %v\n", err)
+			return 1
+		}
+		fmt.Printf("%s PGP keypair deleted\n", okMark())
+
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown pgp action %q\n", action)
+		fmt.Fprintf(os.Stderr, "Use: --maintenance 'pgp --help'\n")
 		return 1
 	}
 	return 0

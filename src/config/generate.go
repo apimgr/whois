@@ -13,6 +13,22 @@ import (
 
 const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
+// GenerateInstallationSecret generates a 64-char hex installation secret (AI.md PART 11).
+// This is the root KDF input for PGP private-key encryption and derived material.
+func GenerateInstallationSecret() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate installation secret: %w", err)
+	}
+	result := make([]byte, 64)
+	const hexChars = "0123456789abcdef"
+	for i, byt := range b {
+		result[i*2] = hexChars[byt>>4]
+		result[i*2+1] = hexChars[byt&0xf]
+	}
+	return string(result), nil
+}
+
 // GenerateToken generates a spec-compliant token: "tok_" + 32 base62 chars.
 func GenerateToken() (string, error) {
 	b := make([]byte, 32)
