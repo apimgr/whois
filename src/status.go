@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/apimgr/whois/src/backup"
 	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/security"
 	"github.com/apimgr/whois/src/update"
 )
@@ -241,43 +243,30 @@ func handleMaintenance(cmd, configDir, dataDir string) int {
 		// --maintenance pgp <action> — manage the project-level GPG keypair (PART 11)
 		return handlePGP(args[1:], configDir)
 
+	case "update":
+		// AI.md PART 22: --maintenance update [cmd] is an alias for --update [cmd]
+		if len(args) < 2 {
+			return handleUpdate("yes", constants.InternalName)
+		}
+		return handleUpdate(strings.Join(args[1:], " "), constants.InternalName)
+
+	case "token":
+		// --maintenance token {list,revoke <prefix>} — operator token administration (PART 14)
+		return handleToken(args[1:], configDir)
+
+	case "data":
+		// --maintenance data {export [ip],delete <ip>} — GDPR/CCPA data rights (PART 12)
+		return handleData(args[1:], configDir)
+
+	case "compliance":
+		// --maintenance compliance report — compliance summary (PART 12)
+		return handleCompliance(args[1:], configDir)
+
 	case "--help":
-		fmt.Println("Maintenance Commands:")
-		fmt.Println()
-		fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
-		fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
-		fmt.Println("  update             Alias for --update yes (in-place binary replacement)")
-		fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
-		fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
-		fmt.Println("  pgp ACTION         Manage the project GPG keypair (security reports / security.txt)")
-		fmt.Println("  --help             Show this help message")
-		fmt.Println()
-		fmt.Println("Examples:")
-		fmt.Println("  caswhois --maintenance backup")
-		fmt.Println("  caswhois --maintenance 'restore /path/to/backup.tar.gz'")
-		fmt.Println("  sudo caswhois --maintenance 'mode development'")
-		fmt.Println("  sudo caswhois --maintenance setup")
-		fmt.Println("  caswhois --maintenance 'pgp generate'")
-		fmt.Println("  caswhois --maintenance 'pgp --help'")
+		printMaintenanceHelp()
 
 	case "help":
-		fmt.Println("Maintenance Commands:")
-		fmt.Println()
-		fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
-		fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
-		fmt.Println("  update             Alias for --update yes (in-place binary replacement)")
-		fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
-		fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
-		fmt.Println("  pgp ACTION         Manage the project GPG keypair (security reports / security.txt)")
-		fmt.Println("  --help             Show this help message")
-		fmt.Println()
-		fmt.Println("Examples:")
-		fmt.Println("  caswhois --maintenance backup")
-		fmt.Println("  caswhois --maintenance 'restore /path/to/backup.tar.gz'")
-		fmt.Println("  sudo caswhois --maintenance 'mode development'")
-		fmt.Println("  sudo caswhois --maintenance setup")
-		fmt.Println("  caswhois --maintenance 'pgp generate'")
-		fmt.Println("  caswhois --maintenance 'pgp --help'")
+		printMaintenanceHelp()
 
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown maintenance command: %s\n", operation)
@@ -440,6 +429,317 @@ func handlePGP(args []string, configDir string) int {
 	return 0
 }
 
+// printMaintenanceHelp prints the --maintenance --help / help output (AI.md PART 8).
+func printMaintenanceHelp() {
+	fmt.Println("Maintenance Commands:")
+	fmt.Println()
+	fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
+	fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
+	fmt.Println("  update [CMD]       Alias for --update [CMD] (check|yes|branch NAME; default: yes)")
+	fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
+	fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
+	fmt.Println("  pgp ACTION         Manage the project GPG keypair (security reports / security.txt)")
+	fmt.Println("  token ACTION       Manage API/resource tokens (list|revoke PREFIX)")
+	fmt.Println("  data ACTION        GDPR/CCPA data rights (export [IP]|delete IP)")
+	fmt.Println("  compliance ACTION  Compliance summary (report)")
+	fmt.Println("  --help             Show this help message")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  caswhois --maintenance backup")
+	fmt.Println("  caswhois --maintenance 'restore /path/to/backup.tar.gz'")
+	fmt.Println("  sudo caswhois --maintenance 'mode development'")
+	fmt.Println("  sudo caswhois --maintenance setup")
+	fmt.Println("  caswhois --maintenance 'pgp generate'")
+	fmt.Println("  caswhois --maintenance 'pgp --help'")
+	fmt.Println("  caswhois --maintenance 'token list'")
+	fmt.Println("  caswhois --maintenance 'token revoke abc123def456'")
+	fmt.Println("  caswhois --maintenance 'data export'")
+	fmt.Println("  caswhois --maintenance 'data delete 203.0.113.5'")
+	fmt.Println("  caswhois --maintenance 'compliance report'")
+}
+
+// openMaintenanceDB loads the server config and opens the configured database
+// for a --maintenance sub-command, creating schema/directories as needed.
+func openMaintenanceDB(configDir string) (*config.ServerConfig, *db.DB, error) {
+	cfg, err := config.LoadServerConfig(configDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load config: %w", err)
+	}
+	database, err := initDatabase(cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open database: %w", err)
+	}
+	return cfg, database, nil
+}
+
+// handleToken dispatches --maintenance token <action> sub-commands (AI.md PART 14).
+// Manages resource-owner API tokens stored (as SHA-256 hashes) in the api_tokens table.
+func handleToken(args []string, configDir string) int {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "help" {
+		fmt.Println("Token Management (caswhois --maintenance token <action>):")
+		fmt.Println()
+		fmt.Println("  list                List active (non-revoked) resource tokens")
+		fmt.Println("  revoke PREFIX       Revoke a specific resource token by its prefix")
+		fmt.Println("  --help              Show this help")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  caswhois --maintenance 'token list'")
+		fmt.Println("  caswhois --maintenance 'token revoke abc123def456'")
+		return 0
+	}
+
+	_, database, err := openMaintenanceDB(configDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	defer database.Close()
+
+	switch args[0] {
+	case "list":
+		rows, err := database.Server.Query(
+			`SELECT token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at
+			 FROM api_tokens WHERE revoked_at IS NULL ORDER BY created_at DESC`)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: list tokens: %v\n", err)
+			return 1
+		}
+		defer rows.Close()
+
+		count := 0
+		fmt.Println("Active tokens:")
+		for rows.Next() {
+			var prefix, resourceType, resourceID string
+			var createdAt int64
+			var expiresAt, lastUsedAt sql.NullInt64
+			if err := rows.Scan(&prefix, &resourceType, &resourceID, &createdAt, &expiresAt, &lastUsedAt); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: scan token row: %v\n", err)
+				return 1
+			}
+			count++
+			created := time.Unix(createdAt, 0).UTC().Format(time.RFC3339)
+			expires := "never"
+			if expiresAt.Valid {
+				expires = time.Unix(expiresAt.Int64, 0).UTC().Format(time.RFC3339)
+			}
+			lastUsed := "never"
+			if lastUsedAt.Valid {
+				lastUsed = time.Unix(lastUsedAt.Int64, 0).UTC().Format(time.RFC3339)
+			}
+			fmt.Printf("  %-16s %s/%s  created=%s  expires=%s  last_used=%s\n",
+				prefix, resourceType, resourceID, created, expires, lastUsed)
+		}
+		if err := rows.Err(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: read token rows: %v\n", err)
+			return 1
+		}
+		if count == 0 {
+			fmt.Println("  (none)")
+		}
+
+	case "revoke":
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Error: revoke requires a token prefix\n")
+			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'token revoke PREFIX'\n")
+			return 1
+		}
+		prefix := args[1]
+		result, err := database.Server.Exec(
+			`UPDATE api_tokens SET revoked_at = strftime('%s', 'now'), revoked_reason = ?
+			 WHERE token_prefix = ? AND revoked_at IS NULL`,
+			"revoked via CLI", prefix)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: revoke token: %v\n", err)
+			return 1
+		}
+		affected, _ := result.RowsAffected()
+		if affected == 0 {
+			fmt.Fprintf(os.Stderr, "Error: no active token found with prefix %q\n", prefix)
+			return 1
+		}
+		fmt.Printf("%s Token %s revoked\n", okMark(), prefix)
+
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown token action %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "Use: --maintenance 'token --help'\n")
+		return 1
+	}
+	return 0
+}
+
+// handleData dispatches --maintenance data <action> sub-commands (AI.md PART 12 — GDPR/CCPA
+// "Data export" / "Data deletion" CLI commands). The only per-visitor identifier this
+// application stores is the requesting IP address (audit_log.actor_ip); WHOIS record data
+// concerns domain registrants, not site visitors, and is out of scope for these rights.
+func handleData(args []string, configDir string) int {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "help" {
+		fmt.Println("Data Rights Management (caswhois --maintenance data <action>):")
+		fmt.Println()
+		fmt.Println("  export [IP]         Export what data is collected (all, or for one IP)")
+		fmt.Println("  delete IP           Anonymize all stored data referencing IP")
+		fmt.Println("  --help              Show this help")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  caswhois --maintenance 'data export'")
+		fmt.Println("  caswhois --maintenance 'data export 203.0.113.5'")
+		fmt.Println("  caswhois --maintenance 'data delete 203.0.113.5'")
+		return 0
+	}
+
+	cfg, database, err := openMaintenanceDB(configDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	defer database.Close()
+
+	switch args[0] {
+	case "export":
+		if len(args) < 2 {
+			// No IP given — CCPA "what data is collected" disclosure (AI.md PART 12).
+			summary := map[string]interface{}{
+				"data_sold":              cfg.Privacy.Data.Sold,
+				"stored_on_server_only":  cfg.Privacy.Data.StoredOnServer,
+				"retention_period":       cfg.Privacy.Retention.Period,
+				"export_available":       cfg.Privacy.Retention.ExportAvailable,
+				"deletion_available":     cfg.Privacy.Retention.DeletionAvailable,
+				"categories_collected":   []string{"request IP address (audit/security log)", "rate-limit counters (ephemeral, in-memory)"},
+				"third_party_sharing":    cfg.Privacy.ThirdParty.Services,
+			}
+			out, err := json.MarshalIndent(summary, "", "  ")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: encode summary: %v\n", err)
+				return 1
+			}
+			fmt.Println(string(out))
+			return 0
+		}
+
+		ip := args[1]
+		rows, err := database.Server.Query(
+			`SELECT timestamp, level, category, action, target_type, target_id, details, success
+			 FROM audit_log WHERE actor_ip = ? ORDER BY timestamp ASC`, ip)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: export data: %v\n", err)
+			return 1
+		}
+		defer rows.Close()
+
+		type auditEntry struct {
+			Timestamp  int64  `json:"timestamp"`
+			Level      string `json:"level"`
+			Category   string `json:"category"`
+			Action     string `json:"action"`
+			TargetType string `json:"target_type,omitempty"`
+			TargetID   string `json:"target_id,omitempty"`
+			Details    string `json:"details,omitempty"`
+			Success    bool   `json:"success"`
+		}
+		var entries []auditEntry
+		for rows.Next() {
+			var e auditEntry
+			var targetType, targetID, details sql.NullString
+			var success int
+			if err := rows.Scan(&e.Timestamp, &e.Level, &e.Category, &e.Action, &targetType, &targetID, &details, &success); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: scan audit row: %v\n", err)
+				return 1
+			}
+			e.TargetType = targetType.String
+			e.TargetID = targetID.String
+			e.Details = details.String
+			e.Success = success != 0
+			entries = append(entries, e)
+		}
+		if err := rows.Err(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: read audit rows: %v\n", err)
+			return 1
+		}
+
+		out, err := json.MarshalIndent(map[string]interface{}{"ip": ip, "audit_log": entries}, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: encode export: %v\n", err)
+			return 1
+		}
+		fmt.Println(string(out))
+
+	case "delete":
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Error: delete requires an IP address\n")
+			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'data delete IP'\n")
+			return 1
+		}
+		ip := args[1]
+		// AI.md PART 12 "Right to Erasure vs Retention": anonymize rather than
+		// hard-delete so the audit trail is preserved; PII is replaced in place.
+		result, err := database.Server.Exec(
+			`UPDATE audit_log SET actor_ip = '[REDACTED]' WHERE actor_ip = ?`, ip)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: delete data: %v\n", err)
+			return 1
+		}
+		affected, _ := result.RowsAffected()
+		fmt.Printf("%s Anonymized %d record(s) referencing %s\n", okMark(), affected, ip)
+
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown data action %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "Use: --maintenance 'data --help'\n")
+		return 1
+	}
+	return 0
+}
+
+// handleCompliance dispatches --maintenance compliance <action> sub-commands.
+// AI.md PART 12: "Operators run {project_name} --maintenance compliance report
+// for a compliance summary."
+func handleCompliance(args []string, configDir string) int {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "help" {
+		fmt.Println("Compliance Summary (caswhois --maintenance compliance <action>):")
+		fmt.Println()
+		fmt.Println("  report              Print current compliance configuration summary")
+		fmt.Println("  --help              Show this help")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  caswhois --maintenance 'compliance report'")
+		return 0
+	}
+
+	if args[0] != "report" {
+		fmt.Fprintf(os.Stderr, "Error: unknown compliance action %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "Use: --maintenance 'compliance --help'\n")
+		return 1
+	}
+
+	cfg, err := config.LoadServerConfig(configDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not load config: %v\n", err)
+		return 1
+	}
+
+	fmt.Println("Compliance Summary:")
+	fmt.Println()
+	fmt.Printf("  Compliance mode:      %v\n", cfg.Compliance.Enabled)
+	fmt.Printf("  Backup encryption:    %v", cfg.Backup.Encryption.Enabled)
+	if cfg.Compliance.Enabled && !cfg.Backup.Encryption.Enabled {
+		fmt.Print("  (WARNING: compliance mode requires encrypted backups)")
+	}
+	fmt.Println()
+	fmt.Printf("  Data sold to third parties: %v\n", cfg.Privacy.Data.Sold)
+	fmt.Printf("  Data stored on this server only: %v\n", cfg.Privacy.Data.StoredOnServer)
+	fmt.Printf("  Retention period:     %s\n", cfg.Privacy.Retention.Period)
+	fmt.Printf("  Data export available: %v\n", cfg.Privacy.Retention.ExportAvailable)
+	fmt.Printf("  Data deletion available: %v\n", cfg.Privacy.Retention.DeletionAvailable)
+	if len(cfg.Privacy.ThirdParty.Services) == 0 {
+		fmt.Println("  Third-party services: (none configured)")
+	} else {
+		fmt.Println("  Third-party services:")
+		for _, svc := range cfg.Privacy.ThirdParty.Services {
+			fmt.Printf("    - %s: %s (data sent: %s)\n", svc.Name, svc.Purpose, svc.DataSent)
+		}
+	}
+
+	return 0
+}
+
 // handleUpdate processes --update commands and returns an exit code (0 = success, 1 = error).
 func handleUpdate(cmd, binaryName string) int {
 	args := strings.Fields(cmd)
@@ -585,8 +885,8 @@ func checkForUpdates(binaryName string) error {
 	cfg, err := config.LoadServerConfig(getConfigDir(""))
 	// Default to the stable channel; overridden below if server.yml configures otherwise.
 	channel := update.ChannelStable
-	if err == nil && cfg.UpdateChannel != "" {
-		switch cfg.UpdateChannel {
+	if err == nil && cfg.Update.Branch != "" {
+		switch cfg.Update.Branch {
 		case "stable":
 			channel = update.ChannelStable
 		case "beta":
@@ -621,8 +921,8 @@ func performUpdate(binaryName string) error {
 	cfg, err := config.LoadServerConfig(getConfigDir(""))
 	// Default to the stable channel; overridden below if server.yml configures otherwise.
 	channel := update.ChannelStable
-	if err == nil && cfg.UpdateChannel != "" {
-		switch cfg.UpdateChannel {
+	if err == nil && cfg.Update.Branch != "" {
+		switch cfg.Update.Branch {
 		case "stable":
 			channel = update.ChannelStable
 		case "beta":

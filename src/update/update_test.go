@@ -20,7 +20,7 @@ import (
 
 // redirectTransport rewrites every request URL to point at a test server,
 // preserving the original path and query so handler routing still works.
-// This is needed because getLatestRelease and downloadChecksum create their
+// This is needed because getLatestRelease and fetchExpectedChecksum create their
 // own http.Client{} values that fall through to http.DefaultTransport.
 type redirectTransport struct {
 	target string
@@ -212,7 +212,7 @@ func TestSetUpdateChannel_ValidChannels(t *testing.T) {
 			}
 			defer os.RemoveAll(dir)
 
-			yaml := "mode: production\nupdate_channel: stable\n"
+			yaml := "mode: production\nupdate:\n  branch: stable\n"
 			if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 				t.Fatalf("WriteFile: %v", err)
 			}
@@ -225,7 +225,7 @@ func TestSetUpdateChannel_ValidChannels(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadFile: %v", err)
 			}
-			wantLine := fmt.Sprintf("update_channel: %s", string(tc.channel))
+			wantLine := fmt.Sprintf("branch: %s", string(tc.channel))
 			if !strings.Contains(string(data), wantLine) {
 				t.Errorf("config does not contain %q after update;\nfile:\n%s", wantLine, string(data))
 			}
@@ -285,7 +285,7 @@ func TestSetUpdateChannel_KeyNotPresentIsAppended(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if !strings.Contains(string(data), "update_channel: beta") {
+	if !strings.Contains(string(data), "branch: beta") {
 		t.Errorf("expected appended key; file:\n%s", string(data))
 	}
 }
@@ -298,7 +298,7 @@ func TestSetUpdateChannel_InPlaceReplacement(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	yaml := "mode: production\nupdate_channel: stable\nport: 64500\n"
+	yaml := "mode: production\nupdate:\n  branch: stable\nport: 64500\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -312,12 +312,12 @@ func TestSetUpdateChannel_InPlaceReplacement(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "update_channel: daily") {
+	if !strings.Contains(content, "branch: daily") {
 		t.Errorf("new channel not found; file:\n%s", content)
 	}
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "update_channel:") &&
+		if strings.HasPrefix(strings.TrimSpace(line), "branch:") &&
 			strings.Contains(line, "stable") {
 			t.Errorf("old channel still present in line: %q", line)
 		}
@@ -332,7 +332,7 @@ func TestSetUpdateChannel_IdempotentSameChannel(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	yaml := "mode: production\nupdate_channel: stable\n"
+	yaml := "mode: production\nupdate:\n  branch: stable\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -348,9 +348,9 @@ func TestSetUpdateChannel_IdempotentSameChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	count := strings.Count(string(data), "update_channel:")
+	count := strings.Count(string(data), "branch:")
 	if count != 1 {
-		t.Errorf("expected 1 update_channel line, got %d; file:\n%s", count, string(data))
+		t.Errorf("expected 1 branch line, got %d; file:\n%s", count, string(data))
 	}
 }
 
@@ -373,8 +373,8 @@ func buildTestRelease(tag string, prerelease bool, serverHost string) Release {
 				Size:               1024,
 			},
 			{
-				Name:               binaryName + ".sha256",
-				BrowserDownloadURL: base + "/asset/" + binaryName + ".sha256",
+				Name:               "checksums.txt",
+				BrowserDownloadURL: base + "/asset/checksums.txt",
 				Size:               65,
 			},
 		},
@@ -556,7 +556,7 @@ func testServerForCheckForUpdates(t *testing.T, tag string, binaryContent []byte
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(release)
 
-		case strings.HasSuffix(r.URL.Path, binaryName+".sha256"):
+		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, checksumLine)
 
@@ -745,8 +745,8 @@ func TestCheckForUpdates_ChecksumDownloadError(t *testing.T) {
 						Size:               1024,
 					},
 					{
-						Name:               binaryName + ".sha256",
-						BrowserDownloadURL: "http://" + addr + "/asset/" + binaryName + ".sha256",
+						Name:               "checksums.txt",
+						BrowserDownloadURL: "http://" + addr + "/asset/checksums.txt",
 						Size:               65,
 					},
 				},
@@ -754,7 +754,7 @@ func TestCheckForUpdates_ChecksumDownloadError(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(release)
 
-		case strings.HasSuffix(r.URL.Path, ".sha256"):
+		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
 			// Return error status for checksum download
 			w.WriteHeader(http.StatusNotFound)
 
@@ -882,80 +882,120 @@ func TestDownloadBinary_BadURL(t *testing.T) {
 	}
 }
 
-// --- downloadChecksum tests --------------------------------------------------
-// Covers: "hash filename" format, hash-only format, 404, empty body.
+// --- fetchExpectedChecksum tests ---------------------------------------------
+// Covers: single checksums.txt asset in standard "hash  filename" sha256sum
+// format (AI.md PART 22), missing entry, missing checksums.txt asset, 404,
+// unreachable host.
 
-// TestDownloadChecksum_404 verifies downloadChecksum returns error on 404.
-func TestDownloadChecksum_404(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	}))
-	defer srv.Close()
-
-	_, err := downloadChecksum(srv.URL + "/missing.sha256")
-	if err == nil {
-		t.Error("downloadChecksum on 404 expected error, got nil")
-	}
-}
-
-// TestDownloadChecksum_EmptyBody verifies downloadChecksum rejects an empty response body.
-func TestDownloadChecksum_EmptyBody(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	_, err := downloadChecksum(srv.URL + "/empty.sha256")
-	if err == nil {
-		t.Error("downloadChecksum with empty body expected error, got nil")
-	}
-}
-
-// TestDownloadChecksum_WithFilenameField verifies "hash filename" format extracts just the hash.
-func TestDownloadChecksum_WithFilenameField(t *testing.T) {
+// TestFetchExpectedChecksum_Success verifies the digest is extracted for the
+// matching filename out of a standard sha256sum-format checksums.txt body.
+func TestFetchExpectedChecksum_Success(t *testing.T) {
 	content := []byte("test data")
 	h := sha256.Sum256(content)
 	expectedHash := hex.EncodeToString(h[:])
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s  caswhois-linux-amd64", expectedHash)
+		fmt.Fprintf(w, "%s  caswhois-linux-amd64\n%s  caswhois-linux-arm64\n", expectedHash, expectedHash)
 	}))
 	defer srv.Close()
 
-	gotHash, err := downloadChecksum(srv.URL + "/checksum")
+	release := &Release{Assets: []Asset{
+		{Name: "checksums.txt", BrowserDownloadURL: srv.URL + "/checksums.txt"},
+	}}
+
+	gotHash, err := fetchExpectedChecksum(release, "caswhois-linux-amd64")
 	if err != nil {
-		t.Fatalf("downloadChecksum: %v", err)
+		t.Fatalf("fetchExpectedChecksum: %v", err)
 	}
 	if gotHash != expectedHash {
 		t.Errorf("gotHash = %q, want %q", gotHash, expectedHash)
 	}
 }
 
-// TestDownloadChecksum_HashOnlyFormat verifies hash-only format (no filename).
-func TestDownloadChecksum_HashOnlyFormat(t *testing.T) {
+// TestFetchExpectedChecksum_BinaryModePrefix verifies the leading "*" that
+// sha256sum emits in binary mode is stripped from the filename before matching.
+func TestFetchExpectedChecksum_BinaryModePrefix(t *testing.T) {
 	content := []byte("solo hash")
 	h := sha256.Sum256(content)
 	expectedHash := hex.EncodeToString(h[:])
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, expectedHash)
+		fmt.Fprintf(w, "%s *caswhois-linux-amd64\n", expectedHash)
 	}))
 	defer srv.Close()
 
-	gotHash, err := downloadChecksum(srv.URL + "/checksum-only")
+	release := &Release{Assets: []Asset{
+		{Name: "checksums.txt", BrowserDownloadURL: srv.URL + "/checksums.txt"},
+	}}
+
+	gotHash, err := fetchExpectedChecksum(release, "caswhois-linux-amd64")
 	if err != nil {
-		t.Fatalf("downloadChecksum: %v", err)
+		t.Fatalf("fetchExpectedChecksum: %v", err)
 	}
 	if gotHash != expectedHash {
 		t.Errorf("gotHash = %q, want %q", gotHash, expectedHash)
 	}
 }
 
-// TestDownloadChecksum_BadURL verifies downloadChecksum returns error for an unreachable URL.
-func TestDownloadChecksum_BadURL(t *testing.T) {
-	_, err := downloadChecksum("http://127.0.0.1:1/no-server")
+// TestFetchExpectedChecksum_NoEntryForAsset verifies an error is returned when
+// checksums.txt does not contain a line for the requested asset name.
+func TestFetchExpectedChecksum_NoEntryForAsset(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "deadbeef  caswhois-darwin-amd64\n")
+	}))
+	defer srv.Close()
+
+	release := &Release{Assets: []Asset{
+		{Name: "checksums.txt", BrowserDownloadURL: srv.URL + "/checksums.txt"},
+	}}
+
+	_, err := fetchExpectedChecksum(release, "caswhois-linux-amd64")
 	if err == nil {
-		t.Error("downloadChecksum with unreachable URL expected error, got nil")
+		t.Error("fetchExpectedChecksum with no matching entry expected error, got nil")
+	}
+}
+
+// TestFetchExpectedChecksum_MissingAsset verifies an error is returned when the
+// release has no checksums.txt asset at all.
+func TestFetchExpectedChecksum_MissingAsset(t *testing.T) {
+	release := &Release{Assets: []Asset{
+		{Name: "caswhois-linux-amd64", BrowserDownloadURL: "http://127.0.0.1:1/bin"},
+	}}
+
+	_, err := fetchExpectedChecksum(release, "caswhois-linux-amd64")
+	if err == nil {
+		t.Error("fetchExpectedChecksum with missing checksums.txt asset expected error, got nil")
+	}
+}
+
+// TestFetchExpectedChecksum_404 verifies fetchExpectedChecksum returns an error
+// when the checksums.txt asset cannot be downloaded.
+func TestFetchExpectedChecksum_404(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	release := &Release{Assets: []Asset{
+		{Name: "checksums.txt", BrowserDownloadURL: srv.URL + "/checksums.txt"},
+	}}
+
+	_, err := fetchExpectedChecksum(release, "caswhois-linux-amd64")
+	if err == nil {
+		t.Error("fetchExpectedChecksum on 404 expected error, got nil")
+	}
+}
+
+// TestFetchExpectedChecksum_BadURL verifies fetchExpectedChecksum returns an
+// error for an unreachable checksums.txt URL.
+func TestFetchExpectedChecksum_BadURL(t *testing.T) {
+	release := &Release{Assets: []Asset{
+		{Name: "checksums.txt", BrowserDownloadURL: "http://127.0.0.1:1/checksums.txt"},
+	}}
+
+	_, err := fetchExpectedChecksum(release, "caswhois-linux-amd64")
+	if err == nil {
+		t.Error("fetchExpectedChecksum with unreachable URL expected error, got nil")
 	}
 }
 

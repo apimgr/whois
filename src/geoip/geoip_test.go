@@ -355,29 +355,45 @@ func TestLoadDatabases_Country_CorruptFile(t *testing.T) {
 	}
 }
 
-// TestLoadDatabases_City_CorruptFile verifies loadDatabases returns an error when the
-// City mmdb file exists but cannot be parsed.
-func TestLoadDatabases_City_CorruptFile(t *testing.T) {
+// TestLoadDatabases_CityV4_CorruptFile verifies loadDatabases returns an error when the
+// City IPv4 mmdb file exists but cannot be parsed.
+func TestLoadDatabases_CityV4_CorruptFile(t *testing.T) {
 	dir := t.TempDir()
-	writeCorruptMMDB(t, filepath.Join(dir, "city.mmdb"))
+	writeCorruptMMDB(t, filepath.Join(dir, "dbip-city-ipv4.mmdb"))
 
 	m := &GeoIPManager{dbDir: dir, enabled: true}
 	err := m.loadDatabases(DatabaseConfig{City: true})
 	if err == nil {
-		t.Error("loadDatabases(corrupt City) expected error, got nil")
+		t.Error("loadDatabases(corrupt City IPv4) expected error, got nil")
 	}
 }
 
-// TestLoadDatabases_WHOIS_CorruptFile verifies loadDatabases returns an error when the
-// WHOIS mmdb file exists but cannot be parsed.
-func TestLoadDatabases_WHOIS_CorruptFile(t *testing.T) {
+// TestLoadDatabases_CityV6_CorruptFile verifies loadDatabases returns an error when the
+// City IPv6 mmdb file exists but cannot be parsed.
+func TestLoadDatabases_CityV6_CorruptFile(t *testing.T) {
 	dir := t.TempDir()
-	writeCorruptMMDB(t, filepath.Join(dir, "whois.mmdb"))
+	writeCorruptMMDB(t, filepath.Join(dir, "dbip-city-ipv6.mmdb"))
+
+	m := &GeoIPManager{dbDir: dir, enabled: true}
+	err := m.loadDatabases(DatabaseConfig{City: true})
+	if err == nil {
+		t.Error("loadDatabases(corrupt City IPv6) expected error, got nil")
+	}
+}
+
+// TestLoadDatabases_WHOIS_NoFile verifies loadDatabases with WHOIS enabled does not
+// attempt to load any file — per AI.md PART 19, WHOIS is a combined view of the
+// ASN and Country databases computed at lookup time, not a separate mmdb file.
+func TestLoadDatabases_WHOIS_NoFile(t *testing.T) {
+	dir := t.TempDir()
 
 	m := &GeoIPManager{dbDir: dir, enabled: true}
 	err := m.loadDatabases(DatabaseConfig{WHOIS: true})
-	if err == nil {
-		t.Error("loadDatabases(corrupt WHOIS) expected error, got nil")
+	if err != nil {
+		t.Errorf("loadDatabases(WHOIS, no file) returned error: %v", err)
+	}
+	if !m.whoisEnabled {
+		t.Error("expected m.whoisEnabled to be true after loadDatabases(WHOIS: true)")
 	}
 }
 
@@ -475,7 +491,7 @@ func TestDownloadDatabase_Success(t *testing.T) {
 	defer srv.Close()
 
 	destPath := filepath.Join(t.TempDir(), "test.mmdb")
-	if err := downloadDatabase(context.Background(), srv.URL, destPath); err != nil {
+	if err := downloadDatabase(context.Background(), srv.URL, destPath, "test-agent"); err != nil {
 		t.Fatalf("downloadDatabase returned error: %v", err)
 	}
 
@@ -496,7 +512,7 @@ func TestDownloadDatabase_Non200(t *testing.T) {
 	defer srv.Close()
 
 	destPath := filepath.Join(t.TempDir(), "test.mmdb")
-	if err := downloadDatabase(context.Background(), srv.URL, destPath); err == nil {
+	if err := downloadDatabase(context.Background(), srv.URL, destPath, "test-agent"); err == nil {
 		t.Error("expected error for 404 response, got nil")
 	}
 }
@@ -505,7 +521,7 @@ func TestDownloadDatabase_Non200(t *testing.T) {
 // unreachable URL.
 func TestDownloadDatabase_InvalidURL(t *testing.T) {
 	destPath := filepath.Join(t.TempDir(), "test.mmdb")
-	if err := downloadDatabase(context.Background(), "http://127.0.0.1:0/invalid", destPath); err == nil {
+	if err := downloadDatabase(context.Background(), "http://127.0.0.1:0/invalid", destPath, "test-agent"); err == nil {
 		t.Error("expected error for unreachable URL, got nil")
 	}
 }
@@ -517,7 +533,7 @@ func TestDownloadDatabase_CancelledContext(t *testing.T) {
 	cancel()
 
 	destPath := filepath.Join(t.TempDir(), "test.mmdb")
-	if err := downloadDatabase(ctx, "http://127.0.0.1:0/any", destPath); err == nil {
+	if err := downloadDatabase(ctx, "http://127.0.0.1:0/any", destPath, "test-agent"); err == nil {
 		t.Error("expected error for cancelled context, got nil")
 	}
 }
@@ -545,7 +561,7 @@ func TestNewGeoIPManager_BadDir(t *testing.T) {
 // all downloads when all four mmdb files already exist on disk.
 func TestEnsureDatabases_AllEnabled_FilesExist(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"asn.mmdb", "country.mmdb", "city.mmdb", "whois.mmdb"} {
+	for _, name := range []string{"asn.mmdb", "country.mmdb", "dbip-city-ipv4.mmdb", "dbip-city-ipv6.mmdb"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("existing"), 0644); err != nil {
 			t.Fatalf("setup %s: %v", name, err)
 		}
@@ -561,7 +577,7 @@ func TestEnsureDatabases_AllEnabled_FilesExist(t *testing.T) {
 	}
 
 	// Files must still have their original content (not overwritten).
-	for _, name := range []string{"asn.mmdb", "country.mmdb", "city.mmdb", "whois.mmdb"} {
+	for _, name := range []string{"asn.mmdb", "country.mmdb", "dbip-city-ipv4.mmdb", "dbip-city-ipv6.mmdb"} {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("reading %s: %v", name, err)
@@ -631,40 +647,45 @@ func TestLoadDatabases_Country_Success(t *testing.T) {
 	m.countryDB.Close()
 }
 
-// TestLoadDatabases_City_Success verifies the success branch for City DB.
+// TestLoadDatabases_City_Success verifies the success branch for City DBs (both
+// IPv4 and IPv6 files are loaded when City is enabled).
 func TestLoadDatabases_City_Success(t *testing.T) {
 	dir := t.TempDir()
-	writeMinimalMMDB(t, filepath.Join(dir, "city.mmdb"))
+	writeMinimalMMDB(t, filepath.Join(dir, "dbip-city-ipv4.mmdb"))
+	writeMinimalMMDB(t, filepath.Join(dir, "dbip-city-ipv6.mmdb"))
 
 	m := &GeoIPManager{dbDir: dir, enabled: true}
 	if err := m.loadDatabases(DatabaseConfig{City: true}); err != nil {
-		t.Fatalf("loadDatabases(City, valid file): %v", err)
+		t.Fatalf("loadDatabases(City, valid files): %v", err)
 	}
-	if m.cityDB == nil {
-		t.Error("expected m.cityDB to be non-nil after successful load")
+	if m.cityDBv4 == nil {
+		t.Error("expected m.cityDBv4 to be non-nil after successful load")
 	}
-	m.cityDB.Close()
+	if m.cityDBv6 == nil {
+		t.Error("expected m.cityDBv6 to be non-nil after successful load")
+	}
+	m.cityDBv4.Close()
+	m.cityDBv6.Close()
 }
 
-// TestLoadDatabases_WHOIS_Success verifies the success branch for WHOIS DB.
+// TestLoadDatabases_WHOIS_Success verifies loadDatabases sets whoisEnabled when
+// WHOIS is requested — per AI.md PART 19 there is no whois.mmdb file to load.
 func TestLoadDatabases_WHOIS_Success(t *testing.T) {
 	dir := t.TempDir()
-	writeMinimalMMDB(t, filepath.Join(dir, "whois.mmdb"))
 
 	m := &GeoIPManager{dbDir: dir, enabled: true}
 	if err := m.loadDatabases(DatabaseConfig{WHOIS: true}); err != nil {
-		t.Fatalf("loadDatabases(WHOIS, valid file): %v", err)
+		t.Fatalf("loadDatabases(WHOIS): %v", err)
 	}
-	if m.whoisDB == nil {
-		t.Error("expected m.whoisDB to be non-nil after successful load")
+	if !m.whoisEnabled {
+		t.Error("expected m.whoisEnabled to be true after successful load")
 	}
-	m.whoisDB.Close()
 }
 
-// TestLoadDatabases_AllDBs_Success verifies all four success branches in one pass.
+// TestLoadDatabases_AllDBs_Success verifies all success branches in one pass.
 func TestLoadDatabases_AllDBs_Success(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"asn.mmdb", "country.mmdb", "city.mmdb", "whois.mmdb"} {
+	for _, name := range []string{"asn.mmdb", "country.mmdb", "dbip-city-ipv4.mmdb", "dbip-city-ipv6.mmdb"} {
 		writeMinimalMMDB(t, filepath.Join(dir, name))
 	}
 
@@ -678,11 +699,14 @@ func TestLoadDatabases_AllDBs_Success(t *testing.T) {
 	if m.countryDB == nil {
 		t.Error("expected m.countryDB to be non-nil")
 	}
-	if m.cityDB == nil {
-		t.Error("expected m.cityDB to be non-nil")
+	if m.cityDBv4 == nil {
+		t.Error("expected m.cityDBv4 to be non-nil")
 	}
-	if m.whoisDB == nil {
-		t.Error("expected m.whoisDB to be non-nil")
+	if m.cityDBv6 == nil {
+		t.Error("expected m.cityDBv6 to be non-nil")
+	}
+	if !m.whoisEnabled {
+		t.Error("expected m.whoisEnabled to be true")
 	}
 	// Close via the Close() method to cover the non-nil reader branches.
 	if err := m.Close(); err != nil {
@@ -695,16 +719,16 @@ func TestLoadDatabases_AllDBs_Success(t *testing.T) {
 	if m.countryDB != nil {
 		t.Error("m.countryDB should be nil after Close")
 	}
-	if m.cityDB != nil {
-		t.Error("m.cityDB should be nil after Close")
+	if m.cityDBv4 != nil {
+		t.Error("m.cityDBv4 should be nil after Close")
 	}
-	if m.whoisDB != nil {
-		t.Error("m.whoisDB should be nil after Close")
+	if m.cityDBv6 != nil {
+		t.Error("m.cityDBv6 should be nil after Close")
 	}
 }
 
 // TestClose_NonNilReaders exercises every non-nil branch in Close():
-// assigns real readers to all four fields, calls Close, and confirms they are cleared.
+// assigns real readers to all reader fields, calls Close, and confirms they are cleared.
 func TestClose_NonNilReaders(t *testing.T) {
 	dir := t.TempDir()
 	mmdbPath := filepath.Join(dir, "test.mmdb")
@@ -724,14 +748,14 @@ func TestClose_NonNilReaders(t *testing.T) {
 		enabled:   true,
 		asnDB:     openReader(),
 		countryDB: openReader(),
-		cityDB:    openReader(),
-		whoisDB:   openReader(),
+		cityDBv4:  openReader(),
+		cityDBv6:  openReader(),
 	}
 
 	if err := m.Close(); err != nil {
 		t.Errorf("Close() returned error: %v", err)
 	}
-	if m.asnDB != nil || m.countryDB != nil || m.cityDB != nil || m.whoisDB != nil {
+	if m.asnDB != nil || m.countryDB != nil || m.cityDBv4 != nil || m.cityDBv6 != nil {
 		t.Error("expected all DB readers to be nil after Close()")
 	}
 }
@@ -784,12 +808,13 @@ func TestLookup_WithAllReaders(t *testing.T) {
 	}
 
 	m := &GeoIPManager{
-		dbDir:     dir,
-		enabled:   true,
-		asnDB:     openReader(),
-		countryDB: openReader(),
-		cityDB:    openReader(),
-		whoisDB:   openReader(),
+		dbDir:        dir,
+		enabled:      true,
+		asnDB:        openReader(),
+		countryDB:    openReader(),
+		cityDBv4:     openReader(),
+		cityDBv6:     openReader(),
+		whoisEnabled: true,
 	}
 	defer m.Close()
 

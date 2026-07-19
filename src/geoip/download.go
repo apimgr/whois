@@ -8,8 +8,11 @@ import (
 	"os"
 )
 
-// downloadDatabase downloads a GeoIP database from URL to filepath
-func downloadDatabase(ctx context.Context, url, filepath string) error {
+// downloadDatabase downloads a GeoIP database from URL to filepath.
+// userAgent must be a real build-injected identifier (e.g. "caswhois/1.2.3"),
+// supplied by the caller — never hardcoded here (AI.md: "never hardcode dev
+// values — detect at runtime").
+func downloadDatabase(ctx context.Context, url, filepath, userAgent string) error {
 	// Create HTTP request with context
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -17,7 +20,10 @@ func downloadDatabase(ctx context.Context, url, filepath string) error {
 	}
 
 	// Set User-Agent
-	req.Header.Set("User-Agent", "caswhois/0.1.0")
+	if userAgent == "" {
+		userAgent = "caswhois"
+	}
+	req.Header.Set("User-Agent", userAgent)
 
 	// Execute request
 	resp, err := http.DefaultClient.Do(req)

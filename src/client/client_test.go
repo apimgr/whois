@@ -324,7 +324,7 @@ func TestRunUpdateCommand_BranchSet(t *testing.T) {
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	runUpdateCommand("branch=beta", cfg)
+	runUpdateCommand("branch=beta", cfg, config.ConfigPath())
 	w.Close()
 	os.Stdout = oldOut
 
@@ -1107,7 +1107,7 @@ func TestRunStatusCheck_EmptyServer(t *testing.T) {
 // causes os.Exit(1).
 func TestRunUpdateCommand_DefaultUnknown(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunUpdateCommand_DefaultUnknown" {
-		os.Exit(runUpdateCommand("badcmd", &config.CLIConfig{}))
+		os.Exit(runUpdateCommand("badcmd", &config.CLIConfig{}, config.ConfigPath()))
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunUpdateCommand_DefaultUnknown", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunUpdateCommand_DefaultUnknown")
@@ -1123,7 +1123,7 @@ func TestRunUpdateCommand_DefaultUnknown(t *testing.T) {
 // TestRunUpdateCommand_BranchEmpty verifies that branch= with no name causes os.Exit(1).
 func TestRunUpdateCommand_BranchEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunUpdateCommand_BranchEmpty" {
-		os.Exit(runUpdateCommand("branch=", &config.CLIConfig{}))
+		os.Exit(runUpdateCommand("branch=", &config.CLIConfig{}, config.ConfigPath()))
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunUpdateCommand_BranchEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunUpdateCommand_BranchEmpty")
@@ -1249,7 +1249,7 @@ func TestRunUpdateCommand_CheckWithServer(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	os.Stderr = w
-	code := runUpdateCommand("check", cfg)
+	code := runUpdateCommand("check", cfg, config.ConfigPath())
 	w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
@@ -1285,7 +1285,7 @@ func TestRunUpdateCommand_EmptyDefaultsToYes(t *testing.T) {
 	os.Stdout = w
 	os.Stderr = w
 	// Empty string should default to "yes" per AI.md PART 22
-	code := runUpdateCommand("", cfg)
+	code := runUpdateCommand("", cfg, config.ConfigPath())
 	w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
@@ -1308,7 +1308,7 @@ func TestRunUpdateCommand_CheckWithoutServer(t *testing.T) {
 	os.Stdout = w
 	os.Stderr = w
 	// This will fail to reach GitHub in test env, which is expected
-	code := runUpdateCommand("check", cfg)
+	code := runUpdateCommand("check", cfg, config.ConfigPath())
 	w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
@@ -1331,7 +1331,7 @@ func TestRunUpdateCommand_YesWithoutServer(t *testing.T) {
 	os.Stdout = w
 	os.Stderr = w
 	// This will fail to reach GitHub in test env, which is expected
-	code := runUpdateCommand("yes", cfg)
+	code := runUpdateCommand("yes", cfg, config.ConfigPath())
 	w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr

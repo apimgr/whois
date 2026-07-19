@@ -193,6 +193,9 @@ github.com/aliyun/credentials-go/credentials/providers
 github.com/aliyun/credentials-go/credentials/request
 github.com/aliyun/credentials-go/credentials/response
 github.com/aliyun/credentials-go/credentials/utils
+# github.com/antlr4-go/antlr/v4 v4.13.0
+## explicit; go 1.20
+github.com/antlr4-go/antlr/v4
 # github.com/atotto/clipboard v0.1.4
 ## explicit
 github.com/atotto/clipboard
@@ -404,6 +407,15 @@ github.com/cloudflare/circl/math/mlsbset
 github.com/cloudflare/circl/sign
 github.com/cloudflare/circl/sign/ed25519
 github.com/cloudflare/circl/sign/ed448
+# github.com/coder/websocket v1.8.12
+## explicit; go 1.19
+github.com/coder/websocket
+github.com/coder/websocket/internal/bpool
+github.com/coder/websocket/internal/errd
+github.com/coder/websocket/internal/util
+github.com/coder/websocket/internal/wsjs
+github.com/coder/websocket/internal/xsync
+github.com/coder/websocket/wsjson
 # github.com/cretz/bine v0.2.0
 ## explicit; go 1.15
 github.com/cretz/bine/control
@@ -1297,6 +1309,23 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/redis/go-redis/v9 v9.21.0
+## explicit; go 1.24
+github.com/redis/go-redis/v9
+github.com/redis/go-redis/v9/auth
+github.com/redis/go-redis/v9/internal
+github.com/redis/go-redis/v9/internal/auth/streaming
+github.com/redis/go-redis/v9/internal/hashtag
+github.com/redis/go-redis/v9/internal/hscan
+github.com/redis/go-redis/v9/internal/interfaces
+github.com/redis/go-redis/v9/internal/maintnotifications/logs
+github.com/redis/go-redis/v9/internal/otel
+github.com/redis/go-redis/v9/internal/pool
+github.com/redis/go-redis/v9/internal/proto
+github.com/redis/go-redis/v9/internal/routing
+github.com/redis/go-redis/v9/internal/util
+github.com/redis/go-redis/v9/maintnotifications
+github.com/redis/go-redis/v9/push
 # github.com/regfish/regfish-dnsapi-go v0.1.1
 ## explicit; go 1.20
 github.com/regfish/regfish-dnsapi-go
@@ -1443,6 +1472,16 @@ github.com/transip/gotransip/v6/domain
 github.com/transip/gotransip/v6/jwt
 github.com/transip/gotransip/v6/repository
 github.com/transip/gotransip/v6/rest
+# github.com/tursodatabase/libsql-client-go v0.0.0-20260528064733-9d5d30a29a60
+## explicit; go 1.20
+github.com/tursodatabase/libsql-client-go/libsql
+github.com/tursodatabase/libsql-client-go/libsql/internal/hrana
+github.com/tursodatabase/libsql-client-go/libsql/internal/http
+github.com/tursodatabase/libsql-client-go/libsql/internal/http/hranaV2
+github.com/tursodatabase/libsql-client-go/libsql/internal/http/shared
+github.com/tursodatabase/libsql-client-go/libsql/internal/ws
+github.com/tursodatabase/libsql-client-go/sqliteparser
+github.com/tursodatabase/libsql-client-go/sqliteparserutils
 # github.com/ucloud/ucloud-sdk-go v0.22.63
 ## explicit; go 1.13
 github.com/ucloud/ucloud-sdk-go/private/protocol/http
@@ -1564,6 +1603,9 @@ go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
+# go.uber.org/atomic v1.11.0
+## explicit; go 1.18
+go.uber.org/atomic
 # go.uber.org/multierr v1.11.0
 ## explicit; go 1.19
 go.uber.org/multierr

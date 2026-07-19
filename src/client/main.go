@@ -45,6 +45,7 @@ func run(args []string) int {
 		flagDebug   bool
 		flagVersion bool
 		flagStatus  bool
+		flagConfig  string
 	)
 
 	fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ContinueOnError)
@@ -64,6 +65,7 @@ func run(args []string) int {
 	fs.BoolVar(&flagVersion, "version", false, "Show version information")
 	fs.BoolVar(&flagVersion, "v", false, "Show version information")
 	fs.BoolVar(&flagStatus, "status", false, "Health check (exit 0=healthy, 1=unhealthy)")
+	fs.StringVar(&flagConfig, "config", "", "Config file to use (name, name.yml, or absolute path)")
 
 	fs.Usage = func() {
 		showHelp()
@@ -83,7 +85,8 @@ func run(args []string) int {
 		return 0
 	}
 
-	cfg, err := config.Load()
+	configPath := config.ResolveConfigPath(flagConfig)
+	cfg, err := config.LoadFrom(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not load config: %v\n", err)
 		cfg = &config.CLIConfig{Format: "text"}
@@ -134,7 +137,7 @@ func run(args []string) int {
 
 	// Handle --update before any server interaction
 	if flagUpdate != "" {
-		return runUpdateCommand(flagUpdate, cfg)
+		return runUpdateCommand(flagUpdate, cfg, configPath)
 	}
 
 	if flagStatus {
@@ -148,7 +151,7 @@ func run(args []string) int {
 			fmt.Fprintln(os.Stderr, "Error: no server configured. Set --server or run the client interactively to complete setup.")
 			return 1
 		}
-		newCfg, wizErr := setup.Run(cfg)
+		newCfg, wizErr := setup.RunTo(cfg, configPath)
 		if wizErr != nil {
 			fmt.Fprintf(os.Stderr, "Setup failed: %v\n", wizErr)
 			return 1
@@ -197,7 +200,7 @@ func resolveColor(flagColor string) bool {
 
 // runUpdateCommand handles --update check/yes/branch=<name> and returns an exit code.
 // Per AI.md PART 32: CLI uses server's /api/autodiscover for update info.
-func runUpdateCommand(cmd string, cfg *config.CLIConfig) int {
+func runUpdateCommand(cmd string, cfg *config.CLIConfig, configPath string) int {
 	// Per AI.md PART 22: --update without argument defaults to "yes"
 	if cmd == "" {
 		cmd = "yes"
@@ -265,7 +268,7 @@ func runUpdateCommand(cmd string, cfg *config.CLIConfig) int {
 			return 1
 		}
 		cfg.UpdateChannel = branch
-		if err := config.Save(cfg); err != nil {
+		if err := config.SaveTo(configPath, cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 			return 1
 		}
@@ -431,6 +434,7 @@ func showHelp() {
 	fmt.Println("  --update check               Check for available updates")
 	fmt.Println("  --update yes                 Download and install the latest update")
 	fmt.Println("  --update branch=NAME         Switch update channel (stable/beta/daily)")
+	fmt.Println("  --config NAME                Config file to use (name, name.yml, or absolute path)")
 	fmt.Println("  --debug                      Debug mode")
 	fmt.Println()
 	fmt.Println("Environment Variables:")

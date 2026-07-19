@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="{{call .T "graphql.subtitle"}}">
-<title>{{call .T "graphql.title"}} — {{.Name}}</title>
+<meta name="description" content="{{t .Lang "graphql.subtitle"}}">
+<title>{{t .Lang "graphql.title"}} — {{.Name}}</title>
 <link rel="stylesheet" href="/static/css/main.css">
 <style>
 .gql-layout {
@@ -46,18 +46,18 @@
 </style>
 </head>
 <body>
-<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
-<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
 
-<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
-      <li><a href="/about">{{call .T "nav.about"}}</a></li>
-      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
     </ul>
     <div class="nav-actions">
-      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
         <span class="icon-sun" aria-hidden="true">&#9788;</span>
         <span class="icon-moon" aria-hidden="true">&#9790;</span>
       </button>
@@ -66,11 +66,11 @@
 </nav>
 
 <main id="main-content">
-  <div class="container" style="padding-top:2rem;padding-bottom:2rem">
-    <h1>{{call .T "graphql.title"}}</h1>
-    <p>{{call .T "graphql.subtitle"}}</p>
+  <div class="container section-pad">
+    <h1>{{t .Lang "graphql.title"}}</h1>
+    <p>{{t .Lang "graphql.subtitle"}}</p>
     <p class="gql-meta">
-      {{call .T "graphql.endpoint_label"}}:
+      {{t .Lang "graphql.endpoint_label"}}:
       <code>{{.EndpointURL}}</code>
     </p>
 
@@ -78,48 +78,47 @@
       data-endpoint="{{.EndpointURL}}">
       <div class="gql-layout">
         <div class="gql-pane">
-          <label for="gql-query"><strong>{{call .T "graphql.query_label"}}</strong></label>
+          <label for="gql-query"><strong>{{t .Lang "graphql.query_label"}}</strong></label>
           <textarea
             id="gql-query" name="query"
             class="gql-textarea"
-            aria-label="{{call .T "graphql.query_label"}}"
+            aria-label="{{t .Lang "graphql.query_label"}}"
             spellcheck="false"
             autocorrect="off"
             autocapitalize="none"
           >{{.Query}}</textarea>
 
-          <label for="gql-vars"><strong>{{call .T "graphql.variables_label"}}</strong></label>
+          <label for="gql-vars"><strong>{{t .Lang "graphql.variables_label"}}</strong></label>
           <textarea
             id="gql-vars" name="variables"
-            class="gql-textarea"
-            style="min-height:5rem"
-            aria-label="{{call .T "graphql.variables_label"}}"
+            class="gql-textarea gql-textarea-vars"
+            aria-label="{{t .Lang "graphql.variables_label"}}"
             spellcheck="false"
             autocorrect="off"
             autocapitalize="none"
           >{{.Variables}}</textarea>
 
-          <label for="gql-op"><strong>{{call .T "graphql.operation_label"}}</strong></label>
+          <label for="gql-op"><strong>{{t .Lang "graphql.operation_label"}}</strong></label>
           <input
             id="gql-op" name="operationName" type="text"
             class="search-input"
-            aria-label="{{call .T "graphql.operation_label"}}"
+            aria-label="{{t .Lang "graphql.operation_label"}}"
             value="{{.OperationName}}"
             autocorrect="off" autocapitalize="none"
             spellcheck="false"
           >
 
           <div class="gql-run">
-            <button type="submit" class="btn-primary">{{call .T "graphql.submit"}}</button>
+            <button type="submit" class="btn-primary">{{t .Lang "graphql.submit"}}</button>
           </div>
         </div>
 
         <div class="gql-pane">
-          <label><strong>{{call .T "graphql.response_label"}}</strong></label>
+          <label><strong>{{t .Lang "graphql.response_label"}}</strong></label>
           {{if .ErrorMsg}}
           <div class="state-box state-error" role="alert">{{.ErrorMsg}}</div>
           {{end}}
-          <pre id="gql-response" class="gql-response" aria-label="{{call .T "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
+          <pre id="gql-response" class="gql-response" aria-label="{{t .Lang "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
         </div>
       </div>
     </form>
@@ -129,9 +128,9 @@
 <footer class="site-footer">
   <p>
     <a href="/">{{.Name}}</a> &mdash;
-    <a href="/about">{{call .T "nav.about"}}</a> &middot;
-    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
-    <a href="/server/healthz">{{call .T "footer.health"}}</a>
+    <a href="/about">{{t .Lang "nav.about"}}</a> &middot;
+    <a href="/docs">{{t .Lang "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{t .Lang "footer.health"}}</a>
   </p>
 </footer>
 
@@ -153,7 +152,7 @@
     if (varsRaw) {
       try { variables = JSON.parse(varsRaw); }
       catch (_) {
-        responseEl.textContent = '{{call .T "graphql.error_invalid_json"}}';
+        responseEl.textContent = '{{t .Lang "graphql.error_invalid_json"}}';
         return;
       }
     }
@@ -162,7 +161,7 @@
     if (variables !== null) body.variables = variables;
     if (opName) body.operationName = opName;
 
-    responseEl.textContent = '{{call .T "common.loading"}}';
+    responseEl.textContent = '{{t .Lang "common.loading"}}';
 
     fetch(endpoint, {
       method: 'POST',
@@ -174,7 +173,7 @@
       responseEl.textContent = JSON.stringify(data, null, 2);
     })
     .catch(function(err) {
-      responseEl.textContent = '{{call .T "whois.error_network"}} ' + err.message;
+      responseEl.textContent = '{{t .Lang "whois.error_network"}} ' + err.message;
     });
   });
 })();

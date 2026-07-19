@@ -22,12 +22,19 @@ type DB struct {
 // DatabaseConfig holds database configuration. Only SQLite/libsql are
 // supported (PART 10) — Name is used for libsql/Turso remote database names.
 type DatabaseConfig struct {
-	// Driver is "sqlite" (also matches libsql via the same SQL driver).
+	// Driver is "sqlite" or "libsql" (normalized via NormalizeDriver).
 	Driver string
 	// Name is the remote database name for libsql/Turso connections.
 	Name string
 	// Path is the directory containing SQLite files (server.db).
 	Path string
+	// URL is the libsql/Turso remote connection string
+	// (libsql://host?authToken=xxx or https://host). Required for the
+	// libsql driver — libSQL has no embedded/local mode (PART 10).
+	URL string
+	// Token is the Turso auth token, used when URL does not already embed
+	// an authToken query parameter.
+	Token string
 	// Pool holds connection-pool tuning.
 	Pool PoolConfig
 }
@@ -72,8 +79,10 @@ func New(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 	switch cfg.Driver {
 	case "sqlite":
 		return NewSQLite(ctx, cfg)
+	case "libsql":
+		return NewLibSQL(ctx, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s (only sqlite is supported)", cfg.Driver)
+		return nil, fmt.Errorf("unsupported database driver: %s (only sqlite and libsql are supported)", cfg.Driver)
 	}
 }
 
@@ -83,6 +92,8 @@ func NormalizeDriver(driver string) string {
 	switch driver {
 	case "sqlite", "sqlite3", "sqlite2", "file":
 		return "sqlite"
+	case "libsql", "turso":
+		return "libsql"
 	default:
 		return driver
 	}

@@ -10,8 +10,6 @@ import (
 // translatablePageData embeds language and translation fields into page data structs.
 // All HTML page data structs must embed this to satisfy AI.md PART 16 and PART 30.
 type translatablePageData struct {
-	// T is the translation function for the request's detected language.
-	T func(string) string
 	// Lang is the BCP-47 language code used in the <html lang="…"> attribute.
 	Lang string
 	// Dir is the text direction ("ltr" or "rtl") used in the <html dir="…"> attribute.
@@ -41,7 +39,6 @@ func themeFromRequest(r *http.Request) string {
 func newPageData(r *http.Request) translatablePageData {
 	lang := LangFromContext(r.Context())
 	return translatablePageData{
-		T:     newTranslatorFunc(r),
 		Lang:  lang,
 		Dir:   i18n.Dir(lang),
 		Theme: themeFromRequest(r),
@@ -92,12 +89,12 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 	}
 	data := AboutPageData{
 		translatablePageData: newPageData(r),
-		Name:         name,
-		Tagline:      tagline,
-		Description:  description,
-		Version:      Version,
-		BuildDate:    BuildDate,
-		OfficialSite: s.config.FQDN,
+		Name:                 name,
+		Tagline:              tagline,
+		Description:          description,
+		Version:              Version,
+		BuildDate:            BuildDate,
+		OfficialSite:         s.config.FQDN,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := aboutTmpl.Execute(w, data); err != nil {
@@ -115,11 +112,11 @@ func (s *Server) handleDocsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	data := DocsPageData{
 		translatablePageData: newPageData(r),
-		Name:          name,
-		Tagline:       s.config.Branding.Tagline,
-		APIVersion:    "v1",
-		RateLimitRead: s.config.RateLimit.Read.Requests,
-		OfficialSite:  s.config.FQDN,
+		Name:                 name,
+		Tagline:              s.config.Branding.Tagline,
+		APIVersion:           "v1",
+		RateLimitRead:        s.config.RateLimit.Read.Requests,
+		OfficialSite:         s.config.FQDN,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := docsTmpl.Execute(w, data); err != nil {

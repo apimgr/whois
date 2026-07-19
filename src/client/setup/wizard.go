@@ -170,8 +170,14 @@ func (m WizardModel) View() string {
 	return sb.String()
 }
 
-// Run launches the setup wizard and saves the resulting config
+// Run launches the setup wizard and saves the resulting config to the default path.
 func Run(cfg *config.CLIConfig) (*config.CLIConfig, error) {
+	return RunTo(cfg, config.ConfigPath())
+}
+
+// RunTo launches the setup wizard and saves the resulting config to path.
+// Use config.ResolveConfigPath to turn a --config flag value into path.
+func RunTo(cfg *config.CLIConfig, path string) (*config.CLIConfig, error) {
 	m := New(cfg)
 	p := tea.NewProgram(m)
 	final, err := p.Run()
@@ -188,7 +194,7 @@ func Run(cfg *config.CLIConfig) (*config.CLIConfig, error) {
 		return nil, fmt.Errorf("setup cancelled")
 	}
 
-	if err := config.Save(finalWizardModel.cfg); err != nil {
+	if err := config.SaveTo(path, finalWizardModel.cfg); err != nil {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 

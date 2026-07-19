@@ -243,6 +243,21 @@ type ComplianceConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
+// UpdateConfig holds self-update settings (AI.md PART 22 — server.update.*).
+type UpdateConfig struct {
+	// Branch selects the release channel: stable, beta, or daily.
+	Branch string `yaml:"branch"`
+	// AutoInstall runs the full update flow from the update_check scheduler
+	// task when an eligible release is found. Default OFF: the task only
+	// notifies; installing is always an explicit operator decision.
+	AutoInstall bool `yaml:"auto_install"`
+	// DeferDays is the defer window in days (0-365): a release is only
+	// eligible for the update_check task once it is this many days old.
+	// 0 = adopt releases immediately. Manual `--update check`/`--update yes`
+	// always ignore this window.
+	DeferDays int `yaml:"defer_days"`
+}
+
 // TorConfig holds Tor hidden service settings (AI.md PART 31 — server.tor.*).
 type TorConfig struct {
 	Binary                    string `yaml:"binary"`
@@ -269,6 +284,162 @@ type TorConfig struct {
 	// contact pages). When unset, no email appears in Tor responses — never falls back to
 	// the clearnet contact email (AI.md PART 12 — Tor privacy rules).
 	ContactEmail              string `yaml:"contact_email"`
+}
+
+// PrivacyConfig holds privacy/consent settings for GDPR/CCPA compliance,
+// including the cookie consent banner (AI.md PART 12 — server.privacy.*).
+type PrivacyConfig struct {
+	Data       DataPolicy       `yaml:"data"`
+	Retention  RetentionPolicy  `yaml:"retention"`
+	Consent    ConsentConfig    `yaml:"consent"`
+	Cookies    CookieCategories `yaml:"cookies"`
+	ThirdParty ThirdPartyConfig `yaml:"third_party"`
+	Content    PrivacyContent   `yaml:"content"`
+}
+
+// DataPolicy controls data handling and CCPA compliance (AI.md PART 12).
+type DataPolicy struct {
+	// Sold defaults to false — we do NOT sell data (MIT users can enable).
+	Sold bool `yaml:"sold"`
+	// StoredOnServer is always true — all data stays on this server.
+	StoredOnServer bool               `yaml:"stored_on_server"`
+	Sharing        []SharingCondition `yaml:"sharing"`
+}
+
+// SharingCondition documents one scenario where data MAY be shared.
+type SharingCondition struct {
+	// Condition is one of: analytics, email, user_initiated.
+	Condition string `yaml:"condition"`
+	When      string `yaml:"when"`
+	Data      string `yaml:"data"`
+}
+
+// RetentionPolicy documents how long user data is kept.
+type RetentionPolicy struct {
+	Period            string `yaml:"period"`
+	ExportAvailable   bool   `yaml:"export_available"`
+	DeletionAvailable bool   `yaml:"deletion_available"`
+}
+
+// ConsentConfig configures the cookie consent banner (AI.md PART 12).
+type ConsentConfig struct {
+	ShowUntilAcknowledged bool `yaml:"show_until_acknowledged"`
+	DefaultEnabled        bool `yaml:"default_enabled"`
+	// Message is used when Data.Sold is false.
+	Message string `yaml:"message"`
+	// MessageIfSold is used when Data.Sold is true.
+	MessageIfSold string `yaml:"message_if_sold"`
+	Policy        struct {
+		Text string `yaml:"text"`
+		URL  string `yaml:"url"`
+	} `yaml:"policy"`
+	Buttons struct {
+		Decline string `yaml:"decline"`
+		Accept  string `yaml:"accept"`
+	} `yaml:"buttons"`
+	// Position is "top" or "bottom".
+	Position         string `yaml:"position"`
+	ShowPreferences  bool   `yaml:"show_preferences"`
+	PreferencesText  string `yaml:"preferences_text"`
+}
+
+// CookieCategories describes the cookie categories shown in the consent banner.
+type CookieCategories struct {
+	Essential   CookieCategory  `yaml:"essential"`
+	Preferences CookieCategory  `yaml:"preferences"`
+	Analytics   AnalyticsCookie `yaml:"analytics"`
+}
+
+// CookieCategory describes one cookie category.
+type CookieCategory struct {
+	Enabled     bool   `yaml:"enabled"`
+	Description string `yaml:"description"`
+}
+
+// AnalyticsCookie extends CookieCategory with sold/not-sold description suffixes.
+type AnalyticsCookie struct {
+	CookieCategory           `yaml:",inline"`
+	DescriptionSuffixNotSold string `yaml:"description_suffix_not_sold"`
+	DescriptionSuffixSold    string `yaml:"description_suffix_sold"`
+}
+
+// ThirdPartyConfig lists third-party services that receive data.
+type ThirdPartyConfig struct {
+	Services []ThirdPartyService `yaml:"services"`
+}
+
+// ThirdPartyService describes one third-party data recipient.
+type ThirdPartyService struct {
+	Name      string `yaml:"name"`
+	Purpose   string `yaml:"purpose"`
+	DataSent  string `yaml:"data_sent"`
+	PolicyURL string `yaml:"policy_url"`
+}
+
+// PrivacyContent holds the Markdown body sections of the privacy page,
+// with sold/not-sold variants for data usage (AI.md PART 12).
+type PrivacyContent struct {
+	DataCollection string `yaml:"data_collection"`
+	// DataUsage is shown when Data.Sold is false.
+	DataUsage string `yaml:"data_usage"`
+	// DataUsageIfSold is shown when Data.Sold is true.
+	DataUsageIfSold string `yaml:"data_usage_if_sold"`
+	DataSecurity    string `yaml:"data_security"`
+}
+
+// GetConsentMessage returns the banner message appropriate for the Sold setting.
+func (p *PrivacyConfig) GetConsentMessage() string {
+	if p.Data.Sold {
+		return p.Consent.MessageIfSold
+	}
+	return p.Consent.Message
+}
+
+// GetAnalyticsDescription returns the analytics cookie description with the
+// suffix appropriate for the Sold setting.
+func (p *PrivacyConfig) GetAnalyticsDescription() string {
+	base := p.Cookies.Analytics.Description
+	if p.Data.Sold {
+		return base + " " + p.Cookies.Analytics.DescriptionSuffixSold
+	}
+	return base + " " + p.Cookies.Analytics.DescriptionSuffixNotSold
+}
+
+// GetDataUsageContent returns the privacy page data-usage section
+// appropriate for the Sold setting.
+func (p *PrivacyConfig) GetDataUsageContent() string {
+	if p.Data.Sold {
+		return p.Content.DataUsageIfSold
+	}
+	return p.Content.DataUsage
+}
+
+// IsCCPAApplicable returns true if CCPA "Do Not Sell" disclosure is required.
+func (p *PrivacyConfig) IsCCPAApplicable() bool {
+	return p.Data.Sold
+}
+
+// CacheConfig holds cache backend settings (AI.md PART 12 — server.cache.*).
+// Cache is optional and defaults to in-process memory; Valkey/Redis is
+// supported for persistence across restarts.
+type CacheConfig struct {
+	// Type is one of: none, memory (default), valkey, redis.
+	Type string `yaml:"type"`
+	// URL takes precedence over host/port/username/password/db when set.
+	// Format: redis://user:password@host:port/db or valkey://...
+	URL             string `yaml:"url"`
+	Host            string `yaml:"host"`
+	Port            int    `yaml:"port"`
+	Username        string `yaml:"username"`
+	Password        string `yaml:"password"`
+	DB              int    `yaml:"db"`
+	TLS             bool   `yaml:"tls"`
+	TLSSkipVerify   bool   `yaml:"tls_skip_verify"`
+	PoolSize        int    `yaml:"pool_size"`
+	MinIdle         int    `yaml:"min_idle"`
+	Timeout         string `yaml:"timeout"`
+	Prefix          string `yaml:"prefix"`
+	TTL             string `yaml:"ttl"`
 }
 
 // MetricsConfig holds Prometheus metrics settings (AI.md PART 20 — server.metrics.*).
@@ -478,12 +649,17 @@ type ServerConfig struct {
 	// Compliance settings (AI.md PART 21 — server.compliance.*)
 	Compliance ComplianceConfig `yaml:"compliance"`
 
-	// Update settings (AI.md PART 22)
-	// UpdateChannel selects the release channel: stable, beta, or daily
-	UpdateChannel string `yaml:"update_channel"`
+	// Update settings (AI.md PART 22 — server.update.*)
+	Update UpdateConfig `yaml:"update"`
 
 	// Tor hidden service settings (AI.md PART 31 — server.tor.*)
 	Tor TorConfig `yaml:"tor"`
+
+	// Privacy/consent settings — GDPR/CCPA (AI.md PART 12 — server.privacy.*)
+	Privacy PrivacyConfig `yaml:"privacy"`
+
+	// Cache backend settings (AI.md PART 12 — server.cache.*)
+	Cache CacheConfig `yaml:"cache"`
 
 	// Notifications settings (AI.md PART 17 — server.notifications.email.smtp.*)
 	Notifications NotificationsConfig `yaml:"notifications"`
@@ -527,7 +703,7 @@ func Default() *ServerConfig {
 	return &ServerConfig{
 		// Port 0 triggers random selection in range 64000-64999 on first run
 		Port:                0,
-		Address:             "127.0.0.1",
+		Address:             "0.0.0.0",
 		Mode:                "production",
 		FQDN:                "",
 		Daemonize:           false,
@@ -632,7 +808,11 @@ func Default() *ServerConfig {
 			},
 		},
 		Compliance: ComplianceConfig{Enabled: false},
-		UpdateChannel: "stable",
+		Update: UpdateConfig{
+			Branch:      "stable",
+			AutoInstall: false,
+			DeferDays:   0,
+		},
 		Tor: TorConfig{
 			Binary:                    "",
 			UseNetwork:                false,
@@ -650,6 +830,87 @@ func Default() *ServerConfig {
 			VirtualPort:               80,
 			OnionAddress:              "",
 			ContactEmail:              "",
+		},
+		Privacy: PrivacyConfig{
+			Data: DataPolicy{
+				// We do NOT sell data by default (MIT users can enable).
+				Sold:           false,
+				StoredOnServer: true,
+				Sharing: []SharingCondition{
+					{
+						Condition: "analytics",
+						When:      "Tracking configured (server.tracking.type set) AND user consents",
+						Data:      "Anonymized: page views, browser type, country",
+					},
+					{
+						Condition: "email",
+						When:      "SMTP configured for sending emails",
+						Data:      "Email address, message content",
+					},
+					{
+						Condition: "user_initiated",
+						When:      "User explicitly shares content (social buttons, exports)",
+						Data:      "Whatever user chooses to share",
+					},
+				},
+			},
+			Retention: RetentionPolicy{
+				Period:            "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months.",
+				ExportAvailable:   true,
+				DeletionAvailable: true,
+			},
+			Consent: ConsentConfig{
+				ShowUntilAcknowledged: true,
+				DefaultEnabled:        true,
+				Message:               "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data is stored on our servers and is never sold.",
+				MessageIfSold:         "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data may be shared with or sold to third parties as described in our Privacy Policy.",
+				Policy: struct {
+					Text string `yaml:"text"`
+					URL  string `yaml:"url"`
+				}{Text: "Privacy Policy", URL: "/server/privacy"},
+				Buttons: struct {
+					Decline string `yaml:"decline"`
+					Accept  string `yaml:"accept"`
+				}{Decline: "Decline", Accept: "I Agree"},
+				Position:        "bottom",
+				ShowPreferences: true,
+				PreferencesText: "Manage Preferences",
+			},
+			Cookies: CookieCategories{
+				Essential: CookieCategory{
+					Enabled:     true,
+					Description: "Required for the site to function. Includes security tokens (CSRF) and site preferences. These cookies are strictly necessary and cannot be disabled.",
+				},
+				Preferences: CookieCategory{
+					Enabled:     true,
+					Description: "Remember your settings such as theme (dark/light), language, and UI preferences. Disabling will reset to defaults on each visit.",
+				},
+				Analytics: AnalyticsCookie{
+					CookieCategory: CookieCategory{
+						Enabled:     true,
+						Description: "Help us understand how visitors use our site to improve the experience.",
+					},
+					DescriptionSuffixNotSold: "Analytics data is anonymized and never sold.",
+					DescriptionSuffixSold:    "Analytics data may be shared with third parties.",
+				},
+			},
+			ThirdParty: ThirdPartyConfig{Services: []ThirdPartyService{}},
+		},
+		Cache: CacheConfig{
+			Type:          "memory",
+			URL:           "",
+			Host:          "localhost",
+			Port:          6379,
+			Username:      "",
+			Password:      "",
+			DB:            0,
+			TLS:           false,
+			TLSSkipVerify: false,
+			PoolSize:      10,
+			MinIdle:       2,
+			Timeout:       "5s",
+			Prefix:        constants.InternalName + ":",
+			TTL:           "1h",
 		},
 		Notifications: NotificationsConfig{
 			Email: EmailNotificationsConfig{
@@ -699,25 +960,14 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 
 	configPath := filepath.Join(configDir, "server.yml")
 
-	// If config doesn't exist, write defaults to disk and return them (first-run experience).
+	// If config doesn't exist, write the annotated default template to disk
+	// (AI.md "Configuration File > Design Rules": server.yml must be
+	// "Comprehensive" — all options present, commented/defaulted) and fall
+	// through to the normal read-and-parse path below.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		cfg := Default()
-		cfg.ConfigDir = configDir
-		// Generate server token on first run.
-		tok, genErr := GenerateToken()
-		if genErr == nil {
-			cfg.ServerToken = tok
+		if genErr := GenerateDefaultConfig(configDir); genErr != nil {
+			return nil, fmt.Errorf("failed to write default config: %w", genErr)
 		}
-		// Generate installation secret on first run (AI.md PART 11).
-		secret, genErr := GenerateInstallationSecret()
-		if genErr == nil {
-			cfg.InstallationSecret = secret
-		}
-		// Write the default config so the operator can inspect and edit it.
-		if saveErr := cfg.Save(configDir); saveErr != nil {
-			fmt.Printf("WARNING: could not write default config to %s: %v\n", configPath, saveErr)
-		}
-		return cfg, nil
 	}
 
 	// Read config file
@@ -787,8 +1037,8 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-// Validate validates the configuration. Invalid critical fields return an error;
-// non-critical fields that are out of range are clamped to safe defaults (AI.md PART 6).
+// Validate validates the configuration. Invalid settings are warned about and
+// replaced with safe defaults; startup is never blocked on config (AI.md PART 12).
 func (c *ServerConfig) Validate() error {
 	// Port range — warn and reset to 0 (random assignment on first run) if invalid.
 	if c.Port < 0 || c.Port > 65535 {
@@ -796,9 +1046,10 @@ func (c *ServerConfig) Validate() error {
 		c.Port = 0
 	}
 
-	// Mode validation — only "production" and "development" are valid (AI.md PART 6).
+	// Mode validation — warn and default to production; never fail startup (AI.md PART 12).
 	if c.Mode != "" && c.Mode != "production" && c.Mode != "development" {
-		return fmt.Errorf("invalid mode %q: must be production or development", c.Mode)
+		fmt.Printf("WARN: invalid mode %q — defaulting to production\n", c.Mode)
+		c.Mode = "production"
 	}
 
 	// Backup retention validation (warn, don't error - server must start per spec)
@@ -822,9 +1073,12 @@ func (c *ServerConfig) Validate() error {
 		// Don't block server startup
 	}
 
-	// Update channel validation
-	if c.UpdateChannel != "stable" && c.UpdateChannel != "beta" && c.UpdateChannel != "daily" {
-		c.UpdateChannel = "stable"
+	// Update branch validation (AI.md PART 22)
+	if c.Update.Branch != "stable" && c.Update.Branch != "beta" && c.Update.Branch != "daily" {
+		c.Update.Branch = "stable"
+	}
+	if c.Update.DeferDays < 0 || c.Update.DeferDays > 365 {
+		c.Update.DeferDays = 0
 	}
 
 	// API version validation — default to v1 if empty
@@ -935,7 +1189,7 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		driver = os.Getenv("DATABASE_DRIVER")
 		if driver == "" {
-			driver = "sqlite" // libsql-compatible
+			driver = "libsql" // a remote URL implies libsql/Turso, not embedded sqlite
 		}
 		return driver, dbURL, ""
 	}
@@ -944,7 +1198,7 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	if c.Database.URL != "" {
 		driver = c.Database.Driver
 		if driver == "" {
-			driver = "sqlite"
+			driver = "libsql" // a remote URL implies libsql/Turso, not embedded sqlite
 		}
 		return driver, c.Database.URL, ""
 	}
@@ -1058,8 +1312,9 @@ func (c *ServerConfig) Save(configDir string) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Write to file
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	// Write with restrictive permissions — the file contains the operator token
+	// and installation secret (AI.md PART 11). Matches GenerateDefaultConfig.
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 

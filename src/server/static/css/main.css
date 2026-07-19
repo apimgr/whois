@@ -411,3 +411,11 @@ td code{font-size:0.875em}
   background:var(--bg-overlay);border:none;color:var(--fg-on-accent);
   padding:0.25rem 0.75rem;border-radius:0.25rem;cursor:pointer;
 }
+
+/* ── Spacing utilities (replace inline styles per PART 16) ───────── */
+.section-pad{padding-top:2rem;padding-bottom:2rem}
+.mt-sm{margin-top:0.5rem}
+.mt-md{margin-top:1rem}
+.mb-md{margin-bottom:1rem}
+.mb-lg{margin-bottom:1.5rem}
+.gql-textarea-vars{min-height:5rem}

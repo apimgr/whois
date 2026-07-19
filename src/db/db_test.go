@@ -62,6 +62,11 @@ func TestNormalizeDriver(t *testing.T) {
 		{"SQLite3", "sqlite"},
 		{"  SQLite  ", "sqlite"},
 		{"FILE", "sqlite"},
+		// libsql/Turso aliases must normalize to "libsql"
+		{"libsql", "libsql"},
+		{"turso", "libsql"},
+		{"LibSQL", "libsql"},
+		{"  Turso  ", "libsql"},
 		// Unknown drivers are returned lowercased
 		{"postgres", "postgres"},
 		{"mysql", "mysql"},

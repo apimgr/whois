@@ -53,7 +53,7 @@ GO_DOCKER := docker run --rm \
 	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
 
-.PHONY: build local release docker test dev lint clean
+.PHONY: build local release docker test dev lint clean i18n-validate
 
 # =============================================================================
 # BUILD - Build all platforms + local binary (via Docker with cached modules)
@@ -208,6 +208,15 @@ test:
 			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 60%\"; exit 1; \
 		fi && \
 		echo \"Tests complete - coverage >= 60% ✓\""
+	@$(MAKE) i18n-validate
+
+# =============================================================================
+# I18N-VALIDATE - Verify every locale has the same key set as en.json
+# =============================================================================
+i18n-validate:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
+	@echo "Validating translation files..."
+	@$(GO_DOCKER) go run ./src/tools/i18n-validate src/common/i18n/locales
 
 # =============================================================================
 # DEV - Quick build for local development/testing (to random temp dir)

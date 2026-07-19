@@ -819,31 +819,24 @@ func TestRecordRequestActiveConns(t *testing.T) {
 	}
 }
 
-// --- public_handler.go: newTranslatorFunc ---
+// --- static_embed.go: translateKey ---
 
-// TestNewTranslatorFuncReturnsFunc verifies newTranslatorFunc produces a callable
-// that does not panic on any key.
-func TestNewTranslatorFuncReturnsFunc(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	fn := newTranslatorFunc(req)
-	if fn == nil {
-		t.Error("newTranslatorFunc returned nil")
+// TestTranslateKeyReturnsValue verifies translateKey resolves a known key
+// without panicking for a supported language.
+func TestTranslateKeyReturnsValue(t *testing.T) {
+	result := translateKey("en", "nav.about")
+	if result == "" {
+		t.Error("translateKey(en, nav.about) returned empty string")
 	}
-	// Call it with a known key — should not panic.
-	result := fn("app.name")
-	t.Logf("newTranslatorFunc(req)('app.name') = %q", result)
 }
 
-// TestNewTranslatorFuncAcceptLanguage verifies the translator uses the
-// Accept-Language header to pick a non-default language without panicking.
-func TestNewTranslatorFuncAcceptLanguage(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Accept-Language", "es")
-	fn := newTranslatorFunc(req)
-	if fn == nil {
-		t.Error("newTranslatorFunc(es) returned nil")
+// TestTranslateKeyUnsupportedLanguageFallsBackToEnglish verifies translateKey
+// falls back to English when given an unsupported language code.
+func TestTranslateKeyUnsupportedLanguageFallsBackToEnglish(t *testing.T) {
+	result := translateKey("xx-not-a-lang", "nav.about")
+	if result == "" {
+		t.Error("translateKey(xx-not-a-lang, nav.about) returned empty string")
 	}
-	_ = fn("any.key")
 }
 
 // --- content.go: DetectClientType edge cases ---

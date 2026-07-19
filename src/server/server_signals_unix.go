@@ -39,7 +39,15 @@ func setupExtraSignals(s *Server) {
 				log.Printf("ERROR: config reload failed: %v", err)
 				continue
 			}
-			s.config = newCfg
+			if s.configManager != nil {
+				// Route through the same hot-reload/restart-required
+				// categorization the polling watcher uses, so a manual
+				// SIGHUP never mutates a restart-required setting
+				// (address/port/ssl/database/tor) on a running process.
+				s.configManager.ApplyExternalConfig(newCfg)
+			} else {
+				s.config = newCfg
+			}
 			log.Printf("Configuration reloaded successfully")
 		}
 	}()

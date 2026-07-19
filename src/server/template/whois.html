@@ -11,18 +11,18 @@
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
-<a class="skip-link" href="#main-content">{{call .T "nav.skip_to_content"}}</a>
-<a class="skip-link" href="#navigation">{{call .T "nav.skip_to_nav"}}</a>
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
 
-<nav id="navigation" class="site-nav" aria-label="{{call .T "nav.main_navigation"}}">
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
     <ul class="nav-links" role="list">
-      <li><a href="/about">{{call .T "nav.about"}}</a></li>
-      <li><a href="/docs">{{call .T "nav.docs"}}</a></li>
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
     </ul>
     <div class="nav-actions">
-      <button id="theme-toggle" class="btn-theme" aria-label="{{call .T "theme.toggle"}}">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
         <span class="icon-sun" aria-hidden="true">&#9788;</span>
         <span class="icon-moon" aria-hidden="true">&#9790;</span>
       </button>
@@ -31,21 +31,21 @@
 </nav>
 
 <main id="main-content">
-  <div class="container" style="padding-top:2rem;padding-bottom:2rem">
+  <div class="container section-pad">
 
-    <form id="whois-form" class="search-form-wrap" action="/whois" method="GET" style="margin-bottom:1.5rem" novalidate>
+    <form id="whois-form" class="search-form-wrap mb-lg" action="/whois" method="GET" novalidate>
       <div class="search-row">
-        <label for="q" class="sr-only">{{call .T "whois.query_label"}}</label>
+        <label for="q" class="sr-only">{{t .Lang "whois.query_label"}}</label>
         <input
           id="q" name="q" type="text"
           class="search-input"
-          placeholder="{{call .T "whois.placeholder"}}"
+          placeholder="{{t .Lang "whois.placeholder"}}"
           autocomplete="off" autocorrect="off" autocapitalize="none"
           spellcheck="false"
           value="{{.Query}}"
-          aria-label="{{call .T "whois.query_label"}}"
+          aria-label="{{t .Lang "whois.query_label"}}"
         >
-        <button type="submit" class="btn-primary">{{call .T "whois.button"}}</button>
+        <button type="submit" class="btn-primary">{{t .Lang "whois.button"}}</button>
       </div>
     </form>
 
@@ -53,42 +53,42 @@
     <div class="state-box state-error" role="alert">{{.Err}}</div>
     {{else if .Result}}
     <div class="card">
-      <div class="result-meta" style="margin-bottom:1rem">
+      <div class="result-meta mb-md">
         <div class="meta-item">
-          <div class="meta-label">{{call .T "whois.result_query"}}</div>
+          <div class="meta-label">{{t .Lang "whois.result_query"}}</div>
           <div class="meta-value long-string">{{.Result.Query}}</div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">{{call .T "whois.result_type"}}</div>
+          <div class="meta-label">{{t .Lang "whois.result_type"}}</div>
           <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">{{call .T "whois.result_server"}}</div>
+          <div class="meta-label">{{t .Lang "whois.result_server"}}</div>
           <div class="meta-value long-string">{{.Result.Server}}</div>
         </div>
         <div class="meta-item">
-          <div class="meta-label">{{call .T "whois.result_timestamp"}}</div>
+          <div class="meta-label">{{t .Lang "whois.result_timestamp"}}</div>
           <div class="meta-value">
             <time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time>
           </div>
         </div>
       </div>
-      <pre class="whois-raw" aria-label="{{call .T "whois.result_raw"}}">{{.Result.Raw}}</pre>
+      <pre class="whois-raw" aria-label="{{t .Lang "whois.result_raw"}}">{{.Result.Raw}}</pre>
     </div>
     {{else if .Query}}
-    <div class="state-box state-error" role="alert">{{call .T "whois.no_result"}}</div>
+    <div class="state-box state-error" role="alert">{{t .Lang "whois.no_result"}}</div>
     {{end}}
 
-    <p style="margin-top:1rem"><a href="/">{{call .T "whois.new_lookup"}}</a></p>
+    <p class="mt-md"><a href="/">{{t .Lang "whois.new_lookup"}}</a></p>
   </div>
 </main>
 
 <footer class="site-footer">
   <p>
     <a href="/">{{.Name}}</a> &mdash;
-    <a href="/about">{{call .T "nav.about"}}</a> &middot;
-    <a href="/docs">{{call .T "nav.docs"}}</a> &middot;
-    <a href="/server/healthz">{{call .T "footer.health"}}</a>
+    <a href="/about">{{t .Lang "nav.about"}}</a> &middot;
+    <a href="/docs">{{t .Lang "nav.docs"}}</a> &middot;
+    <a href="/server/healthz">{{t .Lang "footer.health"}}</a>
   </p>
 </footer>
 

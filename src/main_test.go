@@ -603,9 +603,12 @@ func TestLoadConfig_InvalidMode(t *testing.T) {
 	if err := os.WriteFile(dir+"/server.yml", []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := loadConfig(dir, "", "[::]", "/", 0, false)
-	if err == nil {
-		t.Error("loadConfig() with invalid mode should return an error")
+	cfg, err := loadConfig(dir, "", "[::]", "/", 0, false)
+	if err != nil {
+		t.Fatalf("loadConfig() with invalid mode should normalise, got error: %v", err)
+	}
+	if cfg.Mode != "production" {
+		t.Errorf("Mode after normalisation = %q, want %q", cfg.Mode, "production")
 	}
 }
 
@@ -992,9 +995,11 @@ func TestRun_Maintenance_Update_Alias(t *testing.T) {
 }
 
 // TestRun_BadConfig verifies that run() returns 1 when the config file is invalid.
+// Invalid scalar values (mode, port) are normalised per AI.md PART 12; only an
+// unparseable config file fails loading, so this uses malformed YAML.
 func TestRun_BadConfig(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  mode: badmode\n  port: 64900\n"), 0644); err != nil {
+	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  port: [1, 2, 3]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	captureStderr(t, func() {
@@ -1006,9 +1011,11 @@ func TestRun_BadConfig(t *testing.T) {
 }
 
 // TestRun_Daemon_BadConfig verifies the daemon flag is parsed and run() returns 1 on bad config.
+// Invalid values (mode, port) are normalised per AI.md PART 12; only an unparseable config file
+// fails loading, so this uses malformed YAML (a scalar field given a sequence).
 func TestRun_Daemon_BadConfig(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  mode: badmode\n  port: 64901\n"), 0644); err != nil {
+	if err := os.WriteFile(dir+"/server.yml", []byte("server:\n  port: [1, 2, 3]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	captureStderr(t, func() {

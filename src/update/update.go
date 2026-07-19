@@ -165,26 +165,25 @@ func CheckForUpdates(currentVersion string, channel UpdateChannel) (*UpdateInfo,
 	downloadURL := ""
 	checksum := ""
 
+	var assetName string
 	for _, asset := range release.Assets {
 		if strings.Contains(asset.Name, binaryName) {
+			assetName = asset.Name
 			downloadURL = asset.BrowserDownloadURL
-			// Checksum is in separate .sha256 file
-			checksumAssetName := asset.Name + ".sha256"
-			for _, checksumAsset := range release.Assets {
-				if checksumAsset.Name == checksumAssetName {
-					checksum, err = downloadChecksum(checksumAsset.BrowserDownloadURL)
-					if err != nil {
-						return nil, fmt.Errorf("download checksum: %w", err)
-					}
-					break
-				}
-			}
 			break
 		}
 	}
 
 	if downloadURL == "" {
 		return nil, fmt.Errorf("no binary found for platform: %s", binaryName)
+	}
+
+	// Checksum is recorded in the release's single checksums.txt asset
+	// (sha256sum format: "{hex-digest}  {filename}" per line), not a
+	// per-asset .sha256 file (AI.md PART 22).
+	checksum, err = fetchExpectedChecksum(release, assetName)
+	if err != nil {
+		return nil, fmt.Errorf("fetch checksum: %w", err)
 	}
 
 	return &UpdateInfo{
@@ -210,6 +209,15 @@ func PerformUpdate(currentVersion string, channel UpdateChannel) error {
 		return fmt.Errorf("already on latest version: %s", currentVersion)
 	}
 
+	return InstallUpdate(info)
+}
+
+// InstallUpdate downloads and installs a previously discovered update. Used
+// by PerformUpdate (manual --update yes) and by the scheduled update_check
+// task (AI.md PART 22, server.update.auto_install) so the task installs the
+// exact defer-eligible release it found rather than re-resolving the true
+// latest release.
+func InstallUpdate(info *UpdateInfo) error {
 	// Download new binary to temp location
 	tempFile, err := downloadBinary(info.DownloadURL)
 	if err != nil {
@@ -258,20 +266,37 @@ func SetUpdateChannel(channel UpdateChannel, configPath string) error {
 		return fmt.Errorf("read config: %w", err)
 	}
 
-	// Simple YAML replacement (update_channel line)
+	// Locate the "branch:" line nested under the top-level "update:" block
+	// (AI.md PART 22 schema: server.update.branch) and replace its value.
 	lines := strings.Split(string(data), "\n")
 	found := false
+	inUpdateBlock := false
 	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "update_channel:") {
-			lines[i] = fmt.Sprintf("update_channel: %s", string(channel))
-			found = true
-			break
+		trimmed := strings.TrimSpace(line)
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if trimmed == "update:" && indent == 0 {
+			inUpdateBlock = true
+			continue
+		}
+		if inUpdateBlock {
+			if indent == 0 && trimmed != "" {
+				// Left the update: block without finding branch: — insert it.
+				branchLine := fmt.Sprintf("  branch: %s", string(channel))
+				lines = append(lines[:i], append([]string{branchLine}, lines[i:]...)...)
+				found = true
+				break
+			}
+			if strings.HasPrefix(trimmed, "branch:") {
+				lines[i] = fmt.Sprintf("  branch: %s", string(channel))
+				found = true
+				break
+			}
 		}
 	}
 
-	// If not found, append to end
+	// If no update: block exists at all, append one.
 	if !found {
-		lines = append(lines, fmt.Sprintf("update_channel: %s", string(channel)))
+		lines = append(lines, "update:", fmt.Sprintf("  branch: %s", string(channel)))
 	}
 
 	// Write back
@@ -334,6 +359,100 @@ func getLatestRelease(channel UpdateChannel) (*Release, error) {
 	}
 
 	return &release, nil
+}
+
+// IsEligibleForAutoUpdate reports whether a release published at publishedAt
+// has cleared the defer window. Per AI.md PART 22: "A release is eligible
+// only once now - published_at >= defer_days." Manual --update check/yes
+// calls never consult this — it only gates the scheduled update_check task.
+func IsEligibleForAutoUpdate(publishedAt time.Time, deferDays int) bool {
+	if deferDays <= 0 {
+		return true
+	}
+	return time.Since(publishedAt) >= time.Duration(deferDays)*24*time.Hour
+}
+
+// CheckForUpdatesScheduled is used by the scheduler's update_check task. It
+// scans recent releases on channel for the newest one that is both newer
+// than currentVersion and past the defer_days eligibility window, per AI.md
+// PART 22. Unlike CheckForUpdates (used by manual --update check/yes, which
+// always sees the true latest release), this respects deferDays.
+func CheckForUpdatesScheduled(currentVersion string, channel UpdateChannel, deferDays int) (*UpdateInfo, error) {
+	releases, err := getRecentReleases(channel)
+	if err != nil {
+		return nil, fmt.Errorf("get recent releases: %w", err)
+	}
+
+	binaryName := getBinaryName()
+	for _, release := range releases {
+		if !isNewer(release.TagName, currentVersion) {
+			continue
+		}
+		if !IsEligibleForAutoUpdate(release.PublishedAt, deferDays) {
+			continue
+		}
+
+		var downloadURL, assetName string
+		for _, asset := range release.Assets {
+			if strings.Contains(asset.Name, binaryName) {
+				assetName = asset.Name
+				downloadURL = asset.BrowserDownloadURL
+				break
+			}
+		}
+		if downloadURL == "" {
+			continue
+		}
+
+		checksum, err := fetchExpectedChecksum(&release, assetName)
+		if err != nil {
+			return nil, fmt.Errorf("fetch checksum: %w", err)
+		}
+
+		return &UpdateInfo{
+			Available:      true,
+			CurrentVersion: currentVersion,
+			LatestVersion:  release.TagName,
+			ReleaseNotes:   release.Name,
+			DownloadURL:    downloadURL,
+			Checksum:       checksum,
+		}, nil
+	}
+
+	return &UpdateInfo{Available: false, CurrentVersion: currentVersion}, nil
+}
+
+// getRecentReleases fetches recent releases from GitHub for channel,
+// newest first, so callers can find the newest release that is both newer
+// than the running version and past the defer_days eligibility window.
+func getRecentReleases(channel UpdateChannel) ([]Release, error) {
+	apiURL := "https://api.github.com/repos/apimgr/whois/releases?per_page=20"
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var releases []Release
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	filtered := releases[:0]
+	for _, r := range releases {
+		if channel == ChannelStable && r.Prerelease {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+
+	return filtered, nil
 }
 
 // isNewer returns true when latest is a higher semver than current.
@@ -428,10 +547,23 @@ func downloadBinary(url string) (string, error) {
 	return tempFile.Name(), nil
 }
 
-// downloadChecksum downloads and returns checksum
-func downloadChecksum(url string) (string, error) {
+// fetchExpectedChecksum downloads the release's single checksums.txt asset
+// and returns the SHA-256 digest recorded for assetName. The file is in
+// standard sha256sum format: "{hex-digest}  {filename}" per line (AI.md PART 22).
+func fetchExpectedChecksum(release *Release, assetName string) (string, error) {
+	var checksumsURL string
+	for _, asset := range release.Assets {
+		if asset.Name == "checksums.txt" {
+			checksumsURL = asset.BrowserDownloadURL
+			break
+		}
+	}
+	if checksumsURL == "" {
+		return "", fmt.Errorf("checksums.txt not found in release assets")
+	}
+
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Get(checksumsURL)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -446,14 +578,19 @@ func downloadChecksum(url string) (string, error) {
 		return "", fmt.Errorf("read content: %w", err)
 	}
 
-	// Checksum file format: "checksum filename"
-	// Extract just the checksum part
-	parts := strings.Fields(string(data))
-	if len(parts) == 0 {
-		return "", fmt.Errorf("invalid checksum file format")
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		// sha256sum output may prefix the filename with "*" for binary mode.
+		name := strings.TrimPrefix(fields[1], "*")
+		if name == assetName {
+			return fields[0], nil
+		}
 	}
 
-	return parts[0], nil
+	return "", fmt.Errorf("no checksum entry for %s", assetName)
 }
 
 // verifyChecksum verifies file SHA-256 checksum

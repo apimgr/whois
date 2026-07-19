@@ -146,6 +146,14 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Disk:      "ok",
 		Scheduler: s.checkScheduler(),
 	}
+	// checks.tor is reported only when the Tor hidden service is enabled (AI.md PART 13).
+	if tor := s.buildTorInfo(); tor.Enabled {
+		if tor.Running {
+			checks.Tor = "ok"
+		} else {
+			checks.Tor = "error"
+		}
+	}
 
 	return HealthResponse{
 		Project: ProjectInfo{
@@ -226,6 +234,10 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "features.email: %v\n", response.Features.Email)
 	fmt.Fprintf(w, "features.tor.enabled: %v\n", response.Features.Tor.Enabled)
 	fmt.Fprintf(w, "features.tor.running: %v\n", response.Features.Tor.Running)
+	fmt.Fprintf(w, "features.tor.status: %s\n", response.Features.Tor.Status)
+	if response.Features.Tor.Hostname != "" {
+		fmt.Fprintf(w, "features.tor.hostname: %s\n", response.Features.Tor.Hostname)
+	}
 	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "# 6. Checks\n")
@@ -233,6 +245,9 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	fmt.Fprintf(w, "checks.cache: %s\n", response.Checks.Cache)
 	fmt.Fprintf(w, "checks.disk: %s\n", response.Checks.Disk)
 	fmt.Fprintf(w, "checks.scheduler: %s\n", response.Checks.Scheduler)
+	if response.Checks.Tor != "" {
+		fmt.Fprintf(w, "checks.tor: %s\n", response.Checks.Tor)
+	}
 	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "# 7. Stats\n")

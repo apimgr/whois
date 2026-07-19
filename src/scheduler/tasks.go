@@ -13,7 +13,7 @@ import (
 // Task IDs use underscore convention per AI.md PART 18.
 // Required tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation,
 // backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update,
-// tor_health.
+// update_check, tor_health.
 func (s *Scheduler) RegisterBuiltInTasks() error {
 	// token_cleanup — Every 15 minutes (REQUIRED)
 	if err := s.Register(&Task{
@@ -207,7 +207,23 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register rdap_bootstrap_update: %w", err)
 	}
 
-	log.Printf("INFO: Registered %d built-in scheduler tasks", 12)
+	// update_check — Daily at 06:00 (REQUIRED, skippable; notify-only unless update.auto_install)
+	if err := s.Register(&Task{
+		ID:       "update_check",
+		Name:     "Update Check",
+		Schedule: "0 6 * * *",
+		Enabled:  true,
+		Handler:  s.taskUpdateCheck,
+		RetryPolicy: &RetryPolicy{
+			MaxRetries: 3,
+			RetryDelay: 1 * time.Hour,
+			Backoff:    "exponential",
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to register update_check: %w", err)
+	}
+
+	log.Printf("INFO: Registered %d built-in scheduler tasks", 13)
 	return nil
 }
 
@@ -339,6 +355,17 @@ func (s *Scheduler) taskWhoisRecordsRefresh(ctx context.Context) error {
 	}
 	log.Printf("INFO: whois_records_refresh: refreshed %d stale records", len(queries))
 	return nil
+}
+
+// taskUpdateCheck checks the configured release channel for a newer version via
+// the UpdateCheckHook (AI.md PART 22). Notify-only unless update.auto_install is
+// set; the hook honors update.defer_days. When no hook is set the task is a no-op.
+func (s *Scheduler) taskUpdateCheck(ctx context.Context) error {
+	if s.UpdateCheckHook == nil {
+		log.Printf("INFO: update_check skipped (no update-check hook registered)")
+		return nil
+	}
+	return s.UpdateCheckHook(ctx)
 }
 
 // taskRDAPBootstrapUpdate fetches the latest IANA RDAP bootstrap files via the

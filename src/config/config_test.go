@@ -35,8 +35,8 @@ func TestDefault(t *testing.T) {
 	}
 
 	// Update channel must default to "stable" (PART 22)
-	if cfg.UpdateChannel != "stable" {
-		t.Errorf("Default().UpdateChannel = %q, want %q", cfg.UpdateChannel, "stable")
+	if cfg.Update.Branch != "stable" {
+		t.Errorf("Default().Update.Branch = %q, want %q", cfg.Update.Branch, "stable")
 	}
 
 	// Debug must default to false
@@ -158,7 +158,7 @@ func TestValidateAcceptsValidConfig(t *testing.T) {
 	cfg := Default()
 	cfg.Port = 64500
 	cfg.Mode = "production"
-	cfg.UpdateChannel = "stable"
+	cfg.Update.Branch = "stable"
 
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("Validate() unexpected error on valid config: %v", err)
@@ -202,10 +202,16 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			// Spec (AI.md PART 6): invalid mode must return an error — fail with clear error messages.
-			name:    "invalid mode",
+			// Spec (AI.md PART 12): invalid mode warns and defaults to production — never fails startup.
+			name:    "invalid mode defaults to production",
 			setup:   func(c *ServerConfig) { c.Mode = "staging" },
-			wantErr: true,
+			wantErr: false,
+			checkAfter: func(t *testing.T, c *ServerConfig) {
+				t.Helper()
+				if c.Mode != "production" {
+					t.Errorf("Mode after correction = %q, want %q", c.Mode, "production")
+				}
+			},
 		},
 		{
 			name: "development mode is valid",
@@ -218,13 +224,13 @@ func TestValidate(t *testing.T) {
 			// Spec says invalid update channel is silently corrected to "stable"
 			name: "invalid update channel auto-corrects to stable",
 			setup: func(c *ServerConfig) {
-				c.UpdateChannel = "nightly"
+				c.Update.Branch = "nightly"
 			},
 			wantErr: false,
 			checkAfter: func(t *testing.T, c *ServerConfig) {
 				t.Helper()
-				if c.UpdateChannel != "stable" {
-					t.Errorf("UpdateChannel after correction = %q, want %q", c.UpdateChannel, "stable")
+				if c.Update.Branch != "stable" {
+					t.Errorf("UpdateChannel after correction = %q, want %q", c.Update.Branch, "stable")
 				}
 			},
 		},
@@ -318,14 +324,14 @@ func TestValidate(t *testing.T) {
 			// beta and daily are valid update channels
 			name: "beta update channel valid",
 			setup: func(c *ServerConfig) {
-				c.UpdateChannel = "beta"
+				c.Update.Branch = "beta"
 			},
 			wantErr: false,
 		},
 		{
 			name: "daily update channel valid",
 			setup: func(c *ServerConfig) {
-				c.UpdateChannel = "daily"
+				c.Update.Branch = "daily"
 			},
 			wantErr: false,
 		},
@@ -415,7 +421,8 @@ func TestLoadServerConfigWithValidYAML(t *testing.T) {
     email:
       smtp:
         port: 465
-  update_channel: beta
+  update:
+    branch: beta
   token: tok_testtoken12345678901234567890123
 `
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
@@ -436,8 +443,8 @@ func TestLoadServerConfigWithValidYAML(t *testing.T) {
 	if cfg.Notifications.Email.SMTP.Port != 465 {
 		t.Errorf("cfg.Notifications.Email.SMTP.Port = %d, want 465", cfg.Notifications.Email.SMTP.Port)
 	}
-	if cfg.UpdateChannel != "beta" {
-		t.Errorf("cfg.UpdateChannel = %q, want %q", cfg.UpdateChannel, "beta")
+	if cfg.Update.Branch != "beta" {
+		t.Errorf("cfg.Update.Branch = %q, want %q", cfg.Update.Branch, "beta")
 	}
 }
 
@@ -481,8 +488,8 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	if cfg.Notifications.Email.SMTP.Port != 587 {
 		t.Errorf("cfg.Notifications.Email.SMTP.Port = %d, want 587 (default)", cfg.Notifications.Email.SMTP.Port)
 	}
-	if cfg.UpdateChannel != "stable" {
-		t.Errorf("cfg.UpdateChannel = %q, want %q (default)", cfg.UpdateChannel, "stable")
+	if cfg.Update.Branch != "stable" {
+		t.Errorf("cfg.Update.Branch = %q, want %q (default)", cfg.Update.Branch, "stable")
 	}
 	if cfg.RateLimit.Read.Requests != 120 {
 		t.Errorf("cfg.RateLimit.Read.Requests = %d, want 120 (default)", cfg.RateLimit.Read.Requests)
@@ -596,7 +603,7 @@ func TestSaveAndReload(t *testing.T) {
 	original := Default()
 	original.Port = 64321
 	original.Mode = "development"
-	original.UpdateChannel = "beta"
+	original.Update.Branch = "beta"
 	original.Notifications.Email.SMTP.Port = 465
 	// Provide a token so LoadServerConfig does not try to generate+persist a new one.
 	original.ServerToken = "tok_savereloadtoken1234567890123456"
@@ -616,8 +623,8 @@ func TestSaveAndReload(t *testing.T) {
 	if reloaded.Mode != original.Mode {
 		t.Errorf("Mode: saved %q, reloaded %q", original.Mode, reloaded.Mode)
 	}
-	if reloaded.UpdateChannel != original.UpdateChannel {
-		t.Errorf("UpdateChannel: saved %q, reloaded %q", original.UpdateChannel, reloaded.UpdateChannel)
+	if reloaded.Update.Branch != original.Update.Branch {
+		t.Errorf("UpdateChannel: saved %q, reloaded %q", original.Update.Branch, reloaded.Update.Branch)
 	}
 	if reloaded.Notifications.Email.SMTP.Port != original.Notifications.Email.SMTP.Port {
 		t.Errorf("SMTPPort: saved %d, reloaded %d", original.Notifications.Email.SMTP.Port, reloaded.Notifications.Email.SMTP.Port)
@@ -872,8 +879,10 @@ func TestGetDatabaseConfig(t *testing.T) {
 		}
 	})
 
-	// Config DatabaseURL with empty DatabaseDriver defaults to "sqlite".
-	t.Run("config DatabaseURL with no driver defaults to sqlite", func(t *testing.T) {
+	// Config DatabaseURL with empty DatabaseDriver defaults to "libsql", since
+	// a remote URL implies libsql/Turso, not embedded sqlite (sqlite requires
+	// a filesystem Path, which is empty in the URL branch).
+	t.Run("config DatabaseURL with no driver defaults to libsql", func(t *testing.T) {
 		os.Unsetenv("DATABASE_URL")
 		os.Unsetenv("DATABASE_DRIVER")
 
@@ -882,8 +891,8 @@ func TestGetDatabaseConfig(t *testing.T) {
 		cfg.Database.Driver = ""
 
 		driver, _, _ := cfg.GetDatabaseConfig()
-		if driver != "sqlite" {
-			t.Errorf("driver = %q, want sqlite (default)", driver)
+		if driver != "libsql" {
+			t.Errorf("driver = %q, want libsql (default)", driver)
 		}
 	})
 

@@ -6,19 +6,8 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
-	"github.com/apimgr/whois/src/common/i18n"
 	"github.com/apimgr/whois/src/whois"
 )
-
-// newTranslatorFunc returns a T(key) function for template use, loaded from request context.
-func newTranslatorFunc(r *http.Request) func(string) string {
-	lang := LangFromContext(r.Context())
-	tr, err := i18n.Load(lang)
-	if err != nil {
-		tr, _ = i18n.Load("en")
-	}
-	return tr.T
-}
 
 // Templates are loaded from src/server/template/ via embed (AI.md PART 7).
 var homepageTmpl = mustParseTemplate("home", "home.html")

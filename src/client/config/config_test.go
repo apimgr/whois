@@ -315,3 +315,168 @@ func TestSaveMkdirAllError(t *testing.T) {
 		t.Error("Save() expected error when MkdirAll fails, got nil")
 	}
 }
+
+// TestResolveConfigPathEmpty verifies an empty flag resolves to the default cli.yml path.
+func TestResolveConfigPathEmpty(t *testing.T) {
+	old := getOS
+	getOS = func() string { return "linux" }
+	defer func() { getOS = old }()
+
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	got := ResolveConfigPath("")
+	want := ConfigPath()
+	if got != want {
+		t.Errorf("ResolveConfigPath(\"\") = %q, want %q", got, want)
+	}
+}
+
+// TestResolveConfigPathBareName verifies a bare name resolves to {config_dir}/name.yml.
+func TestResolveConfigPathBareName(t *testing.T) {
+	old := getOS
+	getOS = func() string { return "linux" }
+	defer func() { getOS = old }()
+
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	got := ResolveConfigPath("test")
+	want := filepath.Join(dir, "apimgr", "caswhois", "test.yml")
+	if got != want {
+		t.Errorf("ResolveConfigPath(\"test\") = %q, want %q", got, want)
+	}
+}
+
+// TestResolveConfigPathExplicitExtension verifies a name with an existing extension
+// is used as-is (relative to config dir), including non-.yml extensions like .yaml.
+func TestResolveConfigPathExplicitExtension(t *testing.T) {
+	old := getOS
+	getOS = func() string { return "linux" }
+	defer func() { getOS = old }()
+
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	got := ResolveConfigPath("dev.yml")
+	want := filepath.Join(dir, "apimgr", "caswhois", "dev.yml")
+	if got != want {
+		t.Errorf("ResolveConfigPath(\"dev.yml\") = %q, want %q", got, want)
+	}
+
+	got = ResolveConfigPath("test.yaml")
+	want = filepath.Join(dir, "apimgr", "caswhois", "test.yaml")
+	if got != want {
+		t.Errorf("ResolveConfigPath(\"test.yaml\") = %q, want %q", got, want)
+	}
+}
+
+// TestResolveConfigPathAbsolute verifies an absolute path is used verbatim (with
+// yaml-extension resolution applied when no extension is present).
+func TestResolveConfigPathAbsolute(t *testing.T) {
+	old := getOS
+	getOS = func() string { return "linux" }
+	defer func() { getOS = old }()
+
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	abs := filepath.Join(dir, "prod.yml")
+	got := ResolveConfigPath(abs)
+	if got != abs {
+		t.Errorf("ResolveConfigPath(%q) = %q, want %q", abs, got, abs)
+	}
+}
+
+// TestResolveConfigPathHomeExpansion verifies "~/..." expands to the home directory.
+func TestResolveConfigPathHomeExpansion(t *testing.T) {
+	old := getOS
+	getOS = func() string { return "linux" }
+	defer func() { getOS = old }()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory available")
+	}
+
+	got := ResolveConfigPath("~/testing/app.yml")
+	want := filepath.Join(home, "testing", "app.yml")
+	if got != want {
+		t.Errorf("ResolveConfigPath(\"~/testing/app.yml\") = %q, want %q", got, want)
+	}
+}
+
+// TestResolveConfigPathAutoDetectYaml verifies auto-detection prefers an existing
+// .yaml file over the .yml default when no extension is given and only .yaml exists.
+func TestResolveConfigPathAutoDetectYaml(t *testing.T) {
+	old := getOS
+	getOS = func() string { return "linux" }
+	defer func() { getOS = old }()
+
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	confDir := filepath.Join(dir, "apimgr", "caswhois")
+	if err := os.MkdirAll(confDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	yamlPath := filepath.Join(confDir, "found.yaml")
+	if err := os.WriteFile(yamlPath, []byte("server: x\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got := ResolveConfigPath("found")
+	if got != yamlPath {
+		t.Errorf("ResolveConfigPath(\"found\") = %q, want %q", got, yamlPath)
+	}
+}
+
+// TestLoadFromMissingFile verifies LoadFrom returns defaults when the file does not exist.
+func TestLoadFromMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := LoadFrom(filepath.Join(dir, "missing.yml"))
+	if err != nil {
+		t.Fatalf("LoadFrom() unexpected error: %v", err)
+	}
+	if cfg.Format != "text" {
+		t.Errorf("LoadFrom() Format = %q, want %q", cfg.Format, "text")
+	}
+}
+
+// TestLoadFromExisting verifies LoadFrom reads and unmarshals an existing config file.
+func TestLoadFromExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom.yml")
+	if err := os.WriteFile(path, []byte("server: http://example.com\ntoken: abc\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom() unexpected error: %v", err)
+	}
+	if cfg.Server != "http://example.com" {
+		t.Errorf("LoadFrom() Server = %q, want %q", cfg.Server, "http://example.com")
+	}
+	if cfg.Token != "abc" {
+		t.Errorf("LoadFrom() Token = %q, want %q", cfg.Token, "abc")
+	}
+}
+
+// TestSaveToWritesFile verifies SaveTo creates parent directories and writes the config.
+func TestSaveToWritesFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nested", "custom.yml")
+
+	if err := SaveTo(path, &CLIConfig{Server: "http://example.com", Format: "text"}); err != nil {
+		t.Fatalf("SaveTo() unexpected error: %v", err)
+	}
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom() unexpected error: %v", err)
+	}
+	if cfg.Server != "http://example.com" {
+		t.Errorf("LoadFrom() Server = %q, want %q", cfg.Server, "http://example.com")
+	}
+}

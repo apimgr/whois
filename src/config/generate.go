@@ -50,7 +50,9 @@ func defaultConfigTemplate() string {
 # {{INTERNAL_NAME}} — Server Configuration (AI.md PART 5)
 # =============================================================================
 # Auto-generated on first run. Edit this file to change settings.
-# All changes require a server restart.
+# Most settings hot-reload automatically (checked every 5s, AI.md PART 8).
+# Only server.address, server.port, ssl.*, server.daemonize, database.*, and
+# tor.* require a full server restart to take effect.
 # =============================================================================
 
 server:
@@ -61,8 +63,8 @@ server:
   # Random port in 64000-64999 range; change to a fixed value if preferred
   port: {{PORT}}
 
-  # Listen on all interfaces (IPv4 + IPv6)
-  address: "[::]"
+  # Listen on all interfaces
+  address: "0.0.0.0"
 
   # production or development
   mode: production
@@ -74,6 +76,10 @@ server:
   # Format: tok_<32 base62 chars>
   # Used for: bulk WHOIS, scheduler management, backup operations
   token: "{{TOKEN}}"
+
+  # Installation secret — root KDF input for PGP private-key encryption
+  # (AI.md PART 11). Auto-generated on first run; NEVER share or lose this.
+  installation_secret: "{{SECRET}}"
 
   # Daemonize: detach from terminal (set true for manual launch without systemd)
   daemonize: false
@@ -135,6 +141,28 @@ server:
       requests: 120
       window: 60
     global_burst: 240
+
+  # ===========================================================================
+  # CACHE (PART 12) — optional; defaults to in-process memory
+  # ===========================================================================
+
+  cache:
+    # type: none (disabled), memory (default), valkey, redis
+    type: "memory"
+    # url: redis://user:pass@host:port/db — takes precedence over host/port below
+    url: ""
+    host: "localhost"
+    port: 6379
+    username: ""
+    password: ""
+    db: 0
+    tls: false
+    tls_skip_verify: false
+    pool_size: 10
+    min_idle: 2
+    timeout: "5s"
+    prefix: "{{INTERNAL_NAME}}:"
+    ttl: "1h"
 
   # ===========================================================================
   # GEOIP (PART 19)
@@ -208,8 +236,15 @@ server:
   # UPDATES (PART 22)
   # ===========================================================================
 
-  # update_channel: stable, beta, daily
-  update_channel: "stable"
+  update:
+    # branch: stable, beta, daily (also settable via --update branch)
+    branch: "stable"
+    # auto_install: default OFF — the update_check task only notifies;
+    # installing is always an explicit operator decision
+    auto_install: false
+    # defer_days: a release is only eligible once it is this many days old
+    # (0-365); 0 = adopt releases immediately. Manual --update always ignores this.
+    defer_days: 0
 
   # ===========================================================================
   # TOR HIDDEN SERVICE (PART 31)
@@ -227,6 +262,87 @@ server:
     virtual_port: 80
     max_circuits: 32
     max_streams_per_circuit: 100
+    # onion_address: set automatically once the hidden service is created
+    onion_address: ""
+    # contact_email: shown in the hidden service descriptor (optional)
+    contact_email: ""
+
+  # ===========================================================================
+  # PRIVACY & CONSENT (PART 12) — GDPR/CCPA cookie consent banner
+  # ===========================================================================
+
+  privacy:
+    data:
+      # sold: MIT license allows others to change this; default false
+      sold: false
+      stored_on_server: true
+      sharing:
+        - condition: "analytics"
+          when: "Tracking configured (server.tracking.type set) AND user consents"
+          data: "Anonymized: page views, browser type, country"
+        - condition: "email"
+          when: "SMTP configured for sending emails"
+          data: "Email address, message content"
+        - condition: "user_initiated"
+          when: "User explicitly shares content (social buttons, exports)"
+          data: "Whatever user chooses to share"
+
+    retention:
+      period: "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months."
+      export_available: true
+      deletion_available: true
+
+    consent:
+      show_until_acknowledged: true
+      # default_enabled: opt-out model — user must click Decline
+      default_enabled: true
+      message: "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data is stored on our servers and is never sold."
+      message_if_sold: "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data may be shared with or sold to third parties as described in our Privacy Policy."
+      policy:
+        text: "Privacy Policy"
+        url: "/server/privacy"
+      buttons:
+        decline: "Decline"
+        accept: "I Agree"
+      # position: bottom or top
+      position: "bottom"
+      show_preferences: true
+      preferences_text: "Manage Preferences"
+
+    cookies:
+      essential:
+        enabled: true
+        description: "Required for the site to function. Includes security tokens (CSRF) and site preferences. These cookies are strictly necessary and cannot be disabled."
+      preferences:
+        enabled: true
+        description: "Remember your settings such as theme (dark/light), language, and UI preferences. Disabling will reset to defaults on each visit."
+      analytics:
+        enabled: true
+        description: "Help us understand how visitors use our site to improve the experience."
+        description_suffix_not_sold: "Analytics data is anonymized and never sold."
+        description_suffix_sold: "Analytics data may be shared with third parties."
+
+    # third_party.services: auto-populated from server.tracking config + manual entries
+    third_party:
+      services: []
+
+    content:
+      data_collection: |
+        We collect only what is necessary to provide our service: usage information
+        (with consent), technical information (IP address, hashed API tokens). We do
+        NOT collect payment information, precise location, or data from other sites.
+      data_usage: |
+        Your data is used solely to provide the service, improve the experience,
+        ensure security, and communicate with you. It is never sold, used for
+        targeted advertising, or shared without consent except as required by law.
+      data_usage_if_sold: |
+        Your data may be used to provide the service, improve the experience, ensure
+        security, communicate with you, and for third-party sharing as described
+        below. You can opt out of data sales and request deletion at any time.
+      data_security: |
+        All data is stored on our servers. API tokens are stored as SHA-256 hashes.
+        All connections are encrypted (HTTPS/TLS). We perform regular security
+        audits and maintain access controls and audit logging for operator actions.
 
   # ===========================================================================
   # SCHEDULER (PART 18)
@@ -342,10 +458,17 @@ func GenerateDefaultConfig(configDir string) error {
 		return fmt.Errorf("failed to generate server token: %w", err)
 	}
 
+	// Generate installation secret on first run (AI.md PART 11).
+	secret, err := GenerateInstallationSecret()
+	if err != nil {
+		return fmt.Errorf("failed to generate installation secret: %w", err)
+	}
+
 	// Replace template variables
 	config := defaultConfigTemplate()
 	config = strings.Replace(config, "{{PORT}}", fmt.Sprintf("%d", port), 1)
 	config = strings.Replace(config, "{{TOKEN}}", token, 1)
+	config = strings.Replace(config, "{{SECRET}}", secret, 1)
 	config = strings.ReplaceAll(config, "{{INTERNAL_NAME}}", constants.InternalName)
 
 	// Write config file with restrictive permissions (contains token)

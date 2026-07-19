@@ -16,13 +16,15 @@ import (
 
 // GeoIPManager handles GeoIP database operations
 type GeoIPManager struct {
-	mu       sync.RWMutex
-	dbDir    string
-	enabled  bool
-	asnDB    *maxminddb.Reader
-	countryDB *maxminddb.Reader
-	cityDB   *maxminddb.Reader
-	whoisDB  *maxminddb.Reader
+	mu         sync.RWMutex
+	dbDir      string
+	enabled    bool
+	userAgent  string
+	asnDB      *maxminddb.Reader
+	countryDB  *maxminddb.Reader
+	cityDBv4   *maxminddb.Reader
+	cityDBv6   *maxminddb.Reader
+	whoisEnabled bool
 	lastUpdate time.Time
 }
 
@@ -31,6 +33,10 @@ type GeoIPConfig struct {
 	Enabled   bool
 	Dir       string
 	Databases DatabaseConfig
+	// UserAgent is sent on database download requests; must be a real
+	// build-injected identifier, never a hardcoded version (AI.md rule:
+	// "never hardcode dev values — detect at runtime").
+	UserAgent string
 }
 
 // DatabaseConfig specifies which databases to use
@@ -73,18 +79,22 @@ type CityResult struct {
 	Timezone    string  `json:"timezone,omitempty" maxminddb:"timezone"`
 }
 
-// WHOISResult contains WHOIS/registrant information
+// WHOISResult contains WHOIS/registrant-style information. Per AI.md PART 19,
+// "WHOIS is not a separate download" — no whois.mmdb file exists. This is
+// built by combining the ASN and Country database results at query time.
 type WHOISResult struct {
-	Registrant  string `json:"registrant,omitempty" maxminddb:"registrant_org"`
-	ASN         int    `json:"asn,omitempty" maxminddb:"asn"`
-	CountryCode string `json:"country_code,omitempty" maxminddb:"country_code"`
+	Registrant  string `json:"registrant,omitempty"`
+	ASN         int    `json:"asn,omitempty"`
+	CountryCode string `json:"country_code,omitempty"`
 }
 
 // NewGeoIPManager creates a new GeoIP manager
 func NewGeoIPManager(cfg GeoIPConfig) (*GeoIPManager, error) {
 	m := &GeoIPManager{
-		dbDir:   cfg.Dir,
-		enabled: cfg.Enabled,
+		dbDir:        cfg.Dir,
+		enabled:      cfg.Enabled,
+		userAgent:    cfg.UserAgent,
+		whoisEnabled: cfg.Databases.WHOIS,
 	}
 
 	if !cfg.Enabled {
@@ -151,20 +161,31 @@ func (m *GeoIPManager) Lookup(ipStr string) (*LookupResult, error) {
 		}
 	}
 
-	// Lookup City
-	if m.cityDB != nil {
+	// Lookup City — sapics/ip-location-db splits city data into separate
+	// IPv4 and IPv6 databases; pick the reader matching the address family.
+	cityDB := m.cityDBv4
+	if ip.To4() == nil {
+		cityDB = m.cityDBv6
+	}
+	if cityDB != nil {
 		var city CityResult
-		if err := m.cityDB.Lookup(ip, &city); err == nil {
+		if err := cityDB.Lookup(ip, &city); err == nil {
 			result.City = &city
 		}
 	}
 
-	// Lookup WHOIS
-	if m.whoisDB != nil {
-		var whois WHOISResult
-		if err := m.whoisDB.Lookup(ip, &whois); err == nil {
-			result.WHOIS = &whois
+	// WHOIS is a combined view of ASN + Country, not a separate download
+	// (AI.md PART 19: "no whois.mmdb file exists").
+	if m.whoisEnabled && (result.ASN != nil || result.Country != nil) {
+		whois := &WHOISResult{}
+		if result.ASN != nil {
+			whois.Registrant = result.ASN.Organization
+			whois.ASN = result.ASN.Number
 		}
+		if result.Country != nil {
+			whois.CountryCode = result.Country.Code
+		}
+		result.WHOIS = whois
 	}
 
 	return result, nil
@@ -205,33 +226,34 @@ func (m *GeoIPManager) loadDatabases(cfg DatabaseConfig) error {
 		}
 	}
 
-	// Load City database
+	// Load City databases (sapics/ip-location-db ships separate IPv4/IPv6 files)
 	if cfg.City {
-		cityPath := filepath.Join(m.dbDir, "city.mmdb")
-		if _, err := os.Stat(cityPath); err == nil {
-			db, err := maxminddb.Open(cityPath)
+		cityV4Path := filepath.Join(m.dbDir, "dbip-city-ipv4.mmdb")
+		if _, err := os.Stat(cityV4Path); err == nil {
+			db, err := maxminddb.Open(cityV4Path)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("city: %w", err))
+				errors = append(errors, fmt.Errorf("city ipv4: %w", err))
 			} else {
-				m.cityDB = db
-				log.Println("[GeoIP] Loaded City database")
+				m.cityDBv4 = db
+				log.Println("[GeoIP] Loaded City (IPv4) database")
+			}
+		}
+
+		cityV6Path := filepath.Join(m.dbDir, "dbip-city-ipv6.mmdb")
+		if _, err := os.Stat(cityV6Path); err == nil {
+			db, err := maxminddb.Open(cityV6Path)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("city ipv6: %w", err))
+			} else {
+				m.cityDBv6 = db
+				log.Println("[GeoIP] Loaded City (IPv6) database")
 			}
 		}
 	}
 
-	// Load WHOIS database
-	if cfg.WHOIS {
-		whoisPath := filepath.Join(m.dbDir, "whois.mmdb")
-		if _, err := os.Stat(whoisPath); err == nil {
-			db, err := maxminddb.Open(whoisPath)
-			if err != nil {
-				errors = append(errors, fmt.Errorf("WHOIS: %w", err))
-			} else {
-				m.whoisDB = db
-				log.Println("[GeoIP] Loaded WHOIS database")
-			}
-		}
-	}
+	// WHOIS is not a separate database — it's a combined view of ASN +
+	// Country computed at lookup time (AI.md PART 19).
+	m.whoisEnabled = cfg.WHOIS
 
 	if len(errors) > 0 {
 		return fmt.Errorf("failed to load some databases: %v", errors)
@@ -242,18 +264,7 @@ func (m *GeoIPManager) loadDatabases(cfg DatabaseConfig) error {
 
 // ensureDatabases downloads databases if they don't exist
 func (m *GeoIPManager) ensureDatabases(ctx context.Context, cfg DatabaseConfig) error {
-	downloads := []struct {
-		enabled  bool
-		filename string
-		url      string
-	}{
-		{cfg.ASN, "asn.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"},
-		{cfg.Country, "country.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"},
-		{cfg.City, "city.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb"},
-		{cfg.WHOIS, "whois.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"},
-	}
-
-	for _, dl := range downloads {
+	for _, dl := range geoipDownloadList(cfg) {
 		if !dl.enabled {
 			continue
 		}
@@ -265,7 +276,7 @@ func (m *GeoIPManager) ensureDatabases(ctx context.Context, cfg DatabaseConfig) 
 		}
 
 		log.Printf("[GeoIP] Downloading %s...", dl.filename)
-		if err := downloadDatabase(ctx, dl.url, dbPath); err != nil {
+		if err := downloadDatabase(ctx, dl.url, dbPath, m.userAgent); err != nil {
 			log.Printf("[GeoIP] Failed to download %s: %v", dl.filename, err)
 			continue
 		}
@@ -275,24 +286,34 @@ func (m *GeoIPManager) ensureDatabases(ctx context.Context, cfg DatabaseConfig) 
 	return nil
 }
 
-// UpdateDatabases downloads the latest databases
-func (m *GeoIPManager) UpdateDatabases(ctx context.Context, cfg DatabaseConfig) error {
-	log.Println("[GeoIP] Updating databases...")
-
-	downloads := []struct {
+// geoipDownloadList returns the sapics/ip-location-db files to download for
+// the enabled database categories (AI.md PART 19). WHOIS is intentionally
+// absent — it is a combined ASN+Country view computed at lookup time, not a
+// downloadable database.
+func geoipDownloadList(cfg DatabaseConfig) []struct {
+	enabled  bool
+	filename string
+	url      string
+} {
+	return []struct {
 		enabled  bool
 		filename string
 		url      string
 	}{
 		{cfg.ASN, "asn.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"},
 		{cfg.Country, "country.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"},
-		{cfg.City, "city.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb"},
-		{cfg.WHOIS, "whois.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"},
+		{cfg.City, "dbip-city-ipv4.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb"},
+		{cfg.City, "dbip-city-ipv6.mmdb", "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv6.mmdb"},
 	}
+}
+
+// UpdateDatabases downloads the latest databases
+func (m *GeoIPManager) UpdateDatabases(ctx context.Context, cfg DatabaseConfig) error {
+	log.Println("[GeoIP] Updating databases...")
 
 	var errors []error
 
-	for _, dl := range downloads {
+	for _, dl := range geoipDownloadList(cfg) {
 		if !dl.enabled {
 			continue
 		}
@@ -301,7 +322,7 @@ func (m *GeoIPManager) UpdateDatabases(ctx context.Context, cfg DatabaseConfig) 
 		tmpPath := dbPath + ".tmp"
 
 		log.Printf("[GeoIP] Downloading %s...", dl.filename)
-		if err := downloadDatabase(ctx, dl.url, tmpPath); err != nil {
+		if err := downloadDatabase(ctx, dl.url, tmpPath, m.userAgent); err != nil {
 			errors = append(errors, fmt.Errorf("%s: %w", dl.filename, err))
 			continue
 		}
@@ -361,18 +382,18 @@ func (m *GeoIPManager) Close() error {
 		m.countryDB = nil
 	}
 
-	if m.cityDB != nil {
-		if err := m.cityDB.Close(); err != nil {
+	if m.cityDBv4 != nil {
+		if err := m.cityDBv4.Close(); err != nil {
 			errors = append(errors, err)
 		}
-		m.cityDB = nil
+		m.cityDBv4 = nil
 	}
 
-	if m.whoisDB != nil {
-		if err := m.whoisDB.Close(); err != nil {
+	if m.cityDBv6 != nil {
+		if err := m.cityDBv6.Close(); err != nil {
 			errors = append(errors, err)
 		}
-		m.whoisDB = nil
+		m.cityDBv6 = nil
 	}
 
 	if len(errors) > 0 {

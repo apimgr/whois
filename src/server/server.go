@@ -28,6 +28,7 @@ import (
 	"github.com/apimgr/whois/src/scheduler"
 	casssl "github.com/apimgr/whois/src/ssl"
 	castor "github.com/apimgr/whois/src/tor"
+	"github.com/apimgr/whois/src/update"
 	"github.com/apimgr/whois/src/whois"
 	"github.com/apimgr/whois/src/whois/records"
 	"github.com/go-chi/chi/v5"
@@ -55,12 +56,34 @@ type Server struct {
 	stats serverStats
 	// lookupService handles RDAP-first lookups with WHOIS fallback
 	lookupService *whois.LookupService
+	// configManager polls server.yml for external edits and applies
+	// hot-reloadable settings in place, flagging restart-required ones
+	// (AI.md PART 8 — Smart Config Reload).
+	configManager *config.ConfigManager
 }
 
 // New creates a new Server instance.
 // lgr may be nil; logging is silently disabled in that case.
 func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Server {
-	memCache := cache.NewMemoryCache(100*1024*1024, 5*time.Minute)
+	memCache, err := cache.New(context.Background(), cache.Config{
+		Type:          cfg.Cache.Type,
+		URL:           cfg.Cache.URL,
+		Host:          cfg.Cache.Host,
+		Port:          cfg.Cache.Port,
+		Username:      cfg.Cache.Username,
+		Password:      cfg.Cache.Password,
+		DB:            cfg.Cache.DB,
+		TLS:           cfg.Cache.TLS,
+		TLSSkipVerify: cfg.Cache.TLSSkipVerify,
+		PoolSize:      cfg.Cache.PoolSize,
+		MinIdle:       cfg.Cache.MinIdle,
+		Timeout:       cfg.Cache.Timeout,
+		Prefix:        cfg.Cache.Prefix,
+	})
+	if err != nil {
+		log.Printf("WARN: Failed to initialize %q cache backend, falling back to in-process memory: %v", cfg.Cache.Type, err)
+		memCache = cache.NewMemoryCache(100*1024*1024, 5*time.Minute)
+	}
 	rateLimiter := ratelimit.New(60, 1*time.Minute)
 
 	// Initialize scheduler with configurable timezone and catch-up window (AI.md PART 18).
@@ -87,8 +110,9 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		cfg.GeoIP.Dir = filepath.Join(cfg.DataDir, "security", "geoip")
 	}
 	geoipCfg := geoip.GeoIPConfig{
-		Enabled: cfg.GeoIP.Enabled,
-		Dir:     cfg.GeoIP.Dir,
+		Enabled:   cfg.GeoIP.Enabled,
+		Dir:       cfg.GeoIP.Dir,
+		UserAgent: constants.InternalName + "/" + Version,
 		Databases: geoip.DatabaseConfig{
 			ASN:     cfg.GeoIP.Databases.ASN,
 			Country: cfg.GeoIP.Databases.Country,
@@ -236,6 +260,37 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		// Wire RDAP bootstrap update hook (IDEA.md — RDAP support).
 		sched.RDAPBootstrapHook = func(ctx context.Context) error {
 			return srv.lookupService.UpdateBootstrap(ctx)
+		}
+
+		// Wire the update_check hook (AI.md PART 22). Notify-only by default;
+		// only installs when server.update.auto_install is true, and only
+		// once the release has cleared server.update.defer_days.
+		sched.UpdateCheckHook = func(ctx context.Context) error {
+			var channel update.UpdateChannel
+			switch cfg.Update.Branch {
+			case "beta":
+				channel = update.ChannelBeta
+			case "daily":
+				channel = update.ChannelDaily
+			default:
+				channel = update.ChannelStable
+			}
+
+			info, err := update.CheckForUpdatesScheduled(Version, channel, cfg.Update.DeferDays)
+			if err != nil {
+				return err
+			}
+			if !info.Available {
+				return nil
+			}
+
+			if !cfg.Update.AutoInstall {
+				log.Printf("INFO: update available: %s -> %s (server.update.auto_install is false; not installing)", info.CurrentVersion, info.LatestVersion)
+				return nil
+			}
+
+			log.Printf("INFO: update available: %s -> %s; installing (server.update.auto_install is true)", info.CurrentVersion, info.LatestVersion)
+			return update.InstallUpdate(info)
 		}
 
 		if err := sched.RegisterBuiltInTasks(); err != nil {
@@ -403,6 +458,11 @@ func (s *Server) Start() error {
 			s.torService = svc
 		}
 	}()
+
+	// Start polling server.yml for external edits and hot-reload what we
+	// can in place (AI.md PART 8 — Smart Config Reload; polling, not fsnotify).
+	s.configManager = config.NewConfigManager(s.config.ConfigDir, s.config)
+	s.configManager.Start()
 
 	// Channel for OS signals
 	shutdown := make(chan os.Signal, 1)

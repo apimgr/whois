@@ -15,6 +15,7 @@ import (
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/logger"
+	appmode "github.com/apimgr/whois/src/mode"
 	"github.com/apimgr/whois/src/server"
 	"github.com/apimgr/whois/src/service"
 )
@@ -35,6 +36,15 @@ var (
 )
 
 func main() {
+	// Propagate ldflags-injected build info into the server package so that
+	// health, autodiscover, swagger, graphql and content pages report the real
+	// version/commit/date instead of the compiled-in defaults.
+	server.Version = Version
+	server.CommitID = CommitID
+	server.BuildDate = BuildDate
+	if OfficialSite != "" {
+		server.OfficialSite = OfficialSite
+	}
 	os.Exit(run(os.Args[1:]))
 }
 
@@ -111,7 +121,7 @@ func run(args []string) int {
 	fs.StringVar(&logDir, "log", "", "Log directory")
 	fs.StringVar(&backupDir, "backup", "", "Backup directory")
 	fs.StringVar(&pidFile, "pid", "", "PID file path")
-	fs.StringVar(&address, "address", "[::]", "Listen address (default: all interfaces)")
+	fs.StringVar(&address, "address", "0.0.0.0", "Listen address (default: all interfaces)")
 	fs.IntVar(&port, "port", 0, "Listen port (0 = random 64000-64999)")
 	fs.StringVar(&baseURL, "baseurl", "/", "URL path prefix")
 	fs.BoolVar(&debug, "debug", false, "Enable debug mode")
@@ -121,7 +131,7 @@ func run(args []string) int {
 	fs.StringVar(&langFlag, "lang", "", "Language for output (default: auto from LANG env)")
 	fs.StringVar(&shellCmd, "shell", "", "Shell integration (completions|init|--help) [SHELL]")
 	fs.StringVar(&serviceCmd, "service", "", "Service management (--install|--uninstall|--disable|start|stop|restart|reload|status|--help)")
-	fs.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|update|mode|setup|pgp|--help)")
+	fs.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations (backup|restore|update|mode|setup|pgp|token|data|compliance|--help)")
 	fs.StringVar(&updateCmd, "update", "", "Update operations (check|yes|branch {stable|beta|daily}|--help)")
 
 	if err := fs.Parse(args); err != nil {
@@ -223,6 +233,12 @@ func run(args []string) int {
 		log.Printf("Failed to load configuration: %v", err)
 		return 1
 	}
+
+	// Apply mode/debug from environment first, then let the resolved config
+	// (CLI flags > server.yml) win — AI.md PART 6 precedence.
+	appmode.FromEnv()
+	appmode.SetAppMode(cfg.Mode)
+	appmode.SetDebugEnabled(cfg.IsDebug())
 
 	// Apply directory overrides from CLI flags (AI.md PART 8).
 	if dataDir != "" {
@@ -537,7 +553,7 @@ func printHelp(binaryName string) {
 	fmt.Printf("Service Management:\n")
 	fmt.Printf("      --service CMD                 Service management (--install|--uninstall|--disable|start|stop|restart|reload|status|--help)\n\n")
 	fmt.Printf("Maintenance:\n")
-	fmt.Printf("      --maintenance CMD             Maintenance operations (backup|restore|update|mode|setup|pgp|--help)\n\n")
+	fmt.Printf("      --maintenance CMD             Maintenance operations (backup|restore|update|mode|setup|pgp|token|data|compliance|--help)\n\n")
 	fmt.Printf("Update:\n")
 	fmt.Printf("      --update [CMD]                Check/perform updates (check|yes|branch {stable|beta|daily}|--help)\n\n")
 	fmt.Printf("Run '%s <command> --help' for detailed help on any command.\n", binaryName)
@@ -609,13 +625,16 @@ func initDatabase(cfg *config.ServerConfig) (*db.DB, error) {
 
 	// Create database config
 	dbCfg := &db.DatabaseConfig{
-		Driver:   driver,
-		Path:     path,
-		Pool:     db.DefaultPoolConfig(),
+		Driver: driver,
+		Path:   path,
+		Pool:   db.DefaultPoolConfig(),
 	}
 
 	// Parse connection string for libsql/Turso remote databases.
 	if url != "" {
+		dbCfg.URL = url
+		dbCfg.Token = cfg.Database.Token
+
 		// Default database name when the URL does not specify one.
 		dbCfg.Name = constants.InternalName
 
