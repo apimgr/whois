@@ -112,7 +112,7 @@ func Load() (*CLIConfig, error) {
 // defaults applied. Use ResolveConfigPath to turn a --config flag value into path.
 func LoadFrom(path string) (*CLIConfig, error) {
 	cfg := &CLIConfig{
-		Format: "text",
+		Format: "table",
 	}
 
 	data, err := readFile(path)
@@ -128,7 +128,7 @@ func LoadFrom(path string) (*CLIConfig, error) {
 	}
 
 	if cfg.Format == "" {
-		cfg.Format = "text"
+		cfg.Format = "table"
 	}
 
 	return cfg, nil

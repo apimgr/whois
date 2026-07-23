@@ -14,45 +14,45 @@ import (
 // Collector holds all Prometheus metrics
 type Collector struct {
 	// Application info (REQUIRED)
-	AppInfo          *prometheus.GaugeVec
-	AppUptime        prometheus.Gauge
-	AppStartTime     prometheus.Gauge
+	AppInfo      *prometheus.GaugeVec
+	AppUptime    prometheus.Gauge
+	AppStartTime prometheus.Gauge
 
 	// HTTP metrics (REQUIRED)
-	HTTPRequestsTotal       *prometheus.CounterVec
-	HTTPRequestDuration     *prometheus.HistogramVec
-	HTTPRequestSize         *prometheus.HistogramVec
-	HTTPResponseSize        *prometheus.HistogramVec
-	HTTPActiveRequests      prometheus.Gauge
+	HTTPRequestsTotal   *prometheus.CounterVec
+	HTTPRequestDuration *prometheus.HistogramVec
+	HTTPRequestSize     *prometheus.HistogramVec
+	HTTPResponseSize    *prometheus.HistogramVec
+	HTTPActiveRequests  prometheus.Gauge
 
 	// Database metrics (REQUIRED)
-	DBQueriesTotal          *prometheus.CounterVec
-	DBQueryDuration         *prometheus.HistogramVec
-	DBConnectionsOpen       prometheus.Gauge
-	DBConnectionsInUse      prometheus.Gauge
-	DBErrorsTotal           *prometheus.CounterVec
+	DBQueriesTotal     *prometheus.CounterVec
+	DBQueryDuration    *prometheus.HistogramVec
+	DBConnectionsOpen  prometheus.Gauge
+	DBConnectionsInUse prometheus.Gauge
+	DBErrorsTotal      *prometheus.CounterVec
 
 	// Cache metrics
-	CacheHitsTotal          *prometheus.CounterVec
-	CacheMissesTotal        *prometheus.CounterVec
-	CacheEvictionsTotal     *prometheus.CounterVec
-	CacheSize               *prometheus.GaugeVec
+	CacheHitsTotal      *prometheus.CounterVec
+	CacheMissesTotal    *prometheus.CounterVec
+	CacheEvictionsTotal *prometheus.CounterVec
+	CacheSize           *prometheus.GaugeVec
 
 	// Scheduler metrics
-	SchedulerTasksTotal         *prometheus.CounterVec
-	SchedulerTaskDuration       *prometheus.HistogramVec
-	SchedulerTasksRunning       *prometheus.GaugeVec
-	SchedulerLastRunTimestamp   *prometheus.GaugeVec
-	SchedulerTaskFailures       *prometheus.CounterVec
+	SchedulerTasksTotal       *prometheus.CounterVec
+	SchedulerTaskDuration     *prometheus.HistogramVec
+	SchedulerTasksRunning     *prometheus.GaugeVec
+	SchedulerLastRunTimestamp *prometheus.GaugeVec
+	SchedulerTaskFailures     *prometheus.CounterVec
 
 	// Authentication metrics
-	AuthAttemptsTotal       *prometheus.CounterVec
-	AuthSessionsActive      prometheus.Gauge
+	AuthAttemptsTotal  *prometheus.CounterVec
+	AuthSessionsActive prometheus.Gauge
 
 	// System metrics (optional)
-	SystemCPU               prometheus.Gauge
-	SystemMemory            prometheus.Gauge
-	SystemGoroutines        prometheus.Gauge
+	SystemCPU        prometheus.Gauge
+	SystemMemory     prometheus.Gauge
+	SystemGoroutines prometheus.Gauge
 
 	startTime time.Time
 }
@@ -384,12 +384,12 @@ func (c *Collector) UpdateSystemMetrics() {
 
 // Compiled regexps for NormalizePath — package-level to avoid repeated compilation.
 var (
-	reUUID            = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
-	reWhoisIP         = regexp.MustCompile(`^(/api/v1/whois/ip/)([^/]+)(.*)$`)
-	reWhoisDomain     = regexp.MustCompile(`^(/api/v1/whois/domain/)([^/]+)(.*)$`)
-	reWhoisASN        = regexp.MustCompile(`^(/api/v1/whois/asn/)([^/]+)(.*)$`)
-	reWhoisValidate   = regexp.MustCompile(`^(/api/v1/whois/validate/)([^/]+)(.*)$`)
-	reWhoisGeneric    = regexp.MustCompile(`^(/api/v1/whois/)([^/]+)(.*)$`)
+	reUUID          = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	reWhoisIP       = regexp.MustCompile(`^(/api/v1/whois/ip/)([^/]+)(.*)$`)
+	reWhoisDomain   = regexp.MustCompile(`^(/api/v1/whois/domain/)([^/]+)(.*)$`)
+	reWhoisASN      = regexp.MustCompile(`^(/api/v1/whois/asn/)([^/]+)(.*)$`)
+	reWhoisValidate = regexp.MustCompile(`^(/api/v1/whois/validate/)([^/]+)(.*)$`)
+	reWhoisGeneric  = regexp.MustCompile(`^(/api/v1/whois/)([^/]+)(.*)$`)
 )
 
 // NormalizePath normalizes URL path for metrics by replacing high-cardinality

@@ -118,7 +118,7 @@ func (sm *ServiceManager) installSystemService() error {
 	// after binding a privileged port (AI.md PART 23). launchd manages its own
 	// accounts, so this only applies to the Linux init systems.
 	switch manager {
-	case "systemd", "openrc", "runit", "rcd":
+	case "systemd", "openrc", "sysv", "runit", "rcd":
 		if err := sm.ensureServiceUser(); err != nil {
 			return fmt.Errorf("creating service account: %w", err)
 		}
@@ -129,6 +129,8 @@ func (sm *ServiceManager) installSystemService() error {
 		return sm.installSystemd()
 	case "openrc":
 		return sm.installOpenRC()
+	case "sysv":
+		return sm.installSysV()
 	case "runit":
 		return sm.installRunit()
 	case "rcd":
@@ -311,6 +313,94 @@ start_pre() {
 
 	fmt.Printf("Service installed and started: %s\n", sm.Name)
 	fmt.Printf("Status: rc-service %s status\n", sm.Name)
+	fmt.Printf("Logs: tail -f /var/log/"+constants.InternalOrg+"/%s/server.log\n", sm.Name)
+	return nil
+}
+
+// installSysV installs a SysVinit init.d service (legacy Linux). Installation
+// path: /etc/init.d/{name} per AI.md PART 24 — same path as OpenRC; only one
+// of the two is installed per host based on detection in daemon.go.
+func (sm *ServiceManager) installSysV() error {
+	initPath := "/etc/init.d/" + sm.Name
+
+	content := fmt.Sprintf(`#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          %s
+# Required-Start:    $network $remote_fs $syslog
+# Required-Stop:     $network $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: %s
+# Description:       %s daemon
+### END INIT INFO
+
+NAME=%s
+DAEMON=%s
+DAEMON_USER=%s
+PIDFILE=/var/run/`+constants.InternalOrg+`/%s.pid
+LOGFILE=/var/log/`+constants.InternalOrg+`/%s/server.log
+
+case "$1" in
+    start)
+        echo "Starting $NAME..."
+        mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
+        chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
+        start-stop-daemon --start --quiet --background --make-pidfile \
+            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
+            --no-close >> $LOGFILE 2>&1
+        ;;
+    stop)
+        echo "Stopping $NAME..."
+        start-stop-daemon --stop --quiet --pidfile $PIDFILE --retry 30
+        rm -f $PIDFILE
+        ;;
+    restart)
+        $0 stop
+        sleep 1
+        $0 start
+        ;;
+    status)
+        if [ -f $PIDFILE ] && kill -0 $(cat $PIDFILE) 2>/dev/null; then
+            echo "$NAME is running (pid $(cat $PIDFILE))"
+            exit 0
+        else
+            echo "$NAME is stopped"
+            exit 3
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+exit 0
+`, sm.Name, sm.DisplayName, sm.DisplayName, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name)
+
+	if err := os.WriteFile(initPath, []byte(content), 0755); err != nil {
+		return fmt.Errorf("writing SysVinit script: %w", err)
+	}
+
+	// Enable at boot: Debian-style update-rc.d, falling back to RHEL-style chkconfig.
+	if updateRcD, err := exec.LookPath("update-rc.d"); err == nil {
+		if out, runErr := exec.Command(updateRcD, sm.Name, "defaults").CombinedOutput(); runErr != nil {
+			return fmt.Errorf("enabling SysVinit service: %w: %s", runErr, strings.TrimSpace(string(out)))
+		}
+	} else if chkconfig, err := exec.LookPath("chkconfig"); err == nil {
+		if out, runErr := exec.Command(chkconfig, "--add", sm.Name).CombinedOutput(); runErr != nil {
+			return fmt.Errorf("enabling SysVinit service: %w: %s", runErr, strings.TrimSpace(string(out)))
+		}
+		if out, runErr := exec.Command(chkconfig, sm.Name, "on").CombinedOutput(); runErr != nil {
+			return fmt.Errorf("enabling SysVinit service: %w: %s", runErr, strings.TrimSpace(string(out)))
+		}
+	}
+
+	// Start service
+	if err := exec.Command("/etc/init.d/"+sm.Name, "start").Run(); err != nil {
+		return fmt.Errorf("starting SysVinit service: %w", err)
+	}
+
+	fmt.Printf("Service installed and started: %s\n", sm.Name)
+	fmt.Printf("Status: /etc/init.d/%s status\n", sm.Name)
 	fmt.Printf("Logs: tail -f /var/log/"+constants.InternalOrg+"/%s/server.log\n", sm.Name)
 	return nil
 }
@@ -514,6 +604,8 @@ func (sm *ServiceManager) uninstall() error {
 		return sm.uninstallSystemd()
 	case "openrc":
 		return sm.uninstallOpenRC()
+	case "sysv":
+		return sm.uninstallSysV()
 	case "launchd":
 		return sm.uninstallLaunchd()
 	case "runit":
@@ -552,6 +644,19 @@ func (sm *ServiceManager) uninstallSystemd() error {
 // uninstallOpenRC removes an OpenRC init.d service.
 func (sm *ServiceManager) uninstallOpenRC() error {
 	exec.Command("rc-update", "del", sm.Name, "default").Run()
+	os.Remove("/etc/init.d/" + sm.Name)
+	fmt.Printf("Service uninstalled: %s\n", sm.Name)
+	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
+	return nil
+}
+
+// uninstallSysV removes a SysVinit init.d service.
+func (sm *ServiceManager) uninstallSysV() error {
+	if updateRcD, err := exec.LookPath("update-rc.d"); err == nil {
+		exec.Command(updateRcD, "-f", sm.Name, "remove").Run()
+	} else if chkconfig, err := exec.LookPath("chkconfig"); err == nil {
+		exec.Command(chkconfig, "--del", sm.Name).Run()
+	}
 	os.Remove("/etc/init.d/" + sm.Name)
 	fmt.Printf("Service uninstalled: %s\n", sm.Name)
 	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
@@ -636,6 +741,14 @@ func (sm *ServiceManager) disable() error {
 		return exec.Command("systemctl", "--user", "disable", sm.Name).Run()
 	case "openrc":
 		return exec.Command("rc-update", "del", sm.Name, "default").Run()
+	case "sysv":
+		if updateRcD, err := exec.LookPath("update-rc.d"); err == nil {
+			return exec.Command(updateRcD, "-f", sm.Name, "remove").Run()
+		}
+		if chkconfig, err := exec.LookPath("chkconfig"); err == nil {
+			return exec.Command(chkconfig, sm.Name, "off").Run()
+		}
+		return fmt.Errorf("no supported tool to disable SysVinit service (update-rc.d/chkconfig)")
 	case "launchd":
 		// Launchd unload
 		plistPath := "/Library/LaunchDaemons/io.github." + constants.InternalOrg + "." + sm.Name + ".plist"

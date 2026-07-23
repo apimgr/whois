@@ -1179,4 +1179,3 @@ func TestUninstall_YesPrompt_NotElevated_CanEscalate_Accept(t *testing.T) {
 		})
 	})
 }
-

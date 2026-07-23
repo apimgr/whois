@@ -35,7 +35,7 @@ type EmailManager struct {
 	smtpUsername string
 	smtpPassword string
 	// smtpTLS is one of: "auto", "starttls", "tls", "none"
-	smtpTLS      string
+	smtpTLS string
 
 	// Sender configuration
 	fromName  string
@@ -114,7 +114,8 @@ func (em *EmailManager) AutoDetectSMTP(fqdn string, globalIPv4 string) bool {
 	// Build list of hosts to try
 	hosts := []string{
 		"127.0.0.1",
-		"172.17.0.1", // Docker bridge gateway
+		// Docker bridge gateway
+		"172.17.0.1",
 	}
 
 	// Add gateway IP
@@ -290,9 +291,10 @@ func (em *EmailManager) loadTemplate(name string) (*EmailTemplate, error) {
 
 // parseTemplate parses template content into subject and body
 // Format:
-//   Subject: ...
-//   ---
-//   Body...
+//
+//	Subject: ...
+//	---
+//	Body...
 func (em *EmailManager) parseTemplate(content string) (*EmailTemplate, error) {
 	parts := strings.SplitN(content, "\n---\n", 2)
 	if len(parts) != 2 {

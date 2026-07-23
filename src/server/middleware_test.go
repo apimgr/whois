@@ -251,15 +251,15 @@ func TestSecurityHeadersMiddleware_RequiredHeaders(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	required := map[string]string{
-		"X-Content-Type-Options":      "nosniff",
-		"X-Frame-Options":             "SAMEORIGIN",
-		"X-XSS-Protection":            "1; mode=block",
-		"Referrer-Policy":             "strict-origin-when-cross-origin",
+		"X-Content-Type-Options":            "nosniff",
+		"X-Frame-Options":                   "SAMEORIGIN",
+		"X-XSS-Protection":                  "1; mode=block",
+		"Referrer-Policy":                   "strict-origin-when-cross-origin",
 		"X-Permitted-Cross-Domain-Policies": "none",
-		"Origin-Agent-Cluster":        "?1",
-		"Cross-Origin-Opener-Policy":  "unsafe-none",
-		"Cross-Origin-Embedder-Policy": "unsafe-none",
-		"Cross-Origin-Resource-Policy": "cross-origin",
+		"Origin-Agent-Cluster":              "?1",
+		"Cross-Origin-Opener-Policy":        "unsafe-none",
+		"Cross-Origin-Embedder-Policy":      "unsafe-none",
+		"Cross-Origin-Resource-Policy":      "cross-origin",
 	}
 	for header, want := range required {
 		got := rr.Header().Get(header)

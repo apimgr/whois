@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{{t .Lang "terms.title"}} — {{.Name}}">
+<title>{{t .Lang "terms.title"}} — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+  {{.AnnouncementsHTML}}
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms" aria-current="page">{{t .Lang "nav.terms"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <div class="container">
+    <article class="terms-page">
+      <h1>{{t .Lang "terms.title"}}</h1>
+
+      <section id="acceptance">
+        <h2>{{t .Lang "terms.acceptance_heading"}}</h2>
+        <p>{{t .Lang "terms.acceptance_desc"}} {{.Name}} {{t .Lang "terms.acceptance_suffix"}}</p>
+      </section>
+
+      <section id="terms-content">
+        {{ .Content | markdownToHTML }}
+      </section>
+    </article>
+  </div>
+</main>
+
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
+
+<script src="/static/js/main.js" defer></script>
+</body>
+</html>

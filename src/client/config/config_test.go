@@ -91,8 +91,8 @@ func TestLoadNoFileReturnsDefaults(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("Load() returned nil config")
 	}
-	if cfg.Format != "text" {
-		t.Errorf("Load().Format = %q, want %q", cfg.Format, "text")
+	if cfg.Format != "table" {
+		t.Errorf("Load().Format = %q, want %q", cfg.Format, "table")
 	}
 }
 
@@ -141,8 +141,8 @@ func TestLoadValidYAML(t *testing.T) {
 	}
 }
 
-// TestLoadEmptyFormatDefaultsToText verifies that format: "" defaults to "text".
-func TestLoadEmptyFormatDefaultsToText(t *testing.T) {
+// TestLoadEmptyFormatDefaultsToTable verifies that format: "" defaults to "table".
+func TestLoadEmptyFormatDefaultsToTable(t *testing.T) {
 	old := getOS
 	getOS = func() string { return "linux" }
 	defer func() { getOS = old }()
@@ -163,8 +163,8 @@ func TestLoadEmptyFormatDefaultsToText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
 	}
-	if cfg.Format != "text" {
-		t.Errorf("Load().Format with empty YAML field = %q, want %q", cfg.Format, "text")
+	if cfg.Format != "table" {
+		t.Errorf("Load().Format with empty YAML field = %q, want %q", cfg.Format, "table")
 	}
 }
 
@@ -438,8 +438,8 @@ func TestLoadFromMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom() unexpected error: %v", err)
 	}
-	if cfg.Format != "text" {
-		t.Errorf("LoadFrom() Format = %q, want %q", cfg.Format, "text")
+	if cfg.Format != "table" {
+		t.Errorf("LoadFrom() Format = %q, want %q", cfg.Format, "table")
 	}
 }
 

@@ -1,7 +1,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 /* ── Dark theme (default) ───────────────────────────────────────── */
-:root{
+:root,html.theme-dark{
   --bg:#0d1117;--bg-subtle:#161b22;--bg-elevated:#21262d;
   --bg-overlay:#30363d;--bg-inset:#010409;
   --fg:#e6edf3;--fg-muted:#8b949e;--fg-subtle:#6e7681;
@@ -16,7 +16,7 @@
 }
 
 /* ── Light theme ─────────────────────────────────────────────────── */
-[data-theme="light"]{
+html.theme-light{
   --bg:#ffffff;--bg-subtle:#f6f8fa;--bg-elevated:#ffffff;
   --bg-overlay:#ffffff;--bg-inset:#eaeef2;
   --fg:#1f2328;--fg-muted:#636c76;--fg-subtle:#818b98;
@@ -30,9 +30,9 @@
   --color-info-fg:#0969da;--color-info-bg:#ddf4ff;--color-info-border:#54aeff;
 }
 
-/* ── Auto mode (no data-theme set) ──────────────────────────────── */
+/* ── Auto mode: system light preference, applied via .theme-auto ─── */
 @media(prefers-color-scheme:light){
-  :root{
+  html.theme-auto{
     --bg:#ffffff;--bg-subtle:#f6f8fa;--bg-elevated:#ffffff;
     --bg-overlay:#ffffff;--bg-inset:#eaeef2;
     --fg:#1f2328;--fg-muted:#636c76;--fg-subtle:#818b98;
@@ -124,6 +124,9 @@ a:hover{color:var(--accent-hover)}
 
 /* ── Container ───────────────────────────────────────────────────── */
 .container{max-width:72rem;margin:0 auto;padding:0 1rem}
+
+/* ── PWA offline fallback page ──────────────────────────────────── */
+.offline-page main{text-align:center;padding:4rem 1rem}
 
 /* ── Cards ───────────────────────────────────────────────────────── */
 .card{
@@ -390,13 +393,13 @@ td code{font-size:0.875em}
 }
 
 /* ── Theme toggle icon helpers ───────────────────────────────────── */
-[data-theme="light"] .icon-moon{display:inline}
-[data-theme="light"] .icon-sun{display:none}
+html.theme-light .icon-moon{display:inline}
+html.theme-light .icon-sun{display:none}
 .icon-moon{display:none}
 .icon-sun{display:inline}
 @media(prefers-color-scheme:light){
-  :root:not([data-theme]) .icon-moon{display:inline}
-  :root:not([data-theme]) .icon-sun{display:none}
+  html.theme-auto .icon-moon{display:inline}
+  html.theme-auto .icon-sun{display:none}
 }
 
 /* ── PWA update banner ───────────────────────────────────────────── */
@@ -419,3 +422,73 @@ td code{font-size:0.875em}
 .mb-md{margin-bottom:1rem}
 .mb-lg{margin-bottom:1.5rem}
 .gql-textarea-vars{min-height:5rem}
+
+/* ── Cookie consent banner (PART 16) ─────────────────────────────── */
+.cookie-banner{
+  position:fixed;bottom:0;left:0;right:0;width:100%;
+  background:#7c5295;color:#ffffff;z-index:9999;
+}
+.cookie-banner-content{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:1.25rem 1rem;max-width:100%;gap:1rem;
+}
+.cookie-message{text-align:center;font-size:0.9rem;line-height:1.4}
+.cookie-banner .policy-link{color:#ffffff;text-decoration:underline}
+.cookie-banner .policy-link:hover{opacity:0.9}
+.cookie-buttons{display:flex;gap:0.75rem;flex-shrink:0;justify-content:center;flex-wrap:wrap}
+.cookie-banner .btn-decline{
+  background:transparent;border:none;color:#ffffff;
+  padding:0.625rem 1.5rem;cursor:pointer;font-size:0.9rem;
+}
+.cookie-banner .btn-decline:hover{text-decoration:underline}
+.cookie-banner .btn-accept{
+  background:#ffffff;border:none;color:#7c5295;
+  padding:0.625rem 1.5rem;cursor:pointer;font-size:0.9rem;border-radius:2px;
+}
+.cookie-banner .btn-accept:hover{opacity:0.95}
+@media(min-width:601px){
+  .cookie-banner-content{flex-direction:row;padding:0.875rem 1.5rem;gap:2rem}
+  .cookie-banner .btn-decline,.cookie-banner .btn-accept{padding:0.5rem 1.25rem}
+}
+
+/* ── Cookie preferences modal (PART 16 — Granular Consent) ───────── */
+.cookie-preferences-modal{
+  border:1px solid var(--border);border-radius:0.5rem;
+  background:var(--bg-elevated);color:var(--fg);
+  padding:1.5rem;max-width:28rem;width:90%;
+}
+.cookie-preferences-modal::backdrop{background:rgba(0,0,0,0.5)}
+.cookie-preferences-modal h2{margin-bottom:1rem;font-size:1.1rem}
+.cookie-pref-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;
+  padding:0.75rem 0;border-bottom:1px solid var(--border-subtle);
+}
+.cookie-pref-row:last-of-type{border-bottom:none}
+.cookie-pref-label p{color:var(--fg-muted);font-size:0.85rem;margin-top:0.15rem}
+.cookie-pref-always-on{color:var(--fg-muted);font-size:0.8rem;white-space:nowrap}
+.cookie-pref-actions{
+  display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1rem;
+}
+.cookie-preferences-modal .btn-decline{
+  background:transparent;border:1px solid var(--border);color:var(--fg);
+  padding:0.5rem 1.25rem;border-radius:0.25rem;cursor:pointer;
+}
+.cookie-preferences-modal .btn-accept{
+  background:var(--accent);border:none;color:var(--fg-on-accent);
+  padding:0.5rem 1.25rem;border-radius:0.25rem;cursor:pointer;
+}
+
+/* ── Site banner / announcements (PART 16) ───────────────────────── */
+.site-banner{
+  display:flex;align-items:center;gap:0.5rem;padding:0.5rem 1rem;
+  font-size:0.875rem;background:var(--color-info-bg);color:var(--color-info-fg);
+}
+.site-banner-warning,.site-banner-error{
+  background:var(--color-warning-bg);color:var(--color-warning-fg);
+}
+.site-banner-success{background:var(--color-success-bg);color:var(--color-success-fg)}
+.site-banner-text{flex:1;text-align:center}
+.site-banner-close{
+  background:none;border:none;cursor:pointer;color:inherit;
+  font-size:1.25rem;line-height:1;
+}

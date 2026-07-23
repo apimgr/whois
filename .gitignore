@@ -130,6 +130,9 @@ caswhois-*
 go.work
 go.work.sum
 
+# Vendored dependencies (not part of the documented project structure)
+vendor/
+
 # Runtime data (docker-compose creates these)
 volumes/rootfs/
 # docker/rootfs/ is committed (build-time container overlay)

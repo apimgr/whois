@@ -21,14 +21,14 @@ type IPResult struct {
 
 // IP WHOIS field patterns
 var ipPatterns = map[string]*regexp.Regexp{
-	"network":        regexp.MustCompile(`(?i)^\s*(?:inetnum|netrange|network):\s*(.+)$`),
-	"cidr":           regexp.MustCompile(`(?i)^\s*cidr:\s*(.+)$`),
-	"organization":   regexp.MustCompile(`(?i)^\s*(?:org(?:anization)?|orgname|owner|descr):\s*(.+)$`),
-	"asn":            regexp.MustCompile(`(?i)^\s*(?:origin|originas|origin\s*as):\s*(?:as)?(\d+)$`),
-	"country":        regexp.MustCompile(`(?i)^\s*country:\s*([a-z]{2})$`),
-	"abuse_email":    regexp.MustCompile(`(?i)^\s*(?:abuse-(?:c|mailbox)|orgabuseemail):\s*(.+)$`),
-	"abuse_phone":    regexp.MustCompile(`(?i)^\s*(?:abuse-phone|orgabusephone):\s*(.+)$`),
-	"allocated":      regexp.MustCompile(`(?i)^\s*(?:allocated|created|regdate):\s*(.+)$`),
+	"network":      regexp.MustCompile(`(?i)^\s*(?:inetnum|netrange|network):\s*(.+)$`),
+	"cidr":         regexp.MustCompile(`(?i)^\s*cidr:\s*(.+)$`),
+	"organization": regexp.MustCompile(`(?i)^\s*(?:org(?:anization)?|orgname|owner|descr):\s*(.+)$`),
+	"asn":          regexp.MustCompile(`(?i)^\s*(?:origin|originas|origin\s*as):\s*(?:as)?(\d+)$`),
+	"country":      regexp.MustCompile(`(?i)^\s*country:\s*([a-z]{2})$`),
+	"abuse_email":  regexp.MustCompile(`(?i)^\s*(?:abuse-(?:c|mailbox)|orgabuseemail):\s*(.+)$`),
+	"abuse_phone":  regexp.MustCompile(`(?i)^\s*(?:abuse-phone|orgabusephone):\s*(.+)$`),
+	"allocated":    regexp.MustCompile(`(?i)^\s*(?:allocated|created|regdate):\s*(.+)$`),
 }
 
 // ParseIP parses raw WHOIS response for IP queries

@@ -85,7 +85,7 @@ func TestTorConfig_Populate(t *testing.T) {
 		CircuitTimeout:            120,
 		BootstrapTimeout:          300,
 		SafeLogging:               false,
-		MaxStreamsPerCircuit:       50,
+		MaxStreamsPerCircuit:      50,
 		CloseCircuitOnStreamLimit: false,
 		BandwidthRate:             "5 MB",
 		BandwidthBurst:            "10 MB",
@@ -312,8 +312,8 @@ func TestGetTorConfig_ContainsExpectedLines(t *testing.T) {
 
 	// DefaultTorConfig has AllowUserPreference=true, so SocksPort must be "auto".
 	checks := []string{
-		"SocksPort auto",     // AllowUserPreference=true (default)
-		"SafeLogging 1",      // SafeLogging=true
+		"SocksPort auto", // AllowUserPreference=true (default)
+		"SafeLogging 1",  // SafeLogging=true
 		"BandwidthRate 1 MB",
 		"BandwidthBurst 2 MB",
 		"ExitRelay 0",
@@ -913,4 +913,3 @@ type fakeKey string
 
 func (k fakeKey) Type() control.KeyType { return "ED25519-V3" }
 func (k fakeKey) Blob() string          { return string(k) }
-

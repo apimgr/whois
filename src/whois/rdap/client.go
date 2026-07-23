@@ -92,14 +92,14 @@ type ASNResponse struct {
 
 // Entity represents an RDAP entity (registrant, registrar, etc.)
 type Entity struct {
-	ObjectClassName string       `json:"objectClassName"`
-	Handle          string       `json:"handle,omitempty"`
-	Roles           []string     `json:"roles,omitempty"`
-	VCardArray      VCardArray   `json:"vcardArray,omitempty"`
-	Entities        []Entity     `json:"entities,omitempty"`
-	Events          []Event      `json:"events,omitempty"`
-	Links           []Link       `json:"links,omitempty"`
-	PublicIDs       []PublicID   `json:"publicIds,omitempty"`
+	ObjectClassName string     `json:"objectClassName"`
+	Handle          string     `json:"handle,omitempty"`
+	Roles           []string   `json:"roles,omitempty"`
+	VCardArray      VCardArray `json:"vcardArray,omitempty"`
+	Entities        []Entity   `json:"entities,omitempty"`
+	Events          []Event    `json:"events,omitempty"`
+	Links           []Link     `json:"links,omitempty"`
+	PublicIDs       []PublicID `json:"publicIds,omitempty"`
 }
 
 // VCardArray is a jCard representation (RFC 7095)

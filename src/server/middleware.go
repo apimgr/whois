@@ -8,9 +8,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path"
+	"strconv"
 	"strings"
 
+	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/geoip"
 	"github.com/apimgr/whois/src/ratelimit"
 )
@@ -423,7 +426,6 @@ func (s *Server) LoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-
 // responseWriter wraps http.ResponseWriter to capture the status code and
 // total bytes written — both are needed for Apache Combined Log Format.
 type responseWriter struct {
@@ -448,13 +450,69 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// CORSMiddleware adds CORS headers to API routes (AI.md PART 16).
-// Applies only to paths under /api/ and /metrics; handles OPTIONS preflight.
-// cors value: "*" = wildcard (no credentials); specific origin = credentials allowed; "" = no CORS.
-func CORSMiddleware(cors string) func(http.Handler) http.Handler {
+// corsAllowedHeaders lists every auth header supported by PART 8 → "Auth
+// Token Headers (All Headers Supported)". Never "*" here: the Fetch spec's
+// Access-Control-Allow-Headers: * wildcard does not cover Authorization, and
+// wildcards are invalid when credentials are allowed (AI.md PART 16 — CORS).
+const corsAllowedHeaders = "Content-Type, Accept, X-Requested-With, Authorization, " +
+	"X-API-Key, X-Api-Key, API-Key, ApiKey, X-Auth-Token, X-Access-Token, " +
+	"X-Token, Token, X-CSRF-Token, X-XSRF-Token, X-Session-ID, " +
+	"X-Service-Token, X-Internal-Token"
+
+// resolveCORSAllowList implements the CORS Allow-list Resolution Order
+// (AI.md PART 16 — CORS Allow-list Resolution Order):
+//  1. Explicit config — server.cors.allowed_origins. A literal "*" entry
+//     allows all origins and stops resolution (credentials NOT allowed).
+//  2. DOMAIN env entries — every hostname from DOMAIN is added as an
+//     https:// origin.
+//  3. Reverse-proxy-learned hosts — X-Forwarded-Host, trusted peers only
+//     (gated on trusted_proxies — AI.md PART 12 → "Trusted Proxies").
+//  4. Default — "*" if no source produced a list (credentials NOT allowed).
+func resolveCORSAllowList(cfg config.CORSConfig, trustedProxies []string, r *http.Request) (origins []string, wildcard bool) {
+	for _, o := range cfg.AllowedOrigins {
+		if strings.TrimSpace(o) == "*" {
+			return nil, true
+		}
+	}
+
+	var list []string
+	for _, o := range cfg.AllowedOrigins {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			list = append(list, o)
+		}
+	}
+
+	if domain := os.Getenv("DOMAIN"); domain != "" {
+		for _, d := range strings.Split(domain, ",") {
+			d = strings.TrimSpace(d)
+			if d != "" {
+				list = append(list, "https://"+d)
+			}
+		}
+	}
+
+	peerHost, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if isTrustedPeer(peerHost, trustedProxies) {
+		if fwdHost := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); fwdHost != "" {
+			list = append(list, "https://"+fwdHost, "http://"+fwdHost)
+		}
+	}
+
+	if len(list) == 0 {
+		return nil, true
+	}
+	return list, false
+}
+
+// CORSMiddleware adds CORS headers to API routes (AI.md PART 16 — CORS).
+// Applies only to paths under /api/, /metrics, and /debug/; handles OPTIONS
+// preflight. A single "" entry in cfg.AllowedOrigins disables CORS headers
+// entirely (same-origin only).
+func CORSMiddleware(cfg config.CORSConfig, trustedProxies []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if cors == "" {
+			if len(cfg.AllowedOrigins) == 1 && cfg.AllowedOrigins[0] == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -470,30 +528,33 @@ func CORSMiddleware(cors string) func(http.Handler) http.Handler {
 				return
 			}
 
+			allowList, wildcard := resolveCORSAllowList(cfg, trustedProxies, r)
 			origin := r.Header.Get("Origin")
-			allowed := cors
 
-			if cors == "*" {
+			if wildcard {
 				// Wildcard: allow any origin, credentials NOT allowed.
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 			} else {
-				// Specific origins: allow only matching origin; credentials allowed.
-				origins := strings.Split(cors, ",")
-				for _, o := range origins {
-					if strings.TrimSpace(o) == origin {
-						allowed = origin
+				for _, o := range allowList {
+					if o == origin {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						// Credentials are sent only when the resolved list is
+						// explicit — never with "*" (AI.md PART 16 — CORS).
+						if cfg.AllowCredentials {
+							w.Header().Set("Access-Control-Allow-Credentials", "true")
+						}
 						break
 					}
-				}
-				w.Header().Set("Access-Control-Allow-Origin", allowed)
-				if allowed == origin {
-					w.Header().Set("Access-Control-Allow-Credentials", "true")
 				}
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "*")
-			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.Header().Set("Access-Control-Allow-Headers", corsAllowedHeaders)
+			maxAge := cfg.MaxAge
+			if maxAge <= 0 {
+				maxAge = 86400
+			}
+			w.Header().Set("Access-Control-Max-Age", strconv.Itoa(maxAge))
 
 			// Handle preflight.
 			if r.Method == http.MethodOptions {

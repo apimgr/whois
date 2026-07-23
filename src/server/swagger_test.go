@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/whois/src/swagger"
 )
 
 // TestHandleSwaggerJSON verifies /api/swagger returns valid OpenAPI JSON.
@@ -25,7 +27,7 @@ func TestHandleSwaggerJSON(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 
-	var spec OpenAPISpec
+	var spec swagger.OpenAPISpec
 	if err := json.Unmarshal(rr.Body.Bytes(), &spec); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -87,8 +89,7 @@ func TestHandleSwaggerUI(t *testing.T) {
 
 // TestBuildOpenAPISpec verifies the spec structure.
 func TestBuildOpenAPISpec(t *testing.T) {
-	s := newTestServer(t)
-	spec := s.buildOpenAPISpec("http://localhost:8080")
+	spec := swagger.BuildSpec("http://localhost:8080", Version)
 
 	// Check required endpoints exist
 	requiredPaths := []string{

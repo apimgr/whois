@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/apimgr/whois/src/common/constants"
 	"gopkg.in/yaml.v3"
@@ -15,14 +16,14 @@ type LogFileConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	Filename string `yaml:"filename"`
 	// Format selects the output format (apache/nginx/json for access; text/json for server/error).
-	Format   string `yaml:"format"`
-	Custom   string `yaml:"custom"`
+	Format string `yaml:"format"`
+	Custom string `yaml:"custom"`
 	// Rotate is the rotation policy: daily, weekly, monthly, yearly, NMB, NGB, or combined.
-	Rotate   string `yaml:"rotate"`
+	Rotate string `yaml:"rotate"`
 	// Keep is the retention policy: none, N, Nd, Nw, Nm, forever.
-	Keep     string `yaml:"keep"`
+	Keep string `yaml:"keep"`
 	// Compress rotated files (only useful when keep > 0).
-	Compress bool   `yaml:"compress"`
+	Compress bool `yaml:"compress"`
 }
 
 // LogsConfig mirrors the server.logs block in server.yml (AI.md PART 11).
@@ -175,9 +176,52 @@ type LimitsConfig struct {
 // WebConfig holds top-level web-layer settings (AI.md PART 16).
 // In server.yml this lives under the top-level web: key (sibling to server:).
 type WebConfig struct {
-	// CORS is a comma-separated list of allowed origins.
-	// "*" = allow all (default); "" = no CORS headers (same-origin only).
-	CORS string `yaml:"cors"`
+	// Footer holds footer customization settings (AI.md PART 16 — web.footer.*).
+	Footer FooterConfig `yaml:"footer"`
+	// Announcements holds site-wide announcement banner settings (AI.md PART 16 — web.announcements.*).
+	Announcements AnnouncementConfig `yaml:"announcements"`
+}
+
+// CORSConfig holds cross-origin resource sharing settings
+// (AI.md PART 16 — CORS, server.cors.*).
+type CORSConfig struct {
+	// AllowedOrigins: ["*"] = allow all (default); [""] = disable CORS
+	// headers entirely; otherwise an explicit origin list.
+	AllowedOrigins []string `yaml:"allowed_origins"`
+	// AllowCredentials is honored only when AllowedOrigins is an explicit
+	// list — never sent alongside "*" (AI.md PART 16 — CORS Allow-list
+	// Resolution Order).
+	AllowCredentials bool `yaml:"allow_credentials"`
+	// MaxAge is the Access-Control-Max-Age value in seconds.
+	MaxAge int `yaml:"max_age"`
+}
+
+// FooterConfig holds footer customization settings (AI.md PART 16 — web.footer.*).
+type FooterConfig struct {
+	// CustomHTML is sanitized branding HTML shown above the application footer.
+	// "" = default branding; " " = disable branding row; otherwise sanitized custom HTML.
+	CustomHTML string `yaml:"custom_html"`
+}
+
+// AnnouncementConfig holds site-wide announcement banner settings (AI.md PART 16 — web.announcements.*).
+type AnnouncementConfig struct {
+	Enabled  bool                  `yaml:"enabled"`
+	Messages []AnnouncementMessage `yaml:"messages"`
+}
+
+// AnnouncementMessage describes a single announcement banner entry
+// (AI.md PART 16 — Announcements → Announcement Structure).
+type AnnouncementMessage struct {
+	ID string `yaml:"id"`
+	// Type is one of: warning, info, error, success.
+	Type    string `yaml:"type"`
+	Title   string `yaml:"title"`
+	Message string `yaml:"message"`
+	// Start and End are ISO 8601 timestamps; empty means unbounded.
+	Start string `yaml:"start"`
+	End   string `yaml:"end"`
+	// Dismissible allows the user to hide the banner (persisted client-side).
+	Dismissible bool `yaml:"dismissible"`
 }
 
 // ConfigFile is the top-level structure of server.yml (AI.md PART 5).
@@ -258,10 +302,48 @@ type UpdateConfig struct {
 	DeferDays int `yaml:"defer_days"`
 }
 
+// MaintenanceSelfHealingConfig controls automatic recovery from critical
+// errors (DB connection loss, disk write failures) — AI.md PART 5.
+type MaintenanceSelfHealingConfig struct {
+	// Enabled turns on automatic retry/recovery attempts.
+	Enabled bool `yaml:"enabled"`
+	// RetryInterval is the delay between recovery attempts (Go duration string).
+	RetryInterval string `yaml:"retry_interval"`
+	// MaxAttempts caps recovery attempts before giving up (0 = unlimited).
+	MaxAttempts int `yaml:"max_attempts"`
+}
+
+// MaintenanceCleanupConfig controls automatic housekeeping thresholds used
+// while the server is in maintenance mode (AI.md PART 5).
+type MaintenanceCleanupConfig struct {
+	// DiskThreshold is the disk usage percent that triggers cleanup.
+	DiskThreshold int `yaml:"disk_threshold"`
+	// LogRetentionDays is how many days of logs to keep during cleanup.
+	LogRetentionDays int `yaml:"log_retention_days"`
+	// BackupKeepCount is how many backups to keep during cleanup.
+	BackupKeepCount int `yaml:"backup_keep_count"`
+}
+
+// MaintenanceNotifyConfig controls notifications sent when maintenance mode
+// is entered or exited (AI.md PART 5).
+type MaintenanceNotifyConfig struct {
+	// OnEnter sends a notification when maintenance mode activates.
+	OnEnter bool `yaml:"on_enter"`
+	// OnExit sends a notification when maintenance mode deactivates.
+	OnExit bool `yaml:"on_exit"`
+}
+
+// MaintenanceConfig holds maintenance-mode settings (AI.md PART 5 — server.maintenance.*).
+type MaintenanceConfig struct {
+	SelfHealing MaintenanceSelfHealingConfig `yaml:"self_healing"`
+	Cleanup     MaintenanceCleanupConfig     `yaml:"cleanup"`
+	Notify      MaintenanceNotifyConfig      `yaml:"notify"`
+}
+
 // TorConfig holds Tor hidden service settings (AI.md PART 31 — server.tor.*).
 type TorConfig struct {
-	Binary                    string `yaml:"binary"`
-	UseNetwork                bool   `yaml:"use_network"`
+	Binary     string `yaml:"binary"`
+	UseNetwork bool   `yaml:"use_network"`
 	// AllowUserPreference enables SOCKS proxy port so end-users can route their
 	// own traffic through Tor even when server UseNetwork is false (AI.md PART 31).
 	AllowUserPreference       bool   `yaml:"allow_user_preference"`
@@ -269,7 +351,7 @@ type TorConfig struct {
 	CircuitTimeout            int    `yaml:"circuit_timeout"`
 	BootstrapTimeout          int    `yaml:"bootstrap_timeout"`
 	SafeLogging               bool   `yaml:"safe_logging"`
-	MaxStreamsPerCircuit       int    `yaml:"max_streams_per_circuit"`
+	MaxStreamsPerCircuit      int    `yaml:"max_streams_per_circuit"`
 	CloseCircuitOnStreamLimit bool   `yaml:"close_circuit_on_stream_limit"`
 	BandwidthRate             string `yaml:"bandwidth_rate"`
 	BandwidthBurst            string `yaml:"bandwidth_burst"`
@@ -279,11 +361,11 @@ type TorConfig struct {
 	// OnionAddress is the .onion hostname for this service (without http:// prefix).
 	// Set by the operator after first run; used by BuildURL and privacy rules (AI.md PART 12).
 	// When set, requests whose Host matches this value are treated as Tor requests.
-	OnionAddress              string `yaml:"onion_address"`
+	OnionAddress string `yaml:"onion_address"`
 	// ContactEmail is the contact address shown exclusively in Tor responses (security.txt,
 	// contact pages). When unset, no email appears in Tor responses — never falls back to
 	// the clearnet contact email (AI.md PART 12 — Tor privacy rules).
-	ContactEmail              string `yaml:"contact_email"`
+	ContactEmail string `yaml:"contact_email"`
 }
 
 // PrivacyConfig holds privacy/consent settings for GDPR/CCPA compliance,
@@ -338,9 +420,9 @@ type ConsentConfig struct {
 		Accept  string `yaml:"accept"`
 	} `yaml:"buttons"`
 	// Position is "top" or "bottom".
-	Position         string `yaml:"position"`
-	ShowPreferences  bool   `yaml:"show_preferences"`
-	PreferencesText  string `yaml:"preferences_text"`
+	Position        string `yaml:"position"`
+	ShowPreferences bool   `yaml:"show_preferences"`
+	PreferencesText string `yaml:"preferences_text"`
 }
 
 // CookieCategories describes the cookie categories shown in the consent banner.
@@ -419,6 +501,62 @@ func (p *PrivacyConfig) IsCCPAApplicable() bool {
 	return p.Data.Sold
 }
 
+// TypeName returns the human-readable name of the configured analytics
+// provider for display on the privacy page (AI.md PART 16 — /server/privacy).
+func (t *TrackingConfig) TypeName() string {
+	switch t.Type {
+	case "umami":
+		return "Umami"
+	case "simple":
+		return "Simple Analytics"
+	case "cloudflare":
+		return "Cloudflare Web Analytics"
+	default:
+		return ""
+	}
+}
+
+// PagesConfig holds per-page content overrides for the standard /server/*
+// content pages (AI.md PART 16 — Standard Pages → Configuration).
+type PagesConfig struct {
+	About   AboutPageConfig   `yaml:"about"`
+	Privacy PrivacyPageConfig `yaml:"privacy"`
+	Contact ContactPageConfig `yaml:"contact"`
+	Help    HelpPageConfig    `yaml:"help"`
+	Terms   TermsPageConfig   `yaml:"terms"`
+}
+
+// AboutPageConfig holds additional Markdown content for the about page.
+type AboutPageConfig struct {
+	Content string `yaml:"content"`
+}
+
+// PrivacyPageConfig holds a full Markdown override for the privacy policy page.
+// Empty uses the default template built from PrivacyConfig.
+type PrivacyPageConfig struct {
+	Content string `yaml:"content"`
+}
+
+// ContactPageConfig controls the /server/contact form.
+type ContactPageConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Captcha selects the spam-prevention method: recaptcha, hcaptcha, simple.
+	Captcha string `yaml:"captcha"`
+	// SuccessMessage is shown after a successful form submission.
+	SuccessMessage string `yaml:"success_message"`
+}
+
+// HelpPageConfig holds project-specific Markdown content for the help page.
+type HelpPageConfig struct {
+	Content string `yaml:"content"`
+}
+
+// TermsPageConfig holds a full Markdown override for the terms of service page.
+// Empty uses the default template.
+type TermsPageConfig struct {
+	Content string `yaml:"content"`
+}
+
 // CacheConfig holds cache backend settings (AI.md PART 12 — server.cache.*).
 // Cache is optional and defaults to in-process memory; Valkey/Redis is
 // supported for persistence across restarts.
@@ -427,30 +565,36 @@ type CacheConfig struct {
 	Type string `yaml:"type"`
 	// URL takes precedence over host/port/username/password/db when set.
 	// Format: redis://user:password@host:port/db or valkey://...
-	URL             string `yaml:"url"`
-	Host            string `yaml:"host"`
-	Port            int    `yaml:"port"`
-	Username        string `yaml:"username"`
-	Password        string `yaml:"password"`
-	DB              int    `yaml:"db"`
-	TLS             bool   `yaml:"tls"`
-	TLSSkipVerify   bool   `yaml:"tls_skip_verify"`
-	PoolSize        int    `yaml:"pool_size"`
-	MinIdle         int    `yaml:"min_idle"`
-	Timeout         string `yaml:"timeout"`
-	Prefix          string `yaml:"prefix"`
-	TTL             string `yaml:"ttl"`
+	URL           string `yaml:"url"`
+	Host          string `yaml:"host"`
+	Port          int    `yaml:"port"`
+	Username      string `yaml:"username"`
+	Password      string `yaml:"password"`
+	DB            int    `yaml:"db"`
+	TLS           bool   `yaml:"tls"`
+	TLSSkipVerify bool   `yaml:"tls_skip_verify"`
+	PoolSize      int    `yaml:"pool_size"`
+	MinIdle       int    `yaml:"min_idle"`
+	Timeout       string `yaml:"timeout"`
+	Prefix        string `yaml:"prefix"`
+	TTL           string `yaml:"ttl"`
 }
 
 // MetricsConfig holds Prometheus metrics settings (AI.md PART 20 — server.metrics.*).
 type MetricsConfig struct {
-	Enabled        bool    `yaml:"enabled"`
-	Endpoint       string  `yaml:"endpoint"`
-	IncludeSystem  bool    `yaml:"include_system"`
-	IncludeRuntime bool    `yaml:"include_runtime"`
+	Enabled        bool   `yaml:"enabled"`
+	Endpoint       string `yaml:"endpoint"`
+	IncludeSystem  bool   `yaml:"include_system"`
+	IncludeRuntime bool   `yaml:"include_runtime"`
 	// Token is the optional Bearer token required to scrape /metrics.
 	// Empty = no auth (rely on firewall).
 	Token string `yaml:"token"`
+	// DurationBuckets are the Prometheus histogram buckets (seconds) used for
+	// request/task duration metrics. Empty = built-in PART 20 defaults.
+	DurationBuckets []float64 `yaml:"duration_buckets"`
+	// SizeBuckets are the Prometheus histogram buckets (bytes) used for
+	// request/response size metrics. Empty = built-in PART 20 defaults.
+	SizeBuckets []float64 `yaml:"size_buckets"`
 }
 
 // DatabaseConfig holds database connection settings (AI.md PART 10 — server.database.*).
@@ -486,11 +630,11 @@ type GeoIPDatabasesConfig struct {
 
 // GeoIPConfig holds GeoIP settings (AI.md PART 19 — server.geoip.*).
 type GeoIPConfig struct {
-	Enabled bool   `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
 	// Dir is the directory for downloaded MMDB files (defaults to {data_dir}/security/geoip).
-	Dir     string `yaml:"dir"`
+	Dir string `yaml:"dir"`
 	// DenyCountries lists ISO 3166-1 alpha-2 country codes to block.
-	DenyCountries  []string             `yaml:"deny_countries"`
+	DenyCountries []string `yaml:"deny_countries"`
 	// AllowCountries allows ONLY listed countries; takes precedence over DenyCountries when both set.
 	AllowCountries []string             `yaml:"allow_countries"`
 	Databases      GeoIPDatabasesConfig `yaml:"databases"`
@@ -517,6 +661,26 @@ type TLSConfig struct {
 	DNSCredentials map[string]string `yaml:"dns_credentials"`
 }
 
+// CSRFConfig holds CSRF protection settings (AI.md PART 16 — CSRF Protection).
+// Uses the stateless double-submit cookie pattern; no server-side session storage.
+type CSRFConfig struct {
+	// Enabled activates CSRF validation. Default true; set false only for
+	// API-only deployments with no browser forms at all.
+	Enabled bool `yaml:"enabled"`
+	// TokenLength is the number of random bytes used to generate each token.
+	TokenLength int `yaml:"token_length"`
+	// CookieName is the name of the CSRF token cookie.
+	CookieName string `yaml:"cookie_name"`
+	// HeaderName is the header carrying the token on XHR/fetch requests.
+	HeaderName string `yaml:"header_name"`
+	// Secure controls the cookie's Secure attribute: "auto" (Secure when the
+	// request is HTTPS), "true", or "false".
+	Secure string `yaml:"secure"`
+	// ExemptPaths lists glob patterns exempt from CSRF validation (e.g.,
+	// webhook receivers, external callbacks).
+	ExemptPaths []string `yaml:"exempt_paths"`
+}
+
 // SMTPConfig holds SMTP connection settings (AI.md PART 17).
 type SMTPConfig struct {
 	// Host is the SMTP server hostname. Empty = auto-detect on startup.
@@ -539,15 +703,65 @@ type EmailFromConfig struct {
 	Email string `yaml:"email"`
 }
 
+// EmailEventsConfig controls which lifecycle events trigger an email notification
+// (AI.md PART 17 — server.notifications.email.events.*).
+type EmailEventsConfig struct {
+	Startup          bool `yaml:"startup"`
+	Shutdown         bool `yaml:"shutdown"`
+	BackupComplete   bool `yaml:"backup_complete"`
+	BackupFailed     bool `yaml:"backup_failed"`
+	SSLExpiring      bool `yaml:"ssl_expiring"`
+	SSLRenewed       bool `yaml:"ssl_renewed"`
+	SSLRenewalFailed bool `yaml:"ssl_renewal_failed"`
+	SecurityAlert    bool `yaml:"security_alert"`
+	SchedulerError   bool `yaml:"scheduler_error"`
+	UpdateAvailable  bool `yaml:"update_available"`
+	UpdateInstalled  bool `yaml:"update_installed"`
+}
+
 // EmailNotificationsConfig holds email notification settings (AI.md PART 17).
 type EmailNotificationsConfig struct {
-	SMTP SMTPConfig      `yaml:"smtp"`
-	From EmailFromConfig `yaml:"from"`
+	SMTP   SMTPConfig        `yaml:"smtp"`
+	From   EmailFromConfig   `yaml:"from"`
+	Events EmailEventsConfig `yaml:"events"`
+}
+
+// WebUINotificationsConfig holds in-browser toast/notification settings
+// (AI.md PART 17 — server.notifications.webui.*).
+type WebUINotificationsConfig struct {
+	// Position is the on-screen placement: top-right, top-left, bottom-right, bottom-left.
+	Position string `yaml:"position"`
+	// Duration is how long a notification stays visible, in seconds.
+	Duration int `yaml:"duration"`
 }
 
 // NotificationsConfig holds all notification channel settings (AI.md PART 17).
 type NotificationsConfig struct {
+	WebUI WebUINotificationsConfig `yaml:"webui"`
 	Email EmailNotificationsConfig `yaml:"email"`
+}
+
+// TaskConfig holds per-task overrides for a built-in scheduler task
+// (AI.md PART 18 — server.scheduler.tasks.<id>.*). Zero values mean
+// "use the task's built-in default from src/scheduler/tasks.go".
+type TaskConfig struct {
+	// Schedule is a cron expression overriding the task's built-in schedule.
+	Schedule string `yaml:"schedule"`
+	// Enabled overrides whether the task runs. Persisted enable/disable state
+	// (via the "scheduler enable/disable" CLI or scheduler_tasks table) wins
+	// after first run.
+	Enabled bool `yaml:"enabled"`
+	// RetryOnFail overrides whether a failed run is retried. nil = keep the
+	// task's built-in retry policy.
+	RetryOnFail *bool `yaml:"retry_on_fail"`
+	// RetryDelay overrides the delay before the first retry (e.g. "5m").
+	RetryDelay string `yaml:"retry_delay"`
+	// Verify requests a post-run integrity check (used by backup_daily/backup_hourly).
+	Verify bool `yaml:"verify"`
+	// Retention overrides backup retention (used by backup_daily/backup_hourly).
+	Retention *BackupRetentionConfig `yaml:"retention"`
+	// RestartOnFail requests a service restart on repeated failure (used by tor_health).
+	RestartOnFail bool `yaml:"restart_on_fail"`
 }
 
 // SchedulerConfig holds scheduler settings (AI.md PART 18).
@@ -556,6 +770,16 @@ type SchedulerConfig struct {
 	Timezone string `yaml:"timezone"`
 	// CatchUpWindow is how far back the scheduler replays missed tasks on restart ("1h", "30m", etc.)
 	CatchUpWindow string `yaml:"catch_up_window"`
+	// MaxRetries is the default retry count applied when a task's TaskConfig
+	// enables retry_on_fail without specifying its own count (default 3).
+	MaxRetries int `yaml:"max_retries"`
+	// RetryDelay is the default delay before the first retry (default "5m").
+	RetryDelay string `yaml:"retry_delay"`
+	// Backoff is the default retry backoff strategy: "linear" or "exponential"
+	// (default "exponential" — e.g. 5m, 10m, 20m).
+	Backoff string `yaml:"backoff"`
+	// Tasks holds per-task overrides keyed by task ID (e.g. "backup_daily").
+	Tasks map[string]TaskConfig `yaml:"tasks"`
 }
 
 // HealthzRootConfig controls the optional /healthz root alias (AI.md PART 13).
@@ -618,8 +842,14 @@ type ServerConfig struct {
 	// TLS / Let's Encrypt settings (AI.md PART 15 — server.ssl.*)
 	TLS TLSConfig `yaml:"ssl"`
 
+	// CSRF protection settings (AI.md PART 16 — server.csrf.*)
+	CSRF CSRFConfig `yaml:"csrf"`
+
+	// CORS settings (AI.md PART 16 — server.cors.*)
+	Cors CORSConfig `yaml:"cors"`
+
 	// Web is populated from the top-level web: key by ConfigFile;
-	// stored here so handlers can access it via s.config.Web.CORS.
+	// stored here so handlers can access it via s.config.Web.
 	Web WebConfig `yaml:"-"`
 
 	// Request size and timeout limits (AI.md PART 12)
@@ -655,6 +885,9 @@ type ServerConfig struct {
 	// Tor hidden service settings (AI.md PART 31 — server.tor.*)
 	Tor TorConfig `yaml:"tor"`
 
+	// Maintenance-mode settings — self-healing, cleanup, notify (AI.md PART 5 — server.maintenance.*)
+	Maintenance MaintenanceConfig `yaml:"maintenance"`
+
 	// Privacy/consent settings — GDPR/CCPA (AI.md PART 12 — server.privacy.*)
 	Privacy PrivacyConfig `yaml:"privacy"`
 
@@ -682,6 +915,9 @@ type ServerConfig struct {
 	// Reverse WHOIS settings — local history + optional external provider (AI.md PART 14)
 	ReverseWHOIS ReverseWHOISConfig `yaml:"reverse_whois"`
 
+	// Pages settings for the standard /server/* content pages (AI.md PART 16 — Standard Pages).
+	Pages PagesConfig `yaml:"pages"`
+
 	// Debug mode
 	Debug bool `yaml:"debug"`
 
@@ -700,21 +936,32 @@ type ServerConfig struct {
 
 // Default returns a ServerConfig with sane defaults
 func Default() *ServerConfig {
+	// APPLICATION_NAME and APPLICATION_TAGLINE are init-only env vars
+	// (AI.md PART 5): only consulted while building the config generated
+	// on first run — later runs read the persisted server.yml values.
+	title := constants.InternalName
+	if envTitle := os.Getenv("APPLICATION_NAME"); envTitle != "" {
+		title = envTitle
+	}
+	tagline := ""
+	if envTagline := os.Getenv("APPLICATION_TAGLINE"); envTagline != "" {
+		tagline = envTagline
+	}
 	return &ServerConfig{
 		// Port 0 triggers random selection in range 64000-64999 on first run
-		Port:                0,
-		Address:             "0.0.0.0",
-		Mode:                "production",
-		FQDN:                "",
-		Daemonize:           false,
-		PIDFile:             true,
-		APIVersion:          "v1",
-		User:                constants.InternalName,
-		Group:               constants.InternalName,
+		Port:       0,
+		Address:    "0.0.0.0",
+		Mode:       "production",
+		FQDN:       "",
+		Daemonize:  false,
+		PIDFile:    true,
+		APIVersion: "v1",
+		User:       constants.InternalName,
+		Group:      constants.InternalName,
 		// ConfigDir, DataDir, LogDir are resolved to OS-appropriate paths at runtime
-		ConfigDir:           "",
-		DataDir:             "",
-		LogDir:              "",
+		ConfigDir: "",
+		DataDir:   "",
+		LogDir:    "",
 		// Database defaults: driver auto-detected from DATABASE_URL; paths resolved at runtime
 		Database: DatabaseConfig{
 			Driver: "",
@@ -729,12 +976,14 @@ func Default() *ServerConfig {
 			MinVersion: "1.2",
 			Staging:    false,
 		},
-		Web: WebConfig{
-			CORS: "*",
+		Cors: CORSConfig{
+			AllowedOrigins:   []string{"*"},
+			AllowCredentials: false,
+			MaxAge:           86400,
 		},
 		Branding: BrandingConfig{
-			Title:       constants.InternalName,
-			Tagline:     "",
+			Title:       title,
+			Tagline:     tagline,
 			Description: "",
 			Theme:       "auto",
 			AccentColor: "#007bff",
@@ -771,7 +1020,7 @@ func Default() *ServerConfig {
 			GlobalBurst: 240,
 		},
 		GeoIP: GeoIPConfig{
-			Enabled:        true,
+			Enabled: true,
 			// Applied at runtime: {data_dir}/security/geoip (AI.md PART 4)
 			Dir:            "",
 			DenyCountries:  []string{},
@@ -783,28 +1032,38 @@ func Default() *ServerConfig {
 				WHOIS:   true,
 			},
 		},
+		CSRF: CSRFConfig{
+			Enabled:     true,
+			TokenLength: 32,
+			CookieName:  "csrf_token",
+			HeaderName:  "X-CSRF-Token",
+			Secure:      "auto",
+			ExemptPaths: []string{},
+		},
 		Metrics: MetricsConfig{
 			Enabled:        true,
 			Endpoint:       "/metrics",
 			IncludeSystem:  true,
 			IncludeRuntime: true,
 			// No token by default — restrict by firewall
-			Token:          "",
+			Token:           "",
+			DurationBuckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+			SizeBuckets:     []float64{100, 1000, 10000, 100000, 1000000, 10000000},
 		},
 		Backup: BackupConfig{
 			// Applied at runtime: {data_dir}/backups (AI.md PART 4)
-			Dir: "",
+			Dir:        "",
 			Encryption: BackupEncryptionConfig{Enabled: false},
 			Retention: BackupRetentionConfig{
 				// Keep 1 daily full backup (default per spec)
-				MaxBackups:  1,
+				MaxBackups: 1,
 				// 0 = disabled
-				KeepWeekly:  0,
+				KeepWeekly: 0,
 				// 0 = disabled
 				KeepMonthly: 0,
 				// 0 = disabled
-				KeepYearly:     0,
-				MaxTotalSize:   "10%",
+				KeepYearly:   0,
+				MaxTotalSize: "10%",
 			},
 		},
 		Compliance: ComplianceConfig{Enabled: false},
@@ -812,6 +1071,22 @@ func Default() *ServerConfig {
 			Branch:      "stable",
 			AutoInstall: false,
 			DeferDays:   0,
+		},
+		Maintenance: MaintenanceConfig{
+			SelfHealing: MaintenanceSelfHealingConfig{
+				Enabled:       true,
+				RetryInterval: "30s",
+				MaxAttempts:   0,
+			},
+			Cleanup: MaintenanceCleanupConfig{
+				DiskThreshold:    90,
+				LogRetentionDays: 7,
+				BackupKeepCount:  5,
+			},
+			Notify: MaintenanceNotifyConfig{
+				OnEnter: true,
+				OnExit:  true,
+			},
 		},
 		Tor: TorConfig{
 			Binary:                    "",
@@ -821,7 +1096,7 @@ func Default() *ServerConfig {
 			CircuitTimeout:            60,
 			BootstrapTimeout:          180,
 			SafeLogging:               true,
-			MaxStreamsPerCircuit:       100,
+			MaxStreamsPerCircuit:      100,
 			CloseCircuitOnStreamLimit: true,
 			BandwidthRate:             "1 MB",
 			BandwidthBurst:            "2 MB",
@@ -913,6 +1188,10 @@ func Default() *ServerConfig {
 			TTL:           "1h",
 		},
 		Notifications: NotificationsConfig{
+			WebUI: WebUINotificationsConfig{
+				Position: "top-right",
+				Duration: 5,
+			},
 			Email: EmailNotificationsConfig{
 				SMTP: SMTPConfig{
 					// empty = auto-detect on startup
@@ -924,9 +1203,22 @@ func Default() *ServerConfig {
 				},
 				From: EmailFromConfig{
 					// default: branding title
-					Name:  "",
+					Name: "",
 					// default: no-reply@{fqdn}
 					Email: "",
+				},
+				Events: EmailEventsConfig{
+					Startup:          false,
+					Shutdown:         false,
+					BackupComplete:   false,
+					BackupFailed:     true,
+					SSLExpiring:      true,
+					SSLRenewed:       false,
+					SSLRenewalFailed: true,
+					SecurityAlert:    true,
+					SchedulerError:   true,
+					UpdateAvailable:  false,
+					UpdateInstalled:  true,
 				},
 			},
 		},
@@ -941,14 +1233,52 @@ func Default() *ServerConfig {
 			ID:   "",
 			URL:  "",
 		},
+		Pages: PagesConfig{
+			About:   AboutPageConfig{Content: ""},
+			Privacy: PrivacyPageConfig{Content: ""},
+			Contact: ContactPageConfig{
+				Enabled:        true,
+				Captcha:        "simple",
+				SuccessMessage: "Thank you for your message. We'll respond soon.",
+			},
+			Help:  HelpPageConfig{Content: ""},
+			Terms: TermsPageConfig{Content: ""},
+		},
 		Logs: DefaultLogsConfig(),
 		Scheduler: SchedulerConfig{
 			Timezone:      "America/New_York",
 			CatchUpWindow: "1h",
+			MaxRetries:    3,
+			RetryDelay:    "5m",
+			Backoff:       "exponential",
+			Tasks: map[string]TaskConfig{
+				"ssl_renewal":      {Schedule: "0 3 * * *", Enabled: true},
+				"geoip_update":     {Schedule: "0 3 * * 0", Enabled: true},
+				"blocklist_update": {Schedule: "0 4 * * *", Enabled: true, RetryOnFail: boolPtr(true), RetryDelay: "1h"},
+				"cve_update":       {Schedule: "0 5 * * *", Enabled: true, RetryOnFail: boolPtr(true), RetryDelay: "1h"},
+				"update_check":     {Schedule: "0 6 * * *", Enabled: true},
+				"token_cleanup":    {Schedule: "@every 15m", Enabled: true},
+				"log_rotation":     {Schedule: "0 0 * * *", Enabled: true},
+				"backup_daily": {
+					Schedule: "0 2 * * *",
+					Enabled:  true,
+					Verify:   true,
+					Retention: &BackupRetentionConfig{
+						MaxBackups:   1,
+						KeepWeekly:   0,
+						KeepMonthly:  0,
+						KeepYearly:   0,
+						MaxTotalSize: "10%",
+					},
+				},
+				"backup_hourly":    {Schedule: "@hourly", Enabled: false},
+				"healthcheck_self": {Schedule: "@every 5m", Enabled: true},
+				"tor_health":       {Schedule: "@every 10m", Enabled: true, RestartOnFail: true},
+			},
 		},
-		Debug:               false,
+		Debug: false,
 		// auto-generated on first run
-		ServerToken:         "",
+		ServerToken: "",
 	}
 }
 
@@ -959,6 +1289,18 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	}
 
 	configPath := filepath.Join(configDir, "server.yml")
+
+	// Auto-migrate a legacy server.yaml to server.yml (AI.md PART 5 "Migration":
+	// "If server.yaml found, auto-migrate to server.yml on startup"). Only runs
+	// when server.yml is absent so an existing server.yml is never overwritten.
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		legacyPath := filepath.Join(configDir, "server.yaml")
+		if _, legacyErr := os.Stat(legacyPath); legacyErr == nil {
+			if renameErr := os.Rename(legacyPath, configPath); renameErr != nil {
+				return nil, fmt.Errorf("migrate server.yaml to server.yml: %w", renameErr)
+			}
+		}
+	}
 
 	// If config doesn't exist, write the annotated default template to disk
 	// (AI.md "Configuration File > Design Rules": server.yml must be
@@ -980,8 +1322,6 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	// The web: sibling section is merged into cfg.Web after unmarshaling.
 	cfgDefault := Default()
 	cf := ConfigFile{Server: *cfgDefault}
-	// default CORS
-	cf.Web.CORS = "*"
 	if err := yaml.Unmarshal(data, &cf); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
@@ -1095,6 +1435,28 @@ func (c *ServerConfig) APIBasePath() string {
 	return "/api/" + c.APIVersion
 }
 
+// windowsProgramData returns %ProgramData% (system-wide writable data), falling
+// back to the documented default if the environment variable is unset.
+func windowsProgramData() string {
+	if v := os.Getenv("ProgramData"); v != "" {
+		return v
+	}
+	return `C:\ProgramData`
+}
+
+// windowsLocalAppData returns %LocalAppData% (per-user local data), falling
+// back to a best-effort path under the user's home directory if unset.
+func windowsLocalAppData() string {
+	if v := os.Getenv("LocalAppData"); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, "AppData", "Local")
+}
+
 // GetDatabaseDir returns the SQLite database directory
 // Priority: Explicit config -> DATABASE_DIR env -> Container default -> Native default
 func (c *ServerConfig) GetDatabaseDir() string {
@@ -1118,17 +1480,42 @@ func (c *ServerConfig) GetDatabaseDir() string {
 		return filepath.Join(c.DataDir, "db")
 	}
 
-	// 5. Root native: /var/lib/{internal_org}/{internal_name}/db (AI.md PART 4)
-	if os.Getuid() == 0 {
-		return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName + "/db"
-	}
+	// 5. Root/user native, branched by OS (AI.md PART 4)
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName, "db")
+		}
+		return filepath.Join(windowsLocalAppData(), constants.InternalOrg, constants.InternalName, "db")
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Application Support", constants.InternalOrg, constants.InternalName, "db")
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./db"
+		}
+		return filepath.Join(home, "Library", "Application Support", constants.InternalOrg, constants.InternalName, "db")
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/var", "db", constants.InternalOrg, constants.InternalName, "db")
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./db"
+		}
+		return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName, "db")
+	default:
+		if os.Getuid() == 0 {
+			return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName + "/db"
+		}
 
-	// 6. User native: ~/.local/share/{internal_org}/{internal_name}/db (AI.md PART 4)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "./db"
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./db"
+		}
+		return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName, "db")
 	}
-	return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName, "db")
 }
 
 // GetBackupDir returns the backup directory per AI.md PART 4.
@@ -1144,17 +1531,42 @@ func (c *ServerConfig) GetBackupDir() string {
 		return "/data/backups/caswhois"
 	}
 
-	// 3. Root native: /mnt/Backups/{internal_org}/{internal_name} (AI.md PART 4)
-	if os.Getuid() == 0 {
-		return "/mnt/Backups/" + constants.InternalOrg + "/" + constants.InternalName
-	}
+	// 3. Root/user native, branched by OS (AI.md PART 4)
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), "Backups", constants.InternalOrg, constants.InternalName)
+		}
+		return filepath.Join(windowsLocalAppData(), "Backups", constants.InternalOrg, constants.InternalName)
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Backups", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./backups"
+		}
+		return filepath.Join(home, "Library", "Backups", constants.InternalOrg, constants.InternalName)
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/var", "backups", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./backups"
+		}
+		return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
+	default:
+		if os.Getuid() == 0 {
+			return "/mnt/Backups/" + constants.InternalOrg + "/" + constants.InternalName
+		}
 
-	// 4. User native: ~/.local/share/Backups/{internal_org}/{internal_name} (AI.md PART 4)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "./backups"
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./backups"
+		}
+		return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
 	}
-	return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
 }
 
 // GetLogDir returns the log directory per AI.md PART 4.
@@ -1170,17 +1582,42 @@ func (c *ServerConfig) GetLogDir() string {
 		return "/data/log/caswhois"
 	}
 
-	// 3. Root native: /var/log/{internal_org}/{internal_name} (AI.md PART 4)
-	if os.Getuid() == 0 {
-		return "/var/log/" + constants.InternalOrg + "/" + constants.InternalName
-	}
+	// 3. Root/user native, branched by OS (AI.md PART 4)
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName, "logs")
+		}
+		return filepath.Join(windowsLocalAppData(), constants.InternalOrg, constants.InternalName, "logs")
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Logs", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./logs"
+		}
+		return filepath.Join(home, "Library", "Logs", constants.InternalOrg, constants.InternalName)
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/var", "log", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./logs"
+		}
+		return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
+	default:
+		if os.Getuid() == 0 {
+			return "/var/log/" + constants.InternalOrg + "/" + constants.InternalName
+		}
 
-	// 4. User native: ~/.local/log/{internal_org}/{internal_name} (AI.md PART 4)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "./logs"
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "./logs"
+		}
+		return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
 	}
-	return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
 }
 
 // GetDatabaseConfig returns database configuration from environment and config
@@ -1189,7 +1626,8 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		driver = os.Getenv("DATABASE_DRIVER")
 		if driver == "" {
-			driver = "libsql" // a remote URL implies libsql/Turso, not embedded sqlite
+			// A remote URL implies libsql/Turso, not embedded sqlite
+			driver = "libsql"
 		}
 		return driver, dbURL, ""
 	}
@@ -1198,7 +1636,8 @@ func (c *ServerConfig) GetDatabaseConfig() (driver, url, path string) {
 	if c.Database.URL != "" {
 		driver = c.Database.Driver
 		if driver == "" {
-			driver = "libsql" // a remote URL implies libsql/Turso, not embedded sqlite
+			// A remote URL implies libsql/Turso, not embedded sqlite
+			driver = "libsql"
 		}
 		return driver, c.Database.URL, ""
 	}
@@ -1242,6 +1681,11 @@ func hasSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// boolPtr returns a pointer to the given bool, for optional TaskConfig fields.
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 // Save writes the configuration to server.yml
@@ -1299,13 +1743,13 @@ func (c *ServerConfig) Save(configDir string) error {
 	configPath := filepath.Join(configDir, "server.yml")
 
 	// Marshal via ConfigFile wrapper so the file uses the server: top-level key
-	// matching the AI.md PART 5 format. web: defaults to CORS "*".
+	// matching the AI.md PART 5 format. server.cors defaults to allowed_origins: ["*"].
 	cf := ConfigFile{
 		Server: *c,
 		Web:    c.Web,
 	}
-	if cf.Web.CORS == "" {
-		cf.Web.CORS = "*"
+	if len(cf.Server.Cors.AllowedOrigins) == 0 {
+		cf.Server.Cors.AllowedOrigins = []string{"*"}
 	}
 	data, err := yaml.Marshal(cf)
 	if err != nil {

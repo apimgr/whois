@@ -92,15 +92,15 @@ type ChecksInfo struct {
 
 // StatsInfo - caswhois statistics
 type StatsInfo struct {
-	RequestsTotal   int64 `json:"requests_total"`
-	Requests24h     int64 `json:"requests_24h"`
-	ActiveConns     int   `json:"active_connections"`
-	CacheHits       int64 `json:"cache_hits"`
-	CacheMisses     int64 `json:"cache_misses"`
-	WhoisQueries    int64 `json:"whois_queries"`
-	DomainQueries   int64 `json:"domain_queries"`
-	IPQueries       int64 `json:"ip_queries"`
-	ASNQueries      int64 `json:"asn_queries"`
+	RequestsTotal int64 `json:"requests_total"`
+	Requests24h   int64 `json:"requests_24h"`
+	ActiveConns   int   `json:"active_connections"`
+	CacheHits     int64 `json:"cache_hits"`
+	CacheMisses   int64 `json:"cache_misses"`
+	WhoisQueries  int64 `json:"whois_queries"`
+	DomainQueries int64 `json:"domain_queries"`
+	IPQueries     int64 `json:"ip_queries"`
+	ASNQueries    int64 `json:"asn_queries"`
 }
 
 // handleHealth handles /healthz and /api/{version}/healthz requests
@@ -125,7 +125,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	// Get cache stats
 	ctx := context.Background()
 	cacheStats, _ := s.cache.Stats(ctx)
-	
+
 	// Build response
 	name := s.config.Branding.Title
 	if name == "" {
@@ -180,15 +180,15 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		},
 		Checks: checks,
 		Stats: StatsInfo{
-			RequestsTotal:   s.stats.requestsTotal.Load(),
-			Requests24h:     s.stats.requests24h.Load(),
-			ActiveConns:     int(s.stats.activeConns.Load()),
-			CacheHits:       cacheStats.Hits,
-			CacheMisses:     cacheStats.Misses,
-			WhoisQueries:    s.stats.domainQueries.Load() + s.stats.ipQueries.Load() + s.stats.asnQueries.Load(),
-			DomainQueries:   s.stats.domainQueries.Load(),
-			IPQueries:       s.stats.ipQueries.Load(),
-			ASNQueries:      s.stats.asnQueries.Load(),
+			RequestsTotal: s.stats.requestsTotal.Load(),
+			Requests24h:   s.stats.requests24h.Load(),
+			ActiveConns:   int(s.stats.activeConns.Load()),
+			CacheHits:     cacheStats.Hits,
+			CacheMisses:   cacheStats.Misses,
+			WhoisQueries:  s.stats.domainQueries.Load() + s.stats.ipQueries.Load() + s.stats.asnQueries.Load(),
+			DomainQueries: s.stats.domainQueries.Load(),
+			IPQueries:     s.stats.ipQueries.Load(),
+			ASNQueries:    s.stats.asnQueries.Load(),
 		},
 	}
 }
@@ -332,7 +332,7 @@ func formatUptime(d time.Duration) string {
 	days := int(d.Hours() / 24)
 	hours := int(d.Hours()) % 24
 	minutes := int(d.Minutes()) % 60
-	
+
 	if days > 0 {
 		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
 	} else if hours > 0 {

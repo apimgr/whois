@@ -45,9 +45,9 @@ func TestDetectHostnameMatchesOS(t *testing.T) {
 // comma-separated list (first value is returned), and empty (falls through to OS).
 func TestGetFQDN_DOMAINEnvVar(t *testing.T) {
 	cases := []struct {
-		name       string
-		domainEnv  string
-		want       string
+		name      string
+		domainEnv string
+		want      string
 	}{
 		{
 			name:      "single domain",
@@ -105,9 +105,9 @@ func TestGetFQDN_NeverEmpty(t *testing.T) {
 // IPs, non-loopback IPs, non-IP hostnames, and empty string.
 func TestIsLoopback_KnownValues(t *testing.T) {
 	cases := []struct {
-		name  string
-		host  string
-		want  bool
+		name string
+		host string
+		want bool
 	}{
 		// String match
 		{name: "localhost literal", host: "localhost", want: true},

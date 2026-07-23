@@ -16,16 +16,16 @@ import (
 
 // GeoIPManager handles GeoIP database operations
 type GeoIPManager struct {
-	mu         sync.RWMutex
-	dbDir      string
-	enabled    bool
-	userAgent  string
-	asnDB      *maxminddb.Reader
-	countryDB  *maxminddb.Reader
-	cityDBv4   *maxminddb.Reader
-	cityDBv6   *maxminddb.Reader
+	mu           sync.RWMutex
+	dbDir        string
+	enabled      bool
+	userAgent    string
+	asnDB        *maxminddb.Reader
+	countryDB    *maxminddb.Reader
+	cityDBv4     *maxminddb.Reader
+	cityDBv6     *maxminddb.Reader
 	whoisEnabled bool
-	lastUpdate time.Time
+	lastUpdate   time.Time
 }
 
 // GeoIPConfig represents GeoIP configuration from server.yml
@@ -49,11 +49,11 @@ type DatabaseConfig struct {
 
 // LookupResult contains all GeoIP data for an IP
 type LookupResult struct {
-	IP          string          `json:"ip"`
-	ASN         *ASNResult      `json:"asn,omitempty"`
-	Country     *CountryResult  `json:"country,omitempty"`
-	City        *CityResult     `json:"city,omitempty"`
-	WHOIS       *WHOISResult    `json:"whois,omitempty"`
+	IP      string         `json:"ip"`
+	ASN     *ASNResult     `json:"asn,omitempty"`
+	Country *CountryResult `json:"country,omitempty"`
+	City    *CityResult    `json:"city,omitempty"`
+	WHOIS   *WHOISResult   `json:"whois,omitempty"`
 }
 
 // ASNResult contains ASN information

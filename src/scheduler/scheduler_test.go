@@ -36,6 +36,18 @@ func openTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("create scheduler_tasks: %v", err)
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS scheduler_history (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		task_id     TEXT NOT NULL,
+		started_at  INTEGER NOT NULL,
+		finished_at INTEGER,
+		status      TEXT NOT NULL,
+		error       TEXT,
+		duration_ms INTEGER
+	)`)
+	if err != nil {
+		t.Fatalf("create scheduler_history: %v", err)
+	}
 	t.Cleanup(func() { db.Close() })
 	return db
 }
@@ -302,20 +314,20 @@ func TestStart_WithEnabledDisabledTasks(t *testing.T) {
 	s := newTestScheduler(t)
 
 	enabled := &Task{
-		ID:      "enabled_overdue",
-		Name:    "Enabled Overdue",
+		ID:       "enabled_overdue",
+		Name:     "Enabled Overdue",
 		Schedule: "* * * * *",
-		Enabled: true,
-		NextRun: time.Now().Add(-30 * time.Second),
-		Handler: nopHandler,
+		Enabled:  true,
+		NextRun:  time.Now().Add(-30 * time.Second),
+		Handler:  nopHandler,
 	}
 	disabled := &Task{
-		ID:      "disabled_task",
-		Name:    "Disabled Task",
+		ID:       "disabled_task",
+		Name:     "Disabled Task",
 		Schedule: "* * * * *",
-		Enabled: false,
-		NextRun: time.Now().Add(-30 * time.Second),
-		Handler: nopHandler,
+		Enabled:  false,
+		NextRun:  time.Now().Add(-30 * time.Second),
+		Handler:  nopHandler,
 	}
 
 	if err := s.Register(enabled); err != nil {
@@ -336,10 +348,10 @@ func TestRunTaskNow_Success(t *testing.T) {
 	s := newTestScheduler(t)
 	done := make(chan struct{}, 1)
 	task := &Task{
-		ID:      "run_now_task",
-		Name:    "Run Now Task",
+		ID:       "run_now_task",
+		Name:     "Run Now Task",
 		Schedule: "0 0 1 1 *",
-		Enabled: true,
+		Enabled:  true,
 		Handler: func(_ context.Context) error {
 			done <- struct{}{}
 			return nil
@@ -371,11 +383,11 @@ func TestEnableTask_Success(t *testing.T) {
 	db := openTestDB(t)
 	s, _ := New(db, "UTC", 5*time.Minute)
 	task := &Task{
-		ID:      "toggle_task",
-		Name:    "Toggle Task",
+		ID:       "toggle_task",
+		Name:     "Toggle Task",
 		Schedule: "* * * * *",
-		Enabled: false,
-		Handler: nopHandler,
+		Enabled:  false,
+		Handler:  nopHandler,
 	}
 	if err := s.Register(task); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -408,11 +420,11 @@ func TestDisableTask_Success(t *testing.T) {
 	db := openTestDB(t)
 	s, _ := New(db, "UTC", 5*time.Minute)
 	task := &Task{
-		ID:      "disable_task",
-		Name:    "Disable Task",
+		ID:       "disable_task",
+		Name:     "Disable Task",
 		Schedule: "* * * * *",
-		Enabled: true,
-		Handler: nopHandler,
+		Enabled:  true,
+		Handler:  nopHandler,
 	}
 	if err := s.Register(task); err != nil {
 		t.Fatalf("Register: %v", err)

@@ -33,6 +33,10 @@ const (
 	ErrRateLimited      = "RATE_LIMITED"
 	ErrServerError      = "SERVER_ERROR"
 	ErrMaintenance      = "MAINTENANCE"
+	// ErrCSRFFailed is returned when a mutating request's CSRF token is
+	// missing or does not match the csrf_token cookie (AI.md PART 16 —
+	// CSRF Protection, double-submit cookie pattern).
+	ErrCSRFFailed = "CSRF_FAILED"
 )
 
 // writeJSON marshals v with 2-space indentation and writes it followed by exactly
@@ -78,7 +82,7 @@ func mapErrorCodeToStatus(code string) int {
 		return http.StatusBadRequest
 	case ErrUnauthorized, ErrTokenExpired, ErrTokenInvalid:
 		return http.StatusUnauthorized
-	case ErrForbidden:
+	case ErrForbidden, ErrCSRFFailed:
 		return http.StatusForbidden
 	case ErrNotFound:
 		return http.StatusNotFound

@@ -65,7 +65,7 @@ func (s *Server) handlePublicWHOISPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := homePageData{translatablePageData: newPageData(r), Name: s.brandName()}
+	data := homePageData{translatablePageData: s.newPageData(w, r), Name: s.brandName()}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := homepageTmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
@@ -122,7 +122,7 @@ func (s *Server) handleWHOISPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// HTML clients — render the server-side result page.
-	data := whoisPageData{translatablePageData: newPageData(r), Name: s.brandName(), Query: q}
+	data := whoisPageData{translatablePageData: s.newPageData(w, r), Name: s.brandName(), Query: q}
 
 	if q != "" {
 		result, err := whois.QueryWHOISWithCache(r.Context(), q, s.cache)

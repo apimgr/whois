@@ -15,7 +15,7 @@ import (
 
 // Argon2 parameters per AI.md PART 11
 const (
-	Argon2Time    = 3
+	Argon2Time = 3
 	// 64 MB memory cost for Argon2id
 	Argon2Memory  = 64 * 1024
 	Argon2Threads = 4

@@ -26,9 +26,13 @@ func (sm *ServiceManager) start() error {
 		// Launchd services auto-start when loaded
 		plistPath := "/Library/LaunchDaemons/io.github." + constants.InternalOrg + "." + sm.Name + ".plist"
 		if _, err := os.Stat(plistPath); err == nil {
-			return exec.Command("launchctl", "start", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
+			return exec.Command("launchctl", "start", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
 		}
-		return exec.Command("launchctl", "start", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
+		return exec.Command("launchctl", "start", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
+	case "openrc":
+		return exec.Command("rc-service", sm.Name, "start").Run()
+	case "sysv":
+		return exec.Command("/etc/init.d/"+sm.Name, "start").Run()
 	case "runit":
 		return exec.Command("sv", "start", sm.Name).Run()
 	case "rcd":
@@ -49,7 +53,11 @@ func (sm *ServiceManager) stop() error {
 		}
 		return exec.Command("systemctl", "--user", "stop", sm.Name).Run()
 	case "launchd":
-		return exec.Command("launchctl", "stop", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
+		return exec.Command("launchctl", "stop", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
+	case "openrc":
+		return exec.Command("rc-service", sm.Name, "stop").Run()
+	case "sysv":
+		return exec.Command("/etc/init.d/"+sm.Name, "stop").Run()
 	case "runit":
 		return exec.Command("sv", "stop", sm.Name).Run()
 	case "rcd":
@@ -71,8 +79,12 @@ func (sm *ServiceManager) restart() error {
 		return exec.Command("systemctl", "--user", "restart", sm.Name).Run()
 	case "launchd":
 		// Launchd restart
-		exec.Command("launchctl", "stop", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
-		return exec.Command("launchctl", "start", "io.github." + constants.InternalOrg + "." + sm.Name).Run()
+		exec.Command("launchctl", "stop", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
+		return exec.Command("launchctl", "start", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
+	case "openrc":
+		return exec.Command("rc-service", sm.Name, "restart").Run()
+	case "sysv":
+		return exec.Command("/etc/init.d/"+sm.Name, "restart").Run()
 	case "runit":
 		return exec.Command("sv", "restart", sm.Name).Run()
 	case "rcd":
@@ -94,6 +106,12 @@ func (sm *ServiceManager) reload() error {
 		return exec.Command("systemctl", "--user", "reload", sm.Name).Run()
 	case "launchd":
 		// Launchd doesn't have reload, use restart
+		return sm.restart()
+	case "openrc":
+		// OpenRC init scripts do not guarantee a reload verb; fall back to restart.
+		return sm.restart()
+	case "sysv":
+		// The generated SysVinit script only supports start/stop/restart/status.
 		return sm.restart()
 	case "runit":
 		return exec.Command("sv", "reload", sm.Name).Run()
@@ -118,6 +136,10 @@ func (sm *ServiceManager) status() error {
 		}
 	case "launchd":
 		cmd = exec.Command("launchctl", "list")
+	case "openrc":
+		cmd = exec.Command("rc-service", sm.Name, "status")
+	case "sysv":
+		cmd = exec.Command("/etc/init.d/"+sm.Name, "status")
 	case "runit":
 		cmd = exec.Command("sv", "status", sm.Name)
 	case "rcd":
@@ -137,7 +159,7 @@ func (sm *ServiceManager) status() error {
 		}
 		lines := strings.Split(string(output), "\n")
 		for _, line := range lines {
-			if strings.Contains(line, "io.github." + constants.InternalOrg + "." + sm.Name) {
+			if strings.Contains(line, "io.github."+constants.InternalOrg+"."+sm.Name) {
 				fmt.Println(line)
 			}
 		}

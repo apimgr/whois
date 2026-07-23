@@ -42,18 +42,18 @@ var tldServers = map[string]Server{
 	"co":   {Host: "whois.nic.co", Port: DefaultPort},
 	"dev":  {Host: "whois.nic.google", Port: DefaultPort},
 	"app":  {Host: "whois.nic.google", Port: DefaultPort},
-	
+
 	// Country code TLDs
-	"uk":   {Host: "whois.nic.uk", Port: DefaultPort},
-	"de":   {Host: "whois.denic.de", Port: DefaultPort},
-	"fr":   {Host: "whois.afnic.fr", Port: DefaultPort},
-	"nl":   {Host: "whois.domain-registry.nl", Port: DefaultPort},
-	"au":   {Host: "whois.auda.org.au", Port: DefaultPort},
-	"ca":   {Host: "whois.cira.ca", Port: DefaultPort},
-	"jp":   {Host: "whois.jprs.jp", Port: DefaultPort},
-	"cn":   {Host: "whois.cnnic.cn", Port: DefaultPort},
-	"ru":   {Host: "whois.tcinet.ru", Port: DefaultPort},
-	"br":   {Host: "whois.registro.br", Port: DefaultPort},
+	"uk": {Host: "whois.nic.uk", Port: DefaultPort},
+	"de": {Host: "whois.denic.de", Port: DefaultPort},
+	"fr": {Host: "whois.afnic.fr", Port: DefaultPort},
+	"nl": {Host: "whois.domain-registry.nl", Port: DefaultPort},
+	"au": {Host: "whois.auda.org.au", Port: DefaultPort},
+	"ca": {Host: "whois.cira.ca", Port: DefaultPort},
+	"jp": {Host: "whois.jprs.jp", Port: DefaultPort},
+	"cn": {Host: "whois.cnnic.cn", Port: DefaultPort},
+	"ru": {Host: "whois.tcinet.ru", Port: DefaultPort},
+	"br": {Host: "whois.registro.br", Port: DefaultPort},
 }
 
 // Address returns the server address (host:port)
@@ -78,7 +78,7 @@ func GetServerForDomain(domain string) Server {
 	}
 
 	tld := parts[len(parts)-1]
-	
+
 	// Check if we have a specific server for this TLD
 	if server, ok := GetTLDServer(tld); ok {
 		return server

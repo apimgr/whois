@@ -167,6 +167,30 @@ func SearchByOwner(ctx context.Context, db *sql.DB, owner string, limit, offset 
 	return recs, nil
 }
 
+// CountByOwner returns the total number of local whois_records rows matching
+// the same owner search term used by SearchByOwner, for pagination totals.
+func CountByOwner(ctx context.Context, db *sql.DB, owner string) (int, error) {
+	if strings.TrimSpace(owner) == "" {
+		return 0, fmt.Errorf("owner search term must not be empty")
+	}
+
+	pattern := "%" + strings.ToLower(strings.TrimSpace(owner)) + "%"
+
+	var total int
+	err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM whois_records
+		WHERE LOWER(registrant_name)  LIKE ?
+		   OR LOWER(registrant_org)   LIKE ?
+		   OR LOWER(registrant_email) LIKE ?`,
+		pattern, pattern, pattern,
+	).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("count whois records: %w", err)
+	}
+
+	return total, nil
+}
+
 // RefreshStale returns the list of queries whose last_updated is older than
 // maxAgeDays days. The scheduler re-queries each returned query and calls
 // UpsertRecord to refresh it.

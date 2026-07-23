@@ -128,11 +128,13 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 
 	// Initialize Metrics (PART 20)
 	metricsCfg := metrics.MetricsConfig{
-		Enabled:        cfg.Metrics.Enabled,
-		Endpoint:       cfg.Metrics.Endpoint,
-		IncludeSystem:  cfg.Metrics.IncludeSystem,
-		IncludeRuntime: cfg.Metrics.IncludeRuntime,
-		Token:          cfg.Metrics.Token,
+		Enabled:         cfg.Metrics.Enabled,
+		Endpoint:        cfg.Metrics.Endpoint,
+		IncludeSystem:   cfg.Metrics.IncludeSystem,
+		IncludeRuntime:  cfg.Metrics.IncludeRuntime,
+		Token:           cfg.Metrics.Token,
+		DurationBuckets: cfg.Metrics.DurationBuckets,
+		SizeBuckets:     cfg.Metrics.SizeBuckets,
 	}
 	metricsCollector := metrics.New(constants.InternalName, metricsCfg)
 	if metricsCollector != nil {
@@ -296,6 +298,28 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		if err := sched.RegisterBuiltInTasks(); err != nil {
 			log.Printf("WARN: Failed to register built-in tasks: %v", err)
 		}
+
+		// Apply per-task retry overrides from server.yml (AI.md PART 18).
+		if len(cfg.Scheduler.Tasks) > 0 {
+			defaultRetryDelay := 5 * time.Minute
+			if cfg.Scheduler.RetryDelay != "" {
+				if d, parseErr := time.ParseDuration(cfg.Scheduler.RetryDelay); parseErr == nil {
+					defaultRetryDelay = d
+				}
+			}
+
+			overrides := make(map[string]scheduler.TaskOverride, len(cfg.Scheduler.Tasks))
+			for id, tc := range cfg.Scheduler.Tasks {
+				ov := scheduler.TaskOverride{RetryOnFail: tc.RetryOnFail}
+				if tc.RetryDelay != "" {
+					if d, parseErr := time.ParseDuration(tc.RetryDelay); parseErr == nil {
+						ov.RetryDelay = d
+					}
+				}
+				overrides[id] = ov
+			}
+			sched.ApplyTaskOverrides(overrides, cfg.Scheduler.MaxRetries, defaultRetryDelay, cfg.Scheduler.Backoff)
+		}
 	}
 
 	return srv
@@ -441,7 +465,7 @@ func (s *Server) Start() error {
 			CircuitTimeout:            s.config.Tor.CircuitTimeout,
 			BootstrapTimeout:          s.config.Tor.BootstrapTimeout,
 			SafeLogging:               s.config.Tor.SafeLogging,
-			MaxStreamsPerCircuit:       s.config.Tor.MaxStreamsPerCircuit,
+			MaxStreamsPerCircuit:      s.config.Tor.MaxStreamsPerCircuit,
 			CloseCircuitOnStreamLimit: s.config.Tor.CloseCircuitOnStreamLimit,
 			BandwidthRate:             s.config.Tor.BandwidthRate,
 			BandwidthBurst:            s.config.Tor.BandwidthBurst,
@@ -531,6 +555,8 @@ func (s *Server) setupRoutes() http.Handler {
 	// Health check endpoints (PART 13)
 	r.Get("/server/healthz", s.handleHealth)
 	r.Get(apiBase+"/server/healthz", s.handleHealth)
+	// Unversioned API alias — always enabled, machine-friendly versionless probing (AI.md PART 13/14)
+	r.Get("/api/healthz", s.handleHealth)
 	// Root alias for load-balancer probes — only when server.healthz.root.enabled: true
 	if s.config.Healthz.Root.Enabled {
 		r.Get("/healthz", s.handleHealth)
@@ -563,10 +589,31 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/offline.html", s.handleOfflinePage)
 
 	// Public content pages
+	r.Get("/server", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
+	})
 	r.Get("/server/about", s.handleAboutPage)
 	r.Get("/about", s.handleAboutPage)
 	r.Get("/server/docs", s.handleDocsPage)
 	r.Get("/docs", s.handleDocsPage)
+
+	// Privacy, Contact, Help, Terms pages (AI.md PART 16) — dual web/API routes
+	r.Get("/server/privacy", s.handlePrivacyPage)
+	r.Get(apiBase+"/server/privacy", s.handlePrivacyAPI)
+	r.Get("/server/contact", s.handleContactPage)
+	r.Post("/server/contact", s.requireCSRF(s.handleContactPage))
+	r.Post(apiBase+"/server/contact", s.handleContactAPI)
+	r.Get("/server/help", s.handleHelpPage)
+	r.Get(apiBase+"/server/help", s.handleHelpAPI)
+	r.Get("/server/terms", s.handleTermsPage)
+	r.Get(apiBase+"/server/terms", s.handleTermsAPI)
+
+	// Cookie consent / CCPA opt-out (AI.md PART 16)
+	r.Post("/server/consent", s.requireCSRF(s.handleConsent))
+	r.Post("/server/ccpa", s.requireCSRF(s.handleCCPA))
+
+	// Site banner / announcements dismissal (AI.md PART 16)
+	r.Post("/announcements/dismiss", s.requireCSRF(s.handleAnnouncementDismiss))
 
 	// Swagger/OpenAPI endpoints (AI.md PART 14)
 	r.Get("/server/docs/swagger", s.handleSwaggerUI)
@@ -575,8 +622,8 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// GraphQL endpoints (AI.md PART 14)
 	r.Get("/server/docs/graphql", s.handleGraphiQL)
-	r.Post("/api/graphql", s.handleGraphQL)
-	r.Post(apiBase+"/server/graphql", s.handleGraphQL)
+	r.Post("/api/graphql", s.requireCSRF(s.handleGraphQL))
+	r.Post(apiBase+"/server/graphql", s.requireCSRF(s.handleGraphQL))
 
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
 	r.Get("/whois", s.handleWHOISPage)
@@ -655,7 +702,7 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	handler = SecFetchValidationMiddleware(handler)
 	handler = SecurityHeadersMiddleware(s.config.FQDN, s.config.APIVersion, s.config.TLS.Enabled, s.config.Debug)(handler)
 	// 3. CORS headers for API paths — handles OPTIONS preflight before route handlers.
-	handler = CORSMiddleware(s.config.Web.CORS)(handler)
+	handler = CORSMiddleware(s.config.Cors, s.config.TrustedProxies.Additional)(handler)
 	// 2. Path traversal check and normalization.
 	handler = PathSecurityMiddleware(handler)
 	// 1b. Request ID assignment — before PathSecurity so the ID is always set.
@@ -723,7 +770,6 @@ func (s *Server) getPIDFilePath() string {
 	homeDir, _ := os.UserHomeDir()
 	return filepath.Join(homeDir, ".local", "share", constants.InternalOrg, constants.InternalName, constants.InternalName+".pid")
 }
-
 
 // handleMetrics returns the Prometheus metrics handler.
 // PART 20: /metrics endpoint (INTERNAL ONLY — never proxy to public).
@@ -924,7 +970,6 @@ func wellKnownMethodCheck(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
 
 // parseDurationDefault parses a duration string (e.g. "30s", "2m") and returns
 // fallback if the string is empty or invalid.

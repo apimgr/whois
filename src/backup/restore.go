@@ -21,11 +21,11 @@ import (
 type RestoreOptions struct {
 	BackupFile string
 	// Password is required when restoring an encrypted backup
-	Password   string
-	ConfigDir  string
-	DataDir    string
+	Password  string
+	ConfigDir string
+	DataDir   string
 	// Force skips interactive confirmation prompts
-	Force      bool
+	Force bool
 }
 
 // Restore restores from backup per AI.md PART 21 specification
@@ -235,7 +235,7 @@ func extractBackup(data []byte, destDir string) error {
 // loadManifest loads and parses manifest.json
 func loadManifest(backupDir string) (*Manifest, error) {
 	manifestPath := filepath.Join(backupDir, "manifest.json")
-	
+
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)

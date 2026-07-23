@@ -15,7 +15,7 @@ import (
 type step int
 
 const (
-	stepURL   step = iota
+	stepURL step = iota
 	stepTest
 	stepToken
 	stepDone

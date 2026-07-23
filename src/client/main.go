@@ -33,20 +33,28 @@ func main() {
 // run parses args and drives the CLI, returning an exit code.
 func run(args []string) int {
 	var (
-		flagHelp    bool
-		flagServer  string
-		flagToken   string
-		flagOutput  string
-		flagFormat  string
-		flagNoColor bool
-		flagLang    string
-		flagColor   string
-		flagUpdate  string
-		flagDebug   bool
-		flagVersion bool
-		flagStatus  bool
-		flagConfig  string
+		flagHelp      bool
+		flagServer    string
+		flagToken     string
+		flagTokenFile string
+		flagOutput    string
+		flagFormat    string
+		flagNoColor   bool
+		flagLang      string
+		flagColor     string
+		flagUpdate    string
+		flagDebug     bool
+		flagVersion   bool
+		flagStatus    bool
+		flagConfig    string
 	)
+
+	// --shell is handled before flag parsing since it takes positional
+	// arguments (completions|init|help [SHELL]) rather than a single value
+	// (AI.md PART 32: "Shell Completions").
+	if len(args) > 0 && args[0] == "--shell" {
+		return handleShellCommand(args[1:])
+	}
 
 	fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -55,7 +63,8 @@ func run(args []string) int {
 	fs.BoolVar(&flagHelp, "h", false, "Show help message")
 	fs.StringVar(&flagServer, "server", "", "Server base URL")
 	fs.StringVar(&flagToken, "token", "", "API token")
-	fs.StringVar(&flagOutput, "output", "", "Output format: json/text/raw (default: text)")
+	fs.StringVar(&flagTokenFile, "token-file", "", "Read API token from file")
+	fs.StringVar(&flagOutput, "output", "", "Output format: json/table/plain (default: table)")
 	fs.StringVar(&flagFormat, "format", "", "Output format alias for --output")
 	fs.BoolVar(&flagNoColor, "no-color", false, "Disable color output")
 	fs.StringVar(&flagLang, "lang", "", "Language code (en, es, zh, fr, ar, de, ja)")
@@ -89,7 +98,7 @@ func run(args []string) int {
 	cfg, err := config.LoadFrom(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not load config: %v\n", err)
-		cfg = &config.CLIConfig{Format: "text"}
+		cfg = &config.CLIConfig{Format: "table"}
 	}
 
 	if flagServer != "" {
@@ -97,6 +106,14 @@ func run(args []string) int {
 	}
 	if flagToken != "" {
 		cfg.Token = flagToken
+	}
+	if flagToken == "" && flagTokenFile != "" {
+		data, readErr := os.ReadFile(flagTokenFile)
+		if readErr != nil {
+			fmt.Fprintf(os.Stderr, "Error reading --token-file: %v\n", readErr)
+			return 1
+		}
+		cfg.Token = strings.TrimSpace(string(data))
 	}
 	// --output takes precedence; --format is a legacy alias.
 	if flagOutput != "" {
@@ -390,7 +407,7 @@ func printResult(result *lookup.Result, err error, format string) int {
 		}
 		fmt.Println(string(data))
 
-	case "raw":
+	case "plain":
 		fmt.Println(result.Raw)
 
 	default:
@@ -427,7 +444,8 @@ func showHelp() {
 	fmt.Println("  --status                     Health check (exit 0=healthy, 1=unhealthy)")
 	fmt.Println("  --server URL                 Server base URL")
 	fmt.Println("  --token TOKEN                API token")
-	fmt.Println("  --output FORMAT              Output format: json/text/raw (default: text)")
+	fmt.Println("  --token-file FILE            Read API token from file")
+	fmt.Println("  --output FORMAT              Output format: json/table/plain (default: table)")
 	fmt.Println("  --format FORMAT              Alias for --output (legacy)")
 	fmt.Println("  --lang CODE                  Language: en/es/zh/fr/ar/de/ja (default: en)")
 	fmt.Println("  --color always|never|auto    Color output (default: auto)")
@@ -436,6 +454,9 @@ func showHelp() {
 	fmt.Println("  --update branch=NAME         Switch update channel (stable/beta/daily)")
 	fmt.Println("  --config NAME                Config file to use (name, name.yml, or absolute path)")
 	fmt.Println("  --debug                      Debug mode")
+	fmt.Println("  --shell completions [SHELL]  Print shell completions (auto-detect if SHELL omitted)")
+	fmt.Println("  --shell init [SHELL]         Print shell init command (auto-detect if SHELL omitted)")
+	fmt.Println("  --shell help                 Show shell integration help")
 	fmt.Println()
 	fmt.Println("Environment Variables:")
 	fmt.Println("  CASWHOIS_SERVER    Default server URL")
@@ -452,4 +473,160 @@ func showHelp() {
 	fmt.Printf("  %s ip 8.8.8.8 --format json\n", binaryName)
 	fmt.Printf("  %s asn AS15169\n", binaryName)
 	fmt.Printf("  %s --update check\n", binaryName)
+}
+
+// handleShellCommand implements --shell completions|init|help [SHELL] and
+// returns an exit code (AI.md PART 32: "Shell Completions (Built-in, NON-NEGOTIABLE)").
+func handleShellCommand(args []string) int {
+	binaryName := filepath.Base(os.Args[0])
+
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: --shell [completions|init|help] [SHELL]")
+		return 1
+	}
+
+	cmd := args[0]
+	shell := ""
+	if len(args) > 1 {
+		shell = args[1]
+	} else {
+		shell = detectShell()
+	}
+
+	switch cmd {
+	case "completions":
+		return printCompletions(shell, binaryName)
+	case "init":
+		return printInit(shell, binaryName)
+	case "help":
+		fmt.Printf("Shell integration for %s:\n", binaryName)
+		fmt.Println("  --shell completions [SHELL]  Print shell completions")
+		fmt.Println("  --shell init [SHELL]         Print shell init command")
+		fmt.Println("  SHELL: bash, zsh, fish, sh, dash, ksh, powershell, pwsh (auto-detect if omitted)")
+		return 0
+	default:
+		fmt.Fprintln(os.Stderr, "Usage: --shell [completions|init|help] [SHELL]")
+		return 1
+	}
+}
+
+// detectShell extracts the shell name from the $SHELL environment variable,
+// falling back to "bash" when unset.
+func detectShell() string {
+	shellPath := os.Getenv("SHELL")
+	if shellPath == "" {
+		return "bash"
+	}
+	return filepath.Base(shellPath)
+}
+
+// printCompletions prints a completion script for the given shell to stdout.
+func printCompletions(shell, binaryName string) int {
+	switch shell {
+	case "bash":
+		fmt.Print(generateBashCompletions(binaryName))
+	case "zsh":
+		fmt.Print(generateZshCompletions(binaryName))
+	case "fish":
+		fmt.Print(generateFishCompletions(binaryName))
+	case "sh", "dash", "ksh":
+		fmt.Print(generatePosixCompletions(binaryName))
+	case "powershell", "pwsh":
+		fmt.Print(generatePowershellCompletions(binaryName))
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unsupported shell %q\n", shell)
+		return 1
+	}
+	return 0
+}
+
+// printInit prints the eval-ready init command for the given shell.
+func printInit(shell, binaryName string) int {
+	switch shell {
+	case "bash":
+		fmt.Printf("source <(%s --shell completions bash)\n", binaryName)
+	case "zsh":
+		fmt.Printf("source <(%s --shell completions zsh)\n", binaryName)
+	case "fish":
+		fmt.Printf("%s --shell completions fish | source\n", binaryName)
+	case "sh", "dash", "ksh":
+		fmt.Printf("eval \"$(%s --shell completions %s)\"\n", binaryName, shell)
+	case "powershell", "pwsh":
+		fmt.Printf("Invoke-Expression (& %s --shell completions powershell)\n", binaryName)
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unsupported shell %q\n", shell)
+		return 1
+	}
+	return 0
+}
+
+// cliCommands lists the client's project-specific subcommands for completion generation.
+var cliCommands = []string{"domain", "ip", "asn", "lookup", "validate"}
+
+// cliFlags lists the client's long-form flags for completion generation.
+var cliFlags = []string{
+	"--help", "--version", "--status", "--server", "--token", "--token-file",
+	"--output", "--format", "--lang", "--color", "--update", "--config",
+	"--debug", "--no-color", "--shell",
+}
+
+// generateBashCompletions returns a bash completion script for binaryName.
+func generateBashCompletions(binaryName string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "_%s_completions() {\n", binaryName)
+	fmt.Fprintf(&b, "    local cur=\"${COMP_WORDS[COMP_CWORD]}\"\n")
+	fmt.Fprintf(&b, "    local opts=\"%s %s\"\n", strings.Join(cliCommands, " "), strings.Join(cliFlags, " "))
+	fmt.Fprintf(&b, "    COMPREPLY=($(compgen -W \"${opts}\" -- \"${cur}\"))\n")
+	fmt.Fprintf(&b, "}\n")
+	fmt.Fprintf(&b, "complete -F _%s_completions %s\n", binaryName, binaryName)
+	return b.String()
+}
+
+// generateZshCompletions returns a zsh completion script for binaryName.
+func generateZshCompletions(binaryName string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#compdef %s\n\n", binaryName)
+	fmt.Fprintf(&b, "_%s() {\n", binaryName)
+	fmt.Fprintf(&b, "    local -a opts\n")
+	fmt.Fprintf(&b, "    opts=(%s %s)\n", strings.Join(cliCommands, " "), strings.Join(cliFlags, " "))
+	fmt.Fprintf(&b, "    _describe 'command' opts\n")
+	fmt.Fprintf(&b, "}\n\n")
+	fmt.Fprintf(&b, "compdef _%s %s\n", binaryName, binaryName)
+	return b.String()
+}
+
+// generateFishCompletions returns a fish completion script for binaryName.
+func generateFishCompletions(binaryName string) string {
+	var b strings.Builder
+	for _, c := range cliCommands {
+		fmt.Fprintf(&b, "complete -c %s -n '__fish_use_subcommand' -a '%s'\n", binaryName, c)
+	}
+	for _, f := range cliFlags {
+		fmt.Fprintf(&b, "complete -c %s -l '%s'\n", binaryName, strings.TrimPrefix(f, "--"))
+	}
+	return b.String()
+}
+
+// generatePosixCompletions returns a minimal POSIX-shell completion helper for binaryName.
+func generatePosixCompletions(binaryName string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# POSIX shell has no native completion API.\n")
+	fmt.Fprintf(&b, "# Available commands and flags for %s:\n", binaryName)
+	fmt.Fprintf(&b, "# %s %s\n", strings.Join(cliCommands, " "), strings.Join(cliFlags, " "))
+	return b.String()
+}
+
+// generatePowershellCompletions returns a PowerShell completion script for binaryName.
+func generatePowershellCompletions(binaryName string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {\n", binaryName)
+	fmt.Fprintf(&b, "    param($wordToComplete, $commandAst, $cursorPosition)\n")
+	fmt.Fprintf(&b, "    $opts = @(%s, %s)\n",
+		"'"+strings.Join(cliCommands, "', '")+"'",
+		"'"+strings.Join(cliFlags, "', '")+"'")
+	fmt.Fprintf(&b, "    $opts | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {\n")
+	fmt.Fprintf(&b, "        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)\n")
+	fmt.Fprintf(&b, "    }\n")
+	fmt.Fprintf(&b, "}\n")
+	return b.String()
 }

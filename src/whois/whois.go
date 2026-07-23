@@ -33,14 +33,14 @@ type Query struct {
 
 // WHOISResult represents a WHOIS query result
 type WHOISResult struct {
-	Query     string                `json:"query"`
-	Type      WHOISQueryType        `json:"type"`
-	Server    string                `json:"server"`
-	Raw       string                `json:"raw"`
-	Timestamp time.Time             `json:"timestamp"`
-	Domain    *parser.DomainResult  `json:"domain,omitempty"`
-	IP        *parser.IPResult      `json:"ip,omitempty"`
-	ASN       *parser.ASNResult     `json:"asn,omitempty"`
+	Query     string               `json:"query"`
+	Type      WHOISQueryType       `json:"type"`
+	Server    string               `json:"server"`
+	Raw       string               `json:"raw"`
+	Timestamp time.Time            `json:"timestamp"`
+	Domain    *parser.DomainResult `json:"domain,omitempty"`
+	IP        *parser.IPResult     `json:"ip,omitempty"`
+	ASN       *parser.ASNResult    `json:"asn,omitempty"`
 }
 
 // DetectQueryType determines the type of query
@@ -73,7 +73,7 @@ func DetectQueryType(query string) WHOISQueryType {
 // SelectServer determines which WHOIS server to use
 func SelectServer(qtype WHOISQueryType, value string) string {
 	var server Server
-	
+
 	switch qtype {
 	case QueryTypeDomain:
 		server = GetServerForDomain(value)

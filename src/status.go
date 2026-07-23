@@ -598,13 +598,13 @@ func handleData(args []string, configDir string) int {
 		if len(args) < 2 {
 			// No IP given — CCPA "what data is collected" disclosure (AI.md PART 12).
 			summary := map[string]interface{}{
-				"data_sold":              cfg.Privacy.Data.Sold,
-				"stored_on_server_only":  cfg.Privacy.Data.StoredOnServer,
-				"retention_period":       cfg.Privacy.Retention.Period,
-				"export_available":       cfg.Privacy.Retention.ExportAvailable,
-				"deletion_available":     cfg.Privacy.Retention.DeletionAvailable,
-				"categories_collected":   []string{"request IP address (audit/security log)", "rate-limit counters (ephemeral, in-memory)"},
-				"third_party_sharing":    cfg.Privacy.ThirdParty.Services,
+				"data_sold":             cfg.Privacy.Data.Sold,
+				"stored_on_server_only": cfg.Privacy.Data.StoredOnServer,
+				"retention_period":      cfg.Privacy.Retention.Period,
+				"export_available":      cfg.Privacy.Retention.ExportAvailable,
+				"deletion_available":    cfg.Privacy.Retention.DeletionAvailable,
+				"categories_collected":  []string{"request IP address (audit/security log)", "rate-limit counters (ephemeral, in-memory)"},
+				"third_party_sharing":   cfg.Privacy.ThirdParty.Services,
 			}
 			out, err := json.MarshalIndent(summary, "", "  ")
 			if err != nil {
@@ -975,4 +975,3 @@ func switchUpdateChannel(channel, binaryName string) error {
 
 	return update.SetUpdateChannel(updateChannel, configPath)
 }
-

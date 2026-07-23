@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/apimgr/whois/src/config"
 )
 
 // --- content negotiation (content.go) ---
@@ -421,26 +423,26 @@ func TestLoggingMiddlewareRecordsStats(t *testing.T) {
 	}
 }
 
-// TestCORSMiddlewareDisabled verifies empty cors value skips CORS headers.
+// TestCORSMiddlewareDisabled verifies a single "" entry skips CORS headers.
 func TestCORSMiddlewareDisabled(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := CORSMiddleware("")(next)
+	h := CORSMiddleware(config.CORSConfig{AllowedOrigins: []string{""}}, nil)(next)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Header().Get("Access-Control-Allow-Origin") != "" {
-		t.Error("CORS headers set when cors = empty string")
+		t.Error("CORS headers set when allowed_origins = [\"\"]")
 	}
 }
 
-// TestCORSMiddlewareWildcard verifies * cors allows all origins.
+// TestCORSMiddlewareWildcard verifies "*" allowed_origins allows all origins.
 func TestCORSMiddlewareWildcard(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := CORSMiddleware("*")(next)
+	h := CORSMiddleware(config.CORSConfig{AllowedOrigins: []string{"*"}}, nil)(next)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
 	req.Header.Set("Origin", "https://example.com")
 	rr := httptest.NewRecorder()
@@ -456,7 +458,8 @@ func TestCORSMiddlewareSpecificOriginMatch(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	origin := "https://app.example.com"
-	h := CORSMiddleware(origin)(next)
+	cfg := config.CORSConfig{AllowedOrigins: []string{origin}, AllowCredentials: true}
+	h := CORSMiddleware(cfg, nil)(next)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
 	req.Header.Set("Origin", origin)
 	rr := httptest.NewRecorder()
@@ -474,7 +477,7 @@ func TestCORSMiddlewarePreflight(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("next should not be called on OPTIONS preflight")
 	})
-	h := CORSMiddleware("*")(next)
+	h := CORSMiddleware(config.CORSConfig{AllowedOrigins: []string{"*"}}, nil)(next)
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/test", nil)
 	req.Header.Set("Origin", "https://example.com")
 	rr := httptest.NewRecorder()
@@ -491,7 +494,7 @@ func TestCORSMiddlewareNonAPIPathSkipped(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
-	h := CORSMiddleware("*")(next)
+	h := CORSMiddleware(config.CORSConfig{AllowedOrigins: []string{"*"}}, nil)(next)
 	req := httptest.NewRequest(http.MethodGet, "/about", nil)
 	req.Header.Set("Origin", "https://example.com")
 	rr := httptest.NewRecorder()

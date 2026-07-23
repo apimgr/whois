@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/whois/src/graphql"
 )
 
 // TestHandleGraphQLMethodNotAllowed verifies GET returns 405.
@@ -70,7 +72,7 @@ func TestHandleGraphQLHealthQuery(t *testing.T) {
 		t.Errorf("status = %d, want 200", rr.Code)
 	}
 
-	var resp GraphQLResponse
+	var resp graphql.GraphQLResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -98,7 +100,7 @@ func TestHandleGraphQLStatsQuery(t *testing.T) {
 		t.Errorf("status = %d, want 200", rr.Code)
 	}
 
-	var resp GraphQLResponse
+	var resp graphql.GraphQLResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -122,7 +124,7 @@ func TestHandleGraphQLIntrospection(t *testing.T) {
 		t.Errorf("status = %d, want 200", rr.Code)
 	}
 
-	var resp GraphQLResponse
+	var resp graphql.GraphQLResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -146,7 +148,7 @@ func TestHandleGraphQLUnknownQuery(t *testing.T) {
 		t.Errorf("status = %d, want 200 (GraphQL returns 200 with errors)", rr.Code)
 	}
 
-	var resp GraphQLResponse
+	var resp graphql.GraphQLResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -241,7 +243,7 @@ func TestHandleGraphQLWhoisMissingQuery(t *testing.T) {
 
 	s.handleGraphQL(rr, req)
 
-	var resp GraphQLResponse
+	var resp graphql.GraphQLResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -262,7 +264,7 @@ func TestWriteGraphQLError(t *testing.T) {
 		t.Errorf("status = %d, want 400", rr.Code)
 	}
 
-	var resp GraphQLResponse
+	var resp graphql.GraphQLResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}

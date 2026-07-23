@@ -13,11 +13,11 @@ import (
 // to their documented defaults (60 req / 1 min).
 func TestNewDefaults(t *testing.T) {
 	cases := []struct {
-		name        string
-		requests    int
-		duration    time.Duration
-		wantReqs    int
-		wantDur     time.Duration
+		name     string
+		requests int
+		duration time.Duration
+		wantReqs int
+		wantDur  time.Duration
 	}{
 		{
 			name:     "zero requests uses default 60",

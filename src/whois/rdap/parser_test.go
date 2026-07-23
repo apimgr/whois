@@ -27,7 +27,7 @@ func TestParseDomainResponse(t *testing.T) {
 		},
 		Entities: []Entity{
 			{
-				Roles:      []string{"registrar"},
+				Roles: []string{"registrar"},
 				VCardArray: VCardArray{"vcard", []interface{}{
 					[]interface{}{"fn", struct{}{}, "text", "Test Registrar"},
 				}},
@@ -36,7 +36,7 @@ func TestParseDomainResponse(t *testing.T) {
 				},
 			},
 			{
-				Roles:      []string{"registrant"},
+				Roles: []string{"registrant"},
 				VCardArray: VCardArray{"vcard", []interface{}{
 					[]interface{}{"fn", struct{}{}, "text", "John Doe"},
 					[]interface{}{"org", struct{}{}, "text", "Test Org"},
@@ -107,7 +107,7 @@ func TestParseIPResponse(t *testing.T) {
 		},
 		Entities: []Entity{
 			{
-				Roles:      []string{"registrant"},
+				Roles: []string{"registrant"},
 				VCardArray: VCardArray{"vcard", []interface{}{
 					[]interface{}{"org", struct{}{}, "text", "Google LLC"},
 				}},
@@ -160,7 +160,7 @@ func TestParseASNResponse(t *testing.T) {
 		},
 		Entities: []Entity{
 			{
-				Roles:      []string{"registrant"},
+				Roles: []string{"registrant"},
 				VCardArray: VCardArray{"vcard", []interface{}{
 					[]interface{}{"org", struct{}{}, "text", "Google LLC"},
 				}},

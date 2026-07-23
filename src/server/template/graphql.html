@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{.Lang}}" dir="{{.Dir}}" data-theme="{{.Theme}}">
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -46,6 +46,7 @@
 </style>
 </head>
 <body>
+  {{.AnnouncementsHTML}}
 <a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
 <a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
 
@@ -55,6 +56,10 @@
     <ul class="nav-links" role="list">
       <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
       <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms">{{t .Lang "nav.terms"}}</a></li>
     </ul>
     <div class="nav-actions">
       <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
@@ -76,6 +81,7 @@
 
     <form id="gql-form" action="{{.EndpointURL}}" method="POST"
       data-endpoint="{{.EndpointURL}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="gql-layout">
         <div class="gql-pane">
           <label for="gql-query"><strong>{{t .Lang "graphql.query_label"}}</strong></label>
@@ -125,20 +131,15 @@
   </div>
 </main>
 
-<footer class="site-footer">
-  <p>
-    <a href="/">{{.Name}}</a> &mdash;
-    <a href="/about">{{t .Lang "nav.about"}}</a> &middot;
-    <a href="/docs">{{t .Lang "nav.docs"}}</a> &middot;
-    <a href="/server/healthz">{{t .Lang "footer.health"}}</a>
-  </p>
-</footer>
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
 
 <script src="/static/js/main.js" defer></script>
 <script>
 (function() {
   var form = document.getElementById('gql-form');
   var responseEl = document.getElementById('gql-response');
+  var csrfInput = form ? form.querySelector('input[name="csrf_token"]') : null;
   if (!form || !responseEl) return;
 
   form.addEventListener('submit', function(e) {
@@ -163,9 +164,12 @@
 
     responseEl.textContent = '{{t .Lang "common.loading"}}';
 
+    var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    if (csrfInput) headers['X-CSRF-Token'] = csrfInput.value;
+
     fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: headers,
       body: JSON.stringify(body),
     })
     .then(function(r) { return r.json(); })

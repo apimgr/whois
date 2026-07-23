@@ -259,9 +259,9 @@ func TestLookupResult_Fields(t *testing.T) {
 		ASN:     &ASNResult{Number: 64512, Organization: "Test-AS"},
 		Country: &CountryResult{Code: "US"},
 		City: &CityResult{
-			City:     "Raleigh",
-			State1:   "NC",
-			Postcode: "27601",
+			City:      "Raleigh",
+			State1:    "NC",
+			Postcode:  "27601",
 			Latitude:  35.77,
 			Longitude: -78.63,
 			Timezone:  "America/New_York",

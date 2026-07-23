@@ -17,7 +17,10 @@ var templateFiles embed.FS
 
 // templateFuncMap holds functions available to all embedded templates.
 var templateFuncMap = template.FuncMap{
-	"t": translateKey,
+	"t":              translateKey,
+	"footer":         renderFooter,
+	"markdownToHTML": markdownToHTML,
+	"humanize":       humanize,
 }
 
 // translateKey looks up a translation key for the given language, falling

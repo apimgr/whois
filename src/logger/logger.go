@@ -1,13 +1,14 @@
 // Package logger opens and manages all required log files for caswhois.
 // Log files per AI.md PART 11:
-//   access.log   — Apache Combined Log Format (HTTP requests)
-//   server.log   — Text format (application events)
-//   error.log    — Text format (error messages)
-//   app.log      — logfmt format (general info/warn events)
-//   auth.log     — Syslog RFC 3164 format (authentication events)
-//   audit.log    — JSON format (security events; machine-parseable)
-//   security.log — Fail2ban format (security/auth events)
-//   debug.log    — Text format (verbose debug events; written only when debug mode enabled)
+//
+//	access.log   — Apache Combined Log Format (HTTP requests)
+//	server.log   — Text format (application events)
+//	error.log    — Text format (error messages)
+//	app.log      — logfmt format (general info/warn events)
+//	auth.log     — Syslog RFC 3164 format (authentication events)
+//	audit.log    — JSON format (security events; machine-parseable)
+//	security.log — Fail2ban format (security/auth events)
+//	debug.log    — Text format (verbose debug events; written only when debug mode enabled)
 //
 // All log files are raw text only: no ANSI codes, no emojis, one event per line.
 package logger

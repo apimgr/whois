@@ -75,7 +75,7 @@ func validatePath(p string) error {
 	for _, seg := range segments {
 		if seg == "" {
 			// Skip empty (from //)
-		continue
+			continue
 		}
 		if err := validatePathSegment(seg); err != nil {
 			return err

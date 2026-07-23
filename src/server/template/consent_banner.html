@@ -1,0 +1,56 @@
+<div id="cookie-consent" class="cookie-banner" data-sold="{{if .DataSold}}true{{else}}false{{end}}">
+  <div class="cookie-banner-content">
+    <span class="cookie-message">
+      {{.Message}} - <a href="{{.PolicyURL}}" class="policy-link">{{.PolicyText}}</a>
+    </span>
+    <div class="cookie-buttons">
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="choice" value="decline">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-decline">{{.DeclineText}}</button>
+      </form>
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="choice" value="accept">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-accept">{{.AcceptText}}</button>
+      </form>
+      {{if .ShowPreferences}}
+      <button type="button" class="btn-decline" data-action="cookie-preferences">{{.PreferencesText}}</button>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{if .ShowPreferences}}
+<dialog id="cookie-preferences-modal" class="cookie-preferences-modal">
+  <form method="post" action="/server/consent" id="cookie-preferences-form">
+    <h2>{{.PreferencesHeading}}</h2>
+    <input type="hidden" name="choice" value="save">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="cookie-pref-row">
+      <div class="cookie-pref-label">
+        <strong>{{.EssentialLabel}}</strong>
+        <p>{{.EssentialDesc}}</p>
+      </div>
+      <span class="cookie-pref-always-on">{{.AlwaysOnText}}</span>
+    </div>
+    <div class="cookie-pref-row">
+      <div class="cookie-pref-label">
+        <label for="pref-preferences"><strong>{{.PreferencesLabel}}</strong></label>
+        <p>{{.PreferencesDesc}}</p>
+      </div>
+      <input type="checkbox" id="pref-preferences" name="preferences" checked>
+    </div>
+    <div class="cookie-pref-row">
+      <div class="cookie-pref-label">
+        <label for="pref-analytics"><strong>{{.AnalyticsLabel}}</strong></label>
+        <p>{{.AnalyticsDesc}}</p>
+      </div>
+      <input type="checkbox" id="pref-analytics" name="analytics" checked>
+    </div>
+    <div class="cookie-pref-actions">
+      <button type="button" class="btn-decline" data-action="cookie-preferences-close">{{.CloseText}}</button>
+      <button type="submit" class="btn-accept">{{.SavePreferencesText}}</button>
+    </div>
+  </form>
+</dialog>
+{{end}}

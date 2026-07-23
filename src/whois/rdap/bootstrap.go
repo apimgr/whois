@@ -25,9 +25,9 @@ const (
 
 // BootstrapFile represents an IANA RDAP bootstrap file structure
 type BootstrapFile struct {
-	Version     string       `json:"version"`
-	Publication string       `json:"publication"`
-	Description string       `json:"description,omitempty"`
+	Version     string        `json:"version"`
+	Publication string        `json:"publication"`
+	Description string        `json:"description,omitempty"`
 	Services    [][2][]string `json:"services"`
 }
 

@@ -7,6 +7,7 @@ on:
     branches: [main, master]
   schedule:
     - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,6 +18,7 @@ concurrency:
 
 jobs:
   lint:
+    name: Lint
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container:
@@ -27,6 +29,7 @@ jobs:
       - run: staticcheck ./...
 
   test:
+    name: Test
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container:
@@ -42,18 +45,107 @@ jobs:
         run: |
           mkdir -p "/tmp/${REPO_OWNER}"
           COVDIR=$(mktemp -d "/tmp/${REPO_OWNER}/${REPO_NAME}-XXXXXX")
-          echo "COVDIR=$COVDIR" >> "$GITHUB_ENV"
-          go test -cover -coverprofile="$COVDIR/coverage.out" ./...
-      - name: Enforce coverage threshold
+          go test -cover -coverprofile="${COVDIR}/coverage.out" ./...
+          cp "${COVDIR}/coverage.out" coverage.out
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Set scan range
         run: |
-          THRESHOLD=60
-          PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
-          if [ "$PCT" -lt "$THRESHOLD" ]; then
-            echo "::error::coverage $PCT% < threshold $THRESHOLD%"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            echo "BASE=${{ github.event.before }}" >> "$GITHUB_ENV"
+            echo "HEAD=${{ github.event.after }}" >> "$GITHUB_ENV"
+          else
+            # schedule / workflow_dispatch / first push on a ref - scan full history
+            echo "BASE=" >> "$GITHUB_ENV"
+            echo "HEAD=" >> "$GITHUB_ENV"
+          fi
+      - name: truffleHog scan
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
+        with:
+          base: ${{ env.BASE }}
+          head: ${{ env.HEAD }}
+          extra_args: --results=verified,unknown
+
+  workflow-policy:
+    name: Workflow Policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Enforce SHA-pinned third-party Actions
+        run: |
+          set -euo pipefail
+          VIOLATIONS=$(grep -rInE '^[[:space:]]*uses:[[:space:]]*[^@]+@[^[:space:]]+' .github/workflows \
+            | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "Third-party Actions must be pinned to a full 40-char commit SHA:"
+            echo "$VIOLATIONS"
             exit 1
           fi
+          echo "All Actions are SHA-pinned."
+      - name: Reject committed .env files
+        run: |
+          set -euo pipefail
+          ENV_FILES=$(find . -path ./.git -prune -o -name '.env' -print -o -name '*.env' -print || true)
+          if [ -n "$ENV_FILES" ]; then
+            echo "Committed .env file(s) found (forbidden):"
+            echo "$ENV_FILES"
+            exit 1
+          fi
+          echo "No committed .env files."
+
+  vuln-scan:
+    name: Vulnerability & License Scan
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: govulncheck
+        run: govulncheck ./...
+      - name: Reject copyleft licenses
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "/tmp/${REPO_OWNER}"
+          TMPDIR=$(mktemp -d "/tmp/${REPO_OWNER}/${REPO_NAME}-XXXXXX")
+          GOBIN="${TMPDIR}/bin" go install github.com/google/go-licenses@latest
+          REPORT="${TMPDIR}/licenses.csv"
+          "${TMPDIR}/bin/go-licenses" report ./... > "$REPORT" 2>/dev/null || true
+          FORBIDDEN=$(grep -iE '(GPL|LGPL|AGPL)' "$REPORT" || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "Forbidden copyleft license(s) detected:"
+            echo "$FORBIDDEN"
+            exit 1
+          fi
+          echo "No GPL/LGPL/AGPL dependencies detected."
 
   build:
+    name: Build
     if: github.event_name != 'schedule'
     needs: [lint, test]
     runs-on: ubuntu-latest
@@ -65,10 +157,76 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - run: go build -buildvcs=false ./...
 
-  vuln-check:
+  coverage:
+    name: Coverage Gate
+    if: github.event_name != 'schedule'
+    needs: build
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-      - run: govulncheck ./...
+      - name: Download coverage artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: coverage-report
+      - name: Enforce coverage threshold
+        run: |
+          set -euo pipefail
+          THRESHOLD=60
+          PCT=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          if [ "$PCT" -lt "$THRESHOLD" ]; then
+            echo "::error::coverage $PCT% < threshold $THRESHOLD%"
+            exit 1
+          fi
+          echo "Coverage $PCT% meets threshold $THRESHOLD%."
+
+  image-scan:
+    name: Image Scan
+    if: github.event_name != 'schedule' && hashFiles('docker/Dockerfile') != ''
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Build image for scanning
+        run: docker build -f docker/Dockerfile -t caswhois:ci-scan .
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8  # v0.36.0
+        with:
+          image-ref: caswhois:ci-scan
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+  upload-artifacts:
+    name: Upload Build Artifacts
+    if: github.event_name != 'schedule'
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Set build info
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=dev-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          fi
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+      - name: Build binary
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o caswhois-linux-amd64 ./src
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: caswhois-linux-amd64-ci
+          path: caswhois-linux-amd64
+          retention-days: 7

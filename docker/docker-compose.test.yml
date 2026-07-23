@@ -7,9 +7,9 @@ services:
     container_name: caswhois-test
     restart: "no"
     environment:
-      - MODE=development
-      - DEBUG=true
-      - TZ=America/New_York
+      DEBUG: 1
+      MODE: dev
+      TZ: America/New_York
     ports:
       - "64581:80"
     volumes:

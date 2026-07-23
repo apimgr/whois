@@ -1,14 +1,18 @@
 (function(){
   var root=document.documentElement;
-  // Theme is set server-side via data-theme on <html> from the theme cookie (AI.md PART 16).
-  // JS only writes the cookie when the user toggles — the server applies it on every render.
+  // Theme is set server-side via class="theme-*" on <html> from the theme cookie (AI.md PART 16).
+  // JS only writes the cookie and swaps the class when the user toggles — no page reload,
+  // no matchMedia detection (auto mode is pure CSS via prefers-color-scheme).
   var toggle=document.getElementById('theme-toggle');
+  var order=['dark','light','auto'];
   if(toggle){
     toggle.addEventListener('click',function(){
-      var current=root.getAttribute('data-theme');
-      var isDark=(current==='dark')||(current===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);
-      var next=isDark?'light':'dark';
-      root.setAttribute('data-theme',next);
+      var current='dark';
+      for(var i=0;i<order.length;i++){
+        if(root.classList.contains('theme-'+order[i])){current=order[i];break;}
+      }
+      var next=order[(order.indexOf(current)+1)%order.length];
+      root.className=root.className.replace(/\btheme-(dark|light|auto)\b/,'theme-'+next);
       // Persist in cookie so the server reads it on next request (SameSite=Lax, 1-year TTL).
       document.cookie='theme='+next+'; path=/; max-age=31536000; SameSite=Lax';
     });
@@ -83,6 +87,149 @@
       e.preventDefault();
       var q=el.getAttribute('data-query');
       if(q){input.value=q;doLookup(q);}
+    });
+  });
+})();
+
+// Cookie consent module (AI.md PART 16 — Cookie Consent Banner).
+// Enhancement only - the banner forms POST to /server/consent and work
+// without JS. This script intercepts the submits to skip the reload.
+(function() {
+  function readConsentCookie() {
+    var match = document.cookie.match(/(?:^|;\s*)cookie_consent=([^;]+)/);
+    if (!match) return null;
+    try { return JSON.parse(decodeURIComponent(match[1])); }
+    catch (e) { return null; }
+  }
+
+  function writeConsentCookie(consent) {
+    var value = encodeURIComponent(JSON.stringify(consent));
+    document.cookie = 'cookie_consent=' + value + '; path=/; max-age=31536000; SameSite=Lax';
+  }
+
+  function applyConsent(consent) {
+    // Essential cookies always work (sessions, CSRF).
+    if (consent.preferences) {
+      document.cookie = 'preferencesEnabled=true; path=/; max-age=31536000; SameSite=Lax';
+    }
+    if (consent.analytics) { loadTracking(); }
+  }
+
+  function loadTracking() {
+    // Tracking script is injected server-side via {{ trackingScript }};
+    // nothing to do client-side once consent.analytics is true.
+  }
+
+  function saveAndApplyConsent(consent) {
+    writeConsentCookie(consent);
+    var banner = document.getElementById('cookie-consent');
+    if (banner) { banner.remove(); }
+    applyConsent(consent);
+  }
+
+  document.querySelectorAll('#cookie-consent form').forEach(function(form) {
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      var accepted = form.elements.choice.value === 'accept';
+      saveAndApplyConsent({
+        essential: true,
+        preferences: accepted,
+        analytics: accepted,
+        timestamp: Date.now()
+      });
+    });
+  });
+
+  function showCookiePreferences() {
+    var modal = document.getElementById('cookie-preferences-modal');
+    if (!modal) return;
+    var consent = readConsentCookie();
+    var prefInput = document.getElementById('pref-preferences');
+    var analyticsInput = document.getElementById('pref-analytics');
+    if (consent && prefInput) { prefInput.checked = !!consent.preferences; }
+    if (consent && analyticsInput) { analyticsInput.checked = !!consent.analytics; }
+    if (typeof modal.showModal === 'function') { modal.showModal(); }
+  }
+
+  document.querySelectorAll('[data-action="cookie-preferences"]').forEach(function(el) {
+    el.addEventListener('click', showCookiePreferences);
+  });
+
+  document.querySelectorAll('[data-action="cookie-preferences-close"]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var modal = document.getElementById('cookie-preferences-modal');
+      if (modal) { modal.close(); }
+    });
+  });
+
+  var prefsForm = document.getElementById('cookie-preferences-form');
+  if (prefsForm) {
+    prefsForm.addEventListener('submit', function(event) {
+      event.preventDefault();
+      var prefInput = document.getElementById('pref-preferences');
+      var analyticsInput = document.getElementById('pref-analytics');
+      saveAndApplyConsent({
+        essential: true,
+        preferences: !!(prefInput && prefInput.checked),
+        analytics: !!(analyticsInput && analyticsInput.checked),
+        timestamp: Date.now()
+      });
+      var modal = document.getElementById('cookie-preferences-modal');
+      if (modal) { modal.close(); }
+    });
+  }
+
+  function applyCCPAOptOut() {
+    document.cookie = 'ccpa_opt_out=true; path=/; max-age=31536000; SameSite=Lax';
+  }
+
+  function ccpaDoNotSell() {
+    applyCCPAOptOut();
+    saveAndApplyConsent({
+      essential: true,
+      preferences: false,
+      analytics: false,
+      timestamp: Date.now(),
+      ccpaOptOut: true
+    });
+  }
+
+  document.querySelectorAll('form[action="/server/ccpa"]').forEach(function(form) {
+    form.addEventListener('submit', function(event) {
+      if (form.elements.choice.value === 'opt-out') {
+        event.preventDefault();
+        ccpaDoNotSell();
+      }
+    });
+  });
+
+  function initCCPA() {
+    var banner = document.getElementById('cookie-consent');
+    var dataSold = banner && banner.dataset.sold === 'true';
+    if (!dataSold) return;
+    var doNotSell = /(?:^|;\s*)ccpa_opt_out=true/.test(document.cookie);
+    if (doNotSell) { applyCCPAOptOut(); }
+  }
+
+  initCCPA();
+})();
+
+// Site banner dismissal (AI.md PART 16 — Site Banner).
+// Enhancement only - the dismiss form POSTs to /announcements/dismiss and
+// works without JS. This script intercepts the submit to skip the reload.
+(function() {
+  document.querySelectorAll('.site-banner .site-banner-dismiss').forEach(function(form) {
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      var banner = form.closest('.site-banner');
+      if (!banner) return;
+      var match = document.cookie.match(/(?:^|;\s*)dismissed_announcements=([^;]*)/);
+      var ids = match ? decodeURIComponent(match[1]).split(',').filter(Boolean) : [];
+      var id = banner.getAttribute('data-announcement-id');
+      if (id && ids.indexOf(id) === -1) { ids.push(id); }
+      document.cookie = 'dismissed_announcements=' + encodeURIComponent(ids.join(',')) +
+        '; path=/; max-age=31536000; SameSite=Lax';
+      banner.remove();
     });
   });
 })();

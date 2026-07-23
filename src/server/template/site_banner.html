@@ -1,0 +1,13 @@
+{{range .}}
+<div class="site-banner site-banner-{{.Type}}" role="{{.Role}}" data-announcement-id="{{.ID}}">
+  <span class="site-banner-icon" aria-hidden="true">{{.Icon}}</span>
+  <span class="site-banner-text">{{.Message}}</span>
+  {{if .Dismissible}}
+  <form method="post" action="/announcements/dismiss" class="site-banner-dismiss">
+    <input type="hidden" name="id" value="{{.ID}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit" class="site-banner-close" aria-label="{{.DismissAria}}">&times;</button>
+  </form>
+  {{end}}
+</div>
+{{end}}

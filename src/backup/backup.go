@@ -35,17 +35,17 @@ type Manifest struct {
 
 // BackupOptions configures backup behavior
 type BackupOptions struct {
-	ConfigDir   string
-	DataDir     string
-	OutputFile  string
+	ConfigDir  string
+	DataDir    string
+	OutputFile string
 	// Password is an optional encryption passphrase; leave empty for unencrypted backup
 	Password    string
 	IncludeSSL  bool
 	IncludeData bool
 	// AdminUser is the username of the admin initiating the backup (for audit log)
-	AdminUser   string
+	AdminUser string
 	// AppVersion is the current application version embedded in the backup manifest
-	AppVersion  string
+	AppVersion string
 }
 
 // Create creates a backup per AI.md PART 21 specification
@@ -307,7 +307,7 @@ func addFileToTar(tw *tar.Writer, name string, data []byte) error {
 
 func addPathToTar(tw *tar.Writer, baseDir, relPath string, contents *[]string) error {
 	fullPath := filepath.Join(baseDir, relPath)
-	
+
 	f, err := os.Open(fullPath)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", relPath, err)
@@ -709,7 +709,8 @@ func ApplyRetentionPolicy(backupDir string, maxBackups, keepWeekly, keepMonthly,
 		if len(base) < 28 {
 			continue
 		}
-		dateStr := base[17:27] // "2025-01-15"
+		// Example: "2025-01-15"
+		dateStr := base[17:27]
 		date, err := time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			continue

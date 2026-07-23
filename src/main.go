@@ -9,13 +9,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/logger"
 	appmode "github.com/apimgr/whois/src/mode"
+	"github.com/apimgr/whois/src/scheduler"
 	"github.com/apimgr/whois/src/server"
 	"github.com/apimgr/whois/src/service"
 )
@@ -66,6 +69,7 @@ var knownSubcommands = map[string]bool{
 	"restart":   true,
 	"status":    true,
 	"update":    true,
+	"scheduler": true,
 }
 
 func run(args []string) int {
@@ -328,6 +332,10 @@ func runSubcommand(subcmd, binaryName string, remainingArgs []string) int {
 	// "update" checks for or applies updates (same as --update).
 	case "update":
 		return runUpdateSubcmd(binaryName, remainingArgs)
+
+	// "scheduler" manages built-in scheduler tasks (AI.md PART 18).
+	case "scheduler":
+		return runSchedulerSubcmd(remainingArgs)
 	}
 
 	fmt.Fprintf(os.Stderr, "Unknown subcommand: %s\n", subcmd)
@@ -359,6 +367,150 @@ func runMigrate(args []string) int {
 
 	fmt.Println("Database migrations applied successfully.")
 	return 0
+}
+
+// runSchedulerSubcmd handles the "scheduler" positional subcommand
+// (AI.md PART 18 CLI Commands: list, show, run, enable, disable, history).
+func runSchedulerSubcmd(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler <list|show|run|enable|disable|history> [task-id]")
+		return 1
+	}
+	action := args[0]
+	rest := args[1:]
+
+	fs := flag.NewFlagSet("scheduler", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	configDir := fs.String("config", "", "Config directory")
+	if err := fs.Parse(rest); err != nil {
+		return 1
+	}
+	taskArgs := fs.Args()
+
+	cfg, err := loadConfig(*configDir, "production", "", "/", 0, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		return 1
+	}
+
+	database, err := initDatabase(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing database: %v\n", err)
+		return 1
+	}
+	defer database.Close()
+
+	catchUp := time.Hour
+	if cfg.Scheduler.CatchUpWindow != "" {
+		if d, parseErr := time.ParseDuration(cfg.Scheduler.CatchUpWindow); parseErr == nil {
+			catchUp = d
+		}
+	}
+
+	sched, err := scheduler.New(database.Server, cfg.Scheduler.Timezone, catchUp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating scheduler: %v\n", err)
+		return 1
+	}
+	if err := sched.RegisterBuiltInTasks(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error registering tasks: %v\n", err)
+		return 1
+	}
+
+	switch action {
+	case "list":
+		for _, ts := range sched.Status() {
+			state := "enabled"
+			if !ts.Enabled {
+				state = "disabled"
+			}
+			fmt.Printf("%-20s %-30s %-8s %s\n", ts.ID, ts.Schedule, state, ts.LastStatus)
+		}
+		return 0
+
+	case "show":
+		if len(taskArgs) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler show <task-id>")
+			return 1
+		}
+		task, err := sched.GetTask(taskArgs[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		fmt.Printf("ID:          %s\n", task.ID)
+		fmt.Printf("Name:        %s\n", task.Name)
+		fmt.Printf("Schedule:    %s\n", task.Schedule)
+		fmt.Printf("Enabled:     %v\n", task.Enabled)
+		fmt.Printf("Last run:    %s\n", task.LastRun)
+		fmt.Printf("Last status: %s\n", task.LastStatus)
+		if task.LastError != "" {
+			fmt.Printf("Last error:  %s\n", task.LastError)
+		}
+		fmt.Printf("Next run:    %s\n", task.NextRun)
+		fmt.Printf("Run count:   %d\n", task.RunCount)
+		fmt.Printf("Fail count:  %d\n", task.FailCount)
+		return 0
+
+	case "run":
+		if len(taskArgs) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler run <task-id>")
+			return 1
+		}
+		if err := sched.RunTaskNow(taskArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		fmt.Printf("Triggered task: %s\n", taskArgs[0])
+		return 0
+
+	case "enable":
+		if len(taskArgs) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler enable <task-id>")
+			return 1
+		}
+		if err := sched.EnableTask(taskArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		fmt.Printf("Enabled task: %s\n", taskArgs[0])
+		return 0
+
+	case "disable":
+		if len(taskArgs) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler disable <task-id>")
+			return 1
+		}
+		if err := sched.DisableTask(taskArgs[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		fmt.Printf("Disabled task: %s\n", taskArgs[0])
+		return 0
+
+	case "history":
+		if len(taskArgs) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler history <task-id>")
+			return 1
+		}
+		entries, err := sched.GetTaskHistory(taskArgs[0], 20)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		if len(entries) == 0 {
+			fmt.Println("No history recorded for this task.")
+			return 0
+		}
+		for _, e := range entries {
+			fmt.Printf("%s  status=%-8s duration=%dms  %s\n", e.StartedAt.Format(time.RFC3339), e.Status, e.DurationMS, e.Error)
+		}
+		return 0
+	}
+
+	fmt.Fprintf(os.Stderr, "Unknown scheduler action: %s\n", action)
+	fmt.Fprintln(os.Stderr, "Usage: caswhois scheduler <list|show|run|enable|disable|history> [task-id]")
+	return 1
 }
 
 // launchClientBinary execs the caswhois-cli binary from PATH (client subcommand).
@@ -586,6 +738,21 @@ func loadConfig(configDir, mode, address, baseURL string, port int, debug bool) 
 		cfg.Backup.Dir = getDefaultBackupDir()
 	}
 
+	// PORT and LISTEN are init-only env vars (AI.md PART 5): consulted only
+	// when server.yml has no port/address set yet, before CLI flags apply.
+	if cfg.Port == 0 {
+		if envPort := os.Getenv("PORT"); envPort != "" {
+			if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
+				cfg.Port = p
+			}
+		}
+	}
+	if cfg.Address == "" {
+		if envListen := os.Getenv("LISTEN"); envListen != "" {
+			cfg.Address = envListen
+		}
+	}
+
 	// Override with CLI flags (highest priority per AI.md PART 5 precedence).
 	if mode != "" {
 		cfg.Mode = mode
@@ -652,7 +819,7 @@ func initDatabase(cfg *config.ServerConfig) (*db.DB, error) {
 				}
 			}
 		}
-		
+
 		log.Printf("Using remote database: %s (database: %s)", driver, dbCfg.Name)
 	} else {
 		// Ensure SQLite directory exists
@@ -674,78 +841,243 @@ func initDatabase(cfg *config.ServerConfig) (*db.DB, error) {
 }
 
 func getDefaultConfigDir() string {
+	// CONFIG_DIR is an init-only env var (AI.md PART 5): consulted only when
+	// no --config flag was given and no server.yml has been generated yet.
+	if envDir := os.Getenv("CONFIG_DIR"); envDir != "" {
+		return envDir
+	}
+
 	// Container path per AI.md PART 4: /config/caswhois/
 	if config.IsContainer() {
 		return "/config/caswhois"
 	}
 
-	// Running as root on Linux/Unix: use system-wide path
-	if os.Getuid() == 0 {
-		return "/etc/" + constants.InternalOrg + "/" + constants.InternalName
-	}
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName)
+		}
+		return filepath.Join(windowsAppData(), constants.InternalOrg, constants.InternalName)
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Application Support", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("Warning: Could not determine home directory: %v", err)
+			return "."
+		}
+		return filepath.Join(home, "Library", "Application Support", constants.InternalOrg, constants.InternalName)
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/usr", "local", "etc", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("Warning: Could not determine home directory: %v", err)
+			return "."
+		}
+		return filepath.Join(home, ".config", constants.InternalOrg, constants.InternalName)
+	default:
+		// Running as root on Linux: use system-wide path
+		if os.Getuid() == 0 {
+			return "/etc/" + constants.InternalOrg + "/" + constants.InternalName
+		}
 
-	// Non-root user: XDG-compatible per-user config directory
-	home, err := os.UserHomeDir()
-	if err != nil {
-		log.Printf("Warning: Could not determine home directory: %v", err)
-		return "."
-	}
+		// Non-root user: XDG-compatible per-user config directory
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("Warning: Could not determine home directory: %v", err)
+			return "."
+		}
 
-	return filepath.Join(home, ".config", constants.InternalOrg, constants.InternalName)
+		return filepath.Join(home, ".config", constants.InternalOrg, constants.InternalName)
+	}
 }
 
 // getDefaultDataDir returns the platform-specific data directory (AI.md PART 4).
 func getDefaultDataDir() string {
+	// DATA_DIR is an init-only env var (AI.md PART 5): consulted only when
+	// server.yml has no data_dir set yet.
+	if envDir := os.Getenv("DATA_DIR"); envDir != "" {
+		return envDir
+	}
+
 	// Container path per AI.md PART 4: /data/{internal_name}/
 	if config.IsContainer() {
 		return "/data/" + constants.InternalName
 	}
 
-	if os.Getuid() == 0 {
-		return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName
-	}
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName, "data")
+		}
+		return filepath.Join(windowsLocalAppData(), constants.InternalOrg, constants.InternalName)
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Application Support", constants.InternalOrg, constants.InternalName, "data")
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, "Library", "Application Support", constants.InternalOrg, constants.InternalName)
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/var", "db", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName)
+	default:
+		if os.Getuid() == 0 {
+			return "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName
+		}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "."
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName)
 	}
-	return filepath.Join(home, ".local", "share", constants.InternalOrg, constants.InternalName)
 }
 
 // getDefaultLogDir returns the platform-specific log directory (AI.md PART 4).
 func getDefaultLogDir() string {
+	// LOG_DIR is an init-only env var (AI.md PART 5): consulted only when
+	// server.yml has no log_dir set yet.
+	if envDir := os.Getenv("LOG_DIR"); envDir != "" {
+		return envDir
+	}
+
 	// Container path per AI.md PART 4: /data/log/{internal_name}/
 	if config.IsContainer() {
 		return "/data/log/" + constants.InternalName
 	}
 
-	if os.Getuid() == 0 {
-		return "/var/log/" + constants.InternalOrg + "/" + constants.InternalName
-	}
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName, "logs")
+		}
+		return filepath.Join(windowsLocalAppData(), constants.InternalOrg, constants.InternalName, "logs")
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Logs", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, "Library", "Logs", constants.InternalOrg, constants.InternalName)
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/var", "log", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
+	default:
+		if os.Getuid() == 0 {
+			return "/var/log/" + constants.InternalOrg + "/" + constants.InternalName
+		}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "."
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
 	}
-	return filepath.Join(home, ".local", "log", constants.InternalOrg, constants.InternalName)
 }
 
 // getDefaultBackupDir returns the platform-specific backup directory (AI.md PART 4).
 func getDefaultBackupDir() string {
+	// BACKUP_DIR is an init-only env var (AI.md PART 5): consulted only when
+	// server.yml has no backup.dir set yet.
+	if envDir := os.Getenv("BACKUP_DIR"); envDir != "" {
+		return envDir
+	}
+
 	// Container path per AI.md PART 4: /data/backups/{internal_name}/
 	if config.IsContainer() {
 		return "/data/backups/" + constants.InternalName
 	}
 
-	if os.Getuid() == 0 {
-		return "/mnt/Backups/" + constants.InternalOrg + "/" + constants.InternalName
-	}
+	switch runtime.GOOS {
+	case "windows":
+		if os.Getuid() == 0 {
+			return filepath.Join(windowsProgramData(), "Backups", constants.InternalOrg, constants.InternalName)
+		}
+		return filepath.Join(windowsLocalAppData(), "Backups", constants.InternalOrg, constants.InternalName)
+	case "darwin":
+		if os.Getuid() == 0 {
+			return filepath.Join("/Library", "Backups", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, "Library", "Backups", constants.InternalOrg, constants.InternalName)
+	case "freebsd", "openbsd", "netbsd":
+		if os.Getuid() == 0 {
+			return filepath.Join("/var", "backups", constants.InternalOrg, constants.InternalName)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
+	default:
+		if os.Getuid() == 0 {
+			return "/mnt/Backups/" + constants.InternalOrg + "/" + constants.InternalName
+		}
 
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "."
+		}
+		return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
+	}
+}
+
+// windowsProgramData returns %ProgramData% (system-wide writable data), falling
+// back to the documented default if the environment variable is unset.
+func windowsProgramData() string {
+	if v := os.Getenv("ProgramData"); v != "" {
+		return v
+	}
+	return `C:\ProgramData`
+}
+
+// windowsAppData returns %AppData% (per-user roaming config), falling back to
+// a best-effort path under the user's home directory if unset.
+func windowsAppData() string {
+	if v := os.Getenv("AppData"); v != "" {
+		return v
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".local", "share", "Backups", constants.InternalOrg, constants.InternalName)
+	return filepath.Join(home, "AppData", "Roaming")
+}
+
+// windowsLocalAppData returns %LocalAppData% (per-user local data), falling
+// back to a best-effort path under the user's home directory if unset.
+func windowsLocalAppData() string {
+	if v := os.Getenv("LocalAppData"); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, "AppData", "Local")
 }
 
 func printStartupBanner(cfg *config.ServerConfig) {
@@ -783,4 +1115,3 @@ func printStartupBanner(cfg *config.ServerConfig) {
 	fmt.Println("╚══════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 }
-

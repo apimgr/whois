@@ -69,6 +69,7 @@ const PRECACHE_ASSETS = [
   '/',
   '/static/css/main.css',
   '/static/js/main.js',
+  '/static/js/offline.js',
   '/offline.html'
 ];
 
@@ -132,6 +133,9 @@ func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
 
 	lang := LangFromContext(r.Context())
 	dir := i18n.Dir(lang)
+	title := translateKey(lang, "pwa.offline_title")
+	message := translateKey(lang, "pwa.offline_message")
+	retry := translateKey(lang, "pwa.offline_retry")
 
 	page := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s" dir="%s">
@@ -142,13 +146,14 @@ func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
 <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body class="offline-page">
-<main id="main-content" style="text-align:center;padding:4rem 1rem;">
-  <h1>You are offline</h1>
-  <p>%s requires a network connection. Please check your connection and try again.</p>
-  <button onclick="window.location.reload()">Retry</button>
+<main id="main-content">
+  <h1>%s</h1>
+  <p>%s</p>
+  <button type="button" id="offline-retry">%s</button>
 </main>
+<script src="/static/js/offline.js"></script>
 </body>
-</html>`, lang, dir, name, name)
+</html>`, lang, dir, name, title, message, retry)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

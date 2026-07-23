@@ -14,9 +14,9 @@ type AutodiscoverResponse struct {
 	Server AutodiscoverServer `json:"server"`
 
 	// API versioning
-	APIVersion    string   `json:"api_version"`
-	APIVersions   []string `json:"api_versions"`
-	BaseURL       string   `json:"base_url"`
+	APIVersion  string   `json:"api_version"`
+	APIVersions []string `json:"api_versions"`
+	BaseURL     string   `json:"base_url"`
 
 	// Feature flags the client can check before calling versioned routes
 	Features AutodiscoverFeatures `json:"features"`
@@ -44,13 +44,13 @@ type AutodiscoverServer struct {
 
 // AutodiscoverFeatures lists enabled capabilities.
 type AutodiscoverFeatures struct {
-	WHOIS       bool `json:"whois"`
-	BulkLookup  bool `json:"bulk_lookup"`
+	WHOIS        bool `json:"whois"`
+	BulkLookup   bool `json:"bulk_lookup"`
 	RateLimiting bool `json:"rate_limiting"`
-	Caching     bool `json:"caching"`
-	GeoIP       bool `json:"geoip"`
-	Metrics     bool `json:"metrics"`
-	TorHidden   bool `json:"tor_hidden_service"`
+	Caching      bool `json:"caching"`
+	GeoIP        bool `json:"geoip"`
+	Metrics      bool `json:"metrics"`
+	TorHidden    bool `json:"tor_hidden_service"`
 }
 
 // CLIBinaryInfo holds version and checksum for a single platform's CLI binary.
@@ -89,9 +89,9 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 			Version:   Version,
 			GoVersion: runtime.Version(),
 		},
-		APIVersion:    "v1",
-		APIVersions:   []string{"v1"},
-		BaseURL:       baseURL,
+		APIVersion:  "v1",
+		APIVersions: []string{"v1"},
+		BaseURL:     baseURL,
 		Features: AutodiscoverFeatures{
 			WHOIS:        true,
 			BulkLookup:   true,

@@ -477,6 +477,11 @@ func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) 
 		maxExt = 100
 	}
 
+	total := len(results)
+	if localTotal, countErr := records.CountByOwner(r.Context(), s.database.Server, owner); countErr == nil {
+		total = localTotal
+	}
+
 	if len(results) == 0 && page == 1 && providerName != "" && providerKey != "" {
 		extResults, extErr := reverse.SearchByOwner(r.Context(), providerName, providerKey, owner, maxExt)
 		if extErr == nil {
@@ -486,16 +491,23 @@ func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) 
 					Source: er.Provider,
 				})
 			}
+			total = len(results)
 		}
 	}
 
+	pages := 0
+	if limit > 0 {
+		pages = (total + limit - 1) / limit
+	}
+
 	SendSuccess(w, map[string]interface{}{
-		"owner":   owner,
-		"results": results,
-		"meta": map[string]interface{}{
-			"page":     page,
-			"limit":    limit,
-			"count":    len(results),
+		"owner": owner,
+		"data":  results,
+		"pagination": map[string]interface{}{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+			"pages": pages,
 		},
 	})
 }

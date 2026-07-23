@@ -71,7 +71,8 @@ func restartSelf() error {
 
 	// Exit current process
 	os.Exit(0)
-	return nil // unreachable
+	// Unreachable
+	return nil
 }
 
 // reexecSelf re-executes the CLI with original args (Windows).

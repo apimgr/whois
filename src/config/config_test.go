@@ -930,9 +930,9 @@ func TestGetDatabaseConfig(t *testing.T) {
 // (len(s) >= len("") is always true and "" == "" or hasSubstring finds it at 0).
 func TestContains(t *testing.T) {
 	cases := []struct {
-		s      string
-		sub    string
-		want   bool
+		s    string
+		sub  string
+		want bool
 	}{
 		// empty substr: implementation returns true (substr fits trivially)
 		{"", "", true},

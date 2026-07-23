@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{.Lang}}" dir="{{.Dir}}" data-theme="{{.Theme}}">
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
 <body>
+  {{.AnnouncementsHTML}}
 <a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
 <a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
 
@@ -20,6 +21,10 @@
     <ul class="nav-links" role="list">
       <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
       <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms">{{t .Lang "nav.terms"}}</a></li>
     </ul>
     <div class="nav-actions">
       <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
@@ -143,14 +148,8 @@
   </section>
 </main>
 
-<footer class="site-footer">
-  <p>
-    <a href="/">{{.Name}}</a> &mdash;
-    <a href="/about">{{t .Lang "nav.about"}}</a> &middot;
-    <a href="/docs">{{t .Lang "nav.docs"}}</a> &middot;
-    <a href="/server/healthz">{{t .Lang "footer.health"}}</a>
-  </p>
-</footer>
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
 
 <script src="/static/js/main.js" defer></script>
 </body>

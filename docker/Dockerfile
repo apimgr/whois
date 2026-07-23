@@ -74,8 +74,8 @@ RUN chmod 755 /usr/local/bin/*
 # Set environment.
 # Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31).
 # DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer).
-ENV MODE=production \
-    TZ=America/New_York \
+# MODE is never baked into the image - binary defaults to production; compose sets MODE explicitly.
+ENV TZ=America/New_York \
     DATABASE_DIR=/data/db/sqlite
 
 # Expose internal port (always 80).

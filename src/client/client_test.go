@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -144,7 +145,7 @@ func TestPrintResult_JSON(t *testing.T) {
 	}
 }
 
-func TestPrintResult_Raw(t *testing.T) {
+func TestPrintResult_Plain(t *testing.T) {
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -154,7 +155,7 @@ func TestPrintResult_Raw(t *testing.T) {
 		Type:  "asn",
 		Raw:   "aut-num: AS15169",
 	}
-	printResult(result, nil, "raw")
+	printResult(result, nil, "plain")
 
 	w.Close()
 	os.Stdout = old
@@ -433,7 +434,7 @@ func TestRunCLICommand_Domain(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.CLIConfig{Server: srv.URL, Format: "raw"}
+	cfg := &config.CLIConfig{Server: srv.URL, Format: "plain"}
 
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
@@ -555,7 +556,7 @@ func TestRunCLICommand_DefaultLookup(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.CLIConfig{Server: srv.URL, Format: "raw"}
+	cfg := &config.CLIConfig{Server: srv.URL, Format: "plain"}
 
 	oldOut := os.Stdout
 	r, w, _ := os.Pipe()
@@ -749,16 +750,236 @@ func TestRun_FormatFlag(t *testing.T) {
 	r, w, _ := os.Pipe()
 	old := os.Stdout
 	os.Stdout = w
-	code := run([]string{"--server", srv.URL, "--format", "raw", "asn", "AS15169"})
+	code := run([]string{"--server", srv.URL, "--format", "plain", "asn", "AS15169"})
 	w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	if code != 0 {
-		t.Errorf("run --format raw = %d, want 0", code)
+		t.Errorf("run --format plain = %d, want 0", code)
 	}
 	if !strings.Contains(buf.String(), "AS15169") {
-		t.Errorf("raw format output should contain AS15169, got: %q", buf.String())
+		t.Errorf("plain format output should contain AS15169, got: %q", buf.String())
+	}
+}
+
+// TestRun_OutputFlag_Plain verifies that --output plain prints the bare raw content.
+func TestRun_OutputFlag_Plain(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		inner, _ := json.Marshal(struct {
+			Query     string `json:"query"`
+			Type      string `json:"type"`
+			Server    string `json:"server"`
+			Timestamp string `json:"timestamp"`
+			Raw       string `json:"raw"`
+		}{"8.8.8.8", "ip", "whois.arin.net", "2024-01-01T00:00:00Z", "NetRange: 8.8.8.0"})
+		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+	code := run([]string{"--server", srv.URL, "--output", "plain", "ip", "8.8.8.8"})
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Errorf("run --output plain = %d, want 0", code)
+	}
+	out := strings.TrimSpace(buf.String())
+	if out != "NetRange: 8.8.8.0" {
+		t.Errorf("--output plain = %q, want bare raw content", out)
+	}
+}
+
+// TestRun_OutputFlag_Table verifies that --output table prints the labeled field view.
+func TestRun_OutputFlag_Table(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		inner, _ := json.Marshal(struct {
+			Query     string `json:"query"`
+			Type      string `json:"type"`
+			Server    string `json:"server"`
+			Timestamp string `json:"timestamp"`
+			Raw       string `json:"raw"`
+		}{"8.8.8.8", "ip", "whois.arin.net", "2024-01-01T00:00:00Z", "NetRange: 8.8.8.0"})
+		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+	code := run([]string{"--server", srv.URL, "--output", "table", "ip", "8.8.8.8"})
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Errorf("run --output table = %d, want 0", code)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Query:") || !strings.Contains(out, "8.8.8.8") {
+		t.Errorf("--output table = %q, want labeled field output", out)
+	}
+}
+
+// TestRun_TokenFileFlag verifies --token-file reads and trims the token from a file.
+func TestRun_TokenFileFlag(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		inner, _ := json.Marshal(struct {
+			Query     string `json:"query"`
+			Type      string `json:"type"`
+			Server    string `json:"server"`
+			Timestamp string `json:"timestamp"`
+			Raw       string `json:"raw"`
+		}{"example.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
+		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("secret-token\n"), 0600); err != nil {
+		t.Fatalf("failed to write token file: %v", err)
+	}
+
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+	code := run([]string{"--server", srv.URL, "--token-file", tokenFile, "domain", "example.com"})
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	if code != 0 {
+		t.Errorf("run --token-file = %d, want 0", code)
+	}
+	if !strings.Contains(gotAuth, "secret-token") {
+		t.Errorf("expected Authorization header to contain trimmed token, got: %q", gotAuth)
+	}
+}
+
+// TestRun_TokenFileFlag_MissingFile verifies --token-file with a nonexistent file errors out.
+func TestRun_TokenFileFlag_MissingFile(t *testing.T) {
+	code := run([]string{"--token-file", "/nonexistent/token/path", "domain", "example.com"})
+	if code != 1 {
+		t.Errorf("run --token-file missing = %d, want 1", code)
+	}
+}
+
+// TestHandleShellCommand_Completions verifies --shell completions prints a script per shell.
+func TestHandleShellCommand_Completions(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish", "sh", "powershell"} {
+		r, w, _ := os.Pipe()
+		old := os.Stdout
+		os.Stdout = w
+		code := handleShellCommand([]string{"completions", shell})
+		w.Close()
+		os.Stdout = old
+		var buf bytes.Buffer
+		buf.ReadFrom(r)
+		if code != 0 {
+			t.Errorf("handleShellCommand completions %s = %d, want 0", shell, code)
+		}
+		if buf.Len() == 0 {
+			t.Errorf("handleShellCommand completions %s produced no output", shell)
+		}
+	}
+}
+
+// TestHandleShellCommand_Init verifies --shell init prints an eval-ready command.
+func TestHandleShellCommand_Init(t *testing.T) {
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+	code := handleShellCommand([]string{"init", "bash"})
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Errorf("handleShellCommand init bash = %d, want 0", code)
+	}
+	if !strings.Contains(buf.String(), "--shell completions bash") {
+		t.Errorf("handleShellCommand init bash = %q, want eval-ready command", buf.String())
+	}
+}
+
+// TestHandleShellCommand_Help verifies --shell help prints usage information.
+func TestHandleShellCommand_Help(t *testing.T) {
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+	code := handleShellCommand([]string{"help"})
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Errorf("handleShellCommand help = %d, want 0", code)
+	}
+	if !strings.Contains(buf.String(), "--shell completions") {
+		t.Errorf("handleShellCommand help = %q, want usage text", buf.String())
+	}
+}
+
+// TestHandleShellCommand_UnsupportedShell verifies an unknown shell name errors out.
+func TestHandleShellCommand_UnsupportedShell(t *testing.T) {
+	code := handleShellCommand([]string{"completions", "nosuchshell"})
+	if code != 1 {
+		t.Errorf("handleShellCommand completions nosuchshell = %d, want 1", code)
+	}
+}
+
+// TestHandleShellCommand_NoArgs verifies --shell with no subcommand errors out.
+func TestHandleShellCommand_NoArgs(t *testing.T) {
+	code := handleShellCommand(nil)
+	if code != 1 {
+		t.Errorf("handleShellCommand with no args = %d, want 1", code)
+	}
+}
+
+// TestDetectShell verifies auto-detection from $SHELL falls back to bash when unset.
+func TestDetectShell(t *testing.T) {
+	old := os.Getenv("SHELL")
+	defer os.Setenv("SHELL", old)
+
+	os.Setenv("SHELL", "/usr/bin/zsh")
+	if got := detectShell(); got != "zsh" {
+		t.Errorf("detectShell() with SHELL=/usr/bin/zsh = %q, want zsh", got)
+	}
+
+	os.Unsetenv("SHELL")
+	if got := detectShell(); got != "bash" {
+		t.Errorf("detectShell() with unset SHELL = %q, want bash", got)
+	}
+}
+
+// TestRun_ShellFlag verifies --shell is intercepted before flag parsing.
+func TestRun_ShellFlag(t *testing.T) {
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+	code := run([]string{"--shell", "completions", "bash"})
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Errorf("run --shell completions bash = %d, want 0", code)
+	}
+	if buf.Len() == 0 {
+		t.Errorf("run --shell completions bash produced no output")
 	}
 }
 
@@ -1144,7 +1365,7 @@ func TestRunUpdateCommand_BranchEmpty(t *testing.T) {
 func TestRunCLICommand_DomainEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_DomainEmpty" {
 		os.Exit(runCLICommand([]string{"domain"}, &config.CLIConfig{Server: "http://localhost:9999"}))
-		
+
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_DomainEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_DomainEmpty")
@@ -1161,7 +1382,7 @@ func TestRunCLICommand_DomainEmpty(t *testing.T) {
 func TestRunCLICommand_IPEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_IPEmpty" {
 		os.Exit(runCLICommand([]string{"ip"}, &config.CLIConfig{Server: "http://localhost:9999"}))
-		
+
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_IPEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_IPEmpty")
@@ -1178,7 +1399,7 @@ func TestRunCLICommand_IPEmpty(t *testing.T) {
 func TestRunCLICommand_ASNEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_ASNEmpty" {
 		os.Exit(runCLICommand([]string{"asn"}, &config.CLIConfig{Server: "http://localhost:9999"}))
-		
+
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_ASNEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_ASNEmpty")
@@ -1195,7 +1416,7 @@ func TestRunCLICommand_ASNEmpty(t *testing.T) {
 func TestRunCLICommand_ValidateEmpty(t *testing.T) {
 	if os.Getenv("SUBPROCESS_EXIT_TEST") == "TestRunCLICommand_ValidateEmpty" {
 		os.Exit(runCLICommand([]string{"validate"}, &config.CLIConfig{Server: "http://localhost:9999"}))
-		
+
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestRunCLICommand_ValidateEmpty", "-test.v")
 	cmd.Env = append(os.Environ(), "SUBPROCESS_EXIT_TEST=TestRunCLICommand_ValidateEmpty")

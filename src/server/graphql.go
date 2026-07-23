@@ -9,33 +9,9 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
+	"github.com/apimgr/whois/src/graphql"
+	"github.com/apimgr/whois/src/whois"
 )
-
-// GraphQLRequest represents a GraphQL query request.
-type GraphQLRequest struct {
-	Query         string                 `json:"query"`
-	OperationName string                 `json:"operationName,omitempty"`
-	Variables     map[string]interface{} `json:"variables,omitempty"`
-}
-
-// GraphQLResponse represents a GraphQL response.
-type GraphQLResponse struct {
-	Data   interface{}     `json:"data,omitempty"`
-	Errors []GraphQLError  `json:"errors,omitempty"`
-}
-
-// GraphQLError represents a GraphQL error.
-type GraphQLError struct {
-	Message   string     `json:"message"`
-	Locations []Location `json:"locations,omitempty"`
-	Path      []string   `json:"path,omitempty"`
-}
-
-// Location represents a position in the query.
-type Location struct {
-	Line   int `json:"line"`
-	Column int `json:"column"`
-}
 
 // handleGraphQL handles GraphQL POST requests.
 // Routes: /api/graphql, /api/v1/server/graphql (AI.md PART 14)
@@ -46,7 +22,7 @@ func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req GraphQLRequest
+	var req graphql.GraphQLRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeGraphQLError(w, http.StatusBadRequest, "Invalid JSON request body")
 		return
@@ -57,212 +33,52 @@ func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle introspection query for schema discovery
-	if strings.Contains(req.Query, "__schema") || strings.Contains(req.Query, "__type") {
-		s.handleGraphQLIntrospection(w, req)
-		return
-	}
-
-	// Execute the query
-	result := s.executeGraphQL(req)
-
-	data, _ := json.MarshalIndent(result, "", "  ")
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-	w.Write([]byte("\n"))
+	resp := s.executeGraphQL(r.Context(), req)
+	graphql.WriteResponse(w, http.StatusOK, resp)
 }
 
-// handleGraphQLIntrospection returns the GraphQL schema for introspection.
-func (s *Server) handleGraphQLIntrospection(w http.ResponseWriter, req GraphQLRequest) {
-	// Return a minimal introspection response
-	schema := map[string]interface{}{
-		"__schema": map[string]interface{}{
-			"queryType": map[string]string{"name": "Query"},
-			"types": []map[string]interface{}{
-				{
-					"kind": "OBJECT",
-					"name": "Query",
-					"fields": []map[string]interface{}{
-						{
-							"name":        "whois",
-							"description": "Look up WHOIS information for a domain, IP, or ASN",
-							"args": []map[string]interface{}{
-								{"name": "query", "type": map[string]string{"kind": "NON_NULL", "name": "String"}},
-							},
-							"type": map[string]string{"kind": "OBJECT", "name": "WhoisRecord"},
-						},
-						{
-							"name":        "health",
-							"description": "Get server health status",
-							"args":        []interface{}{},
-							"type":        map[string]string{"kind": "OBJECT", "name": "Health"},
-						},
-						{
-							"name":        "stats",
-							"description": "Get server statistics",
-							"args":        []interface{}{},
-							"type":        map[string]string{"kind": "OBJECT", "name": "Stats"},
-						},
-					},
-				},
-				{
-					"kind": "OBJECT",
-					"name": "WhoisRecord",
-					"fields": []map[string]interface{}{
-						{"name": "query", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "queryType", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "source", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "registrantName", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "registrantOrg", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "registrantEmail", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "registrar", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "createdDate", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "expiryDate", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "nameservers", "type": map[string]interface{}{"kind": "LIST", "ofType": map[string]string{"kind": "SCALAR", "name": "String"}}},
-					},
-				},
-				{
-					"kind": "OBJECT",
-					"name": "Health",
-					"fields": []map[string]interface{}{
-						{"name": "ok", "type": map[string]string{"kind": "SCALAR", "name": "Boolean"}},
-						{"name": "status", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "version", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-						{"name": "uptime", "type": map[string]string{"kind": "SCALAR", "name": "String"}},
-					},
-				},
-				{
-					"kind": "OBJECT",
-					"name": "Stats",
-					"fields": []map[string]interface{}{
-						{"name": "totalRequests", "type": map[string]string{"kind": "SCALAR", "name": "Int"}},
-						{"name": "requests24h", "type": map[string]string{"kind": "SCALAR", "name": "Int"}},
-						{"name": "domainQueries", "type": map[string]string{"kind": "SCALAR", "name": "Int"}},
-						{"name": "ipQueries", "type": map[string]string{"kind": "SCALAR", "name": "Int"}},
-					},
-				},
-			},
-		},
-	}
-
-	resp := GraphQLResponse{Data: schema}
-	data, _ := json.MarshalIndent(resp, "", "  ")
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-	w.Write([]byte("\n"))
-}
-
-// executeGraphQL executes a GraphQL query and returns the result.
-func (s *Server) executeGraphQL(req GraphQLRequest) GraphQLResponse {
-	query := strings.TrimSpace(req.Query)
-
-	// Simple query parser for common queries
-	if strings.Contains(query, "health") {
-		return s.resolveHealthQuery()
-	}
-
-	if strings.Contains(query, "stats") {
-		return s.resolveStatsQuery()
-	}
-
-	if strings.Contains(query, "whois") {
-		// Extract query argument
-		queryArg := ""
-		if v, ok := req.Variables["query"]; ok {
-			queryArg = fmt.Sprintf("%v", v)
-		}
-		if queryArg == "" {
-			// Try to extract from inline query
-			if idx := strings.Index(query, `query:`); idx >= 0 {
-				rest := query[idx+6:]
-				if start := strings.Index(rest, `"`); start >= 0 {
-					rest = rest[start+1:]
-					if end := strings.Index(rest, `"`); end >= 0 {
-						queryArg = rest[:end]
-					}
-				}
-			}
-		}
-		if queryArg != "" {
-			return s.resolveWhoisQuery(queryArg)
-		}
-		return GraphQLResponse{
-			Errors: []GraphQLError{{Message: "Missing query argument for whois lookup"}},
+// executeGraphQL validates and runs a GraphQL request against the graphql
+// package's query engine, supplying server-specific health/stats/lookup data.
+func (s *Server) executeGraphQL(ctx context.Context, req graphql.GraphQLRequest) graphql.GraphQLResponse {
+	if strings.TrimSpace(req.Query) == "" {
+		return graphql.GraphQLResponse{
+			Errors: []graphql.GraphQLError{{Message: "Query is required"}},
 		}
 	}
 
-	return GraphQLResponse{
-		Errors: []GraphQLError{{Message: "Unknown query. Supported: health, stats, whois(query: String!)"}},
+	return graphql.Execute(ctx, req, s.graphqlHealth(), s.graphqlStats(), s.graphqlLookup)
+}
+
+// graphqlHealth builds the health data exposed to the "health" GraphQL query.
+func (s *Server) graphqlHealth() graphql.HealthInfo {
+	return graphql.HealthInfo{
+		OK:      true,
+		Status:  "ok",
+		Version: Version,
+		Uptime:  time.Since(s.startTime).String(),
 	}
 }
 
-// resolveHealthQuery returns health data for GraphQL.
-func (s *Server) resolveHealthQuery() GraphQLResponse {
-	uptime := time.Since(s.startTime)
-	return GraphQLResponse{
-		Data: map[string]interface{}{
-			"health": map[string]interface{}{
-				"ok":      true,
-				"status":  "ok",
-				"version": Version,
-				"uptime":  uptime.String(),
-			},
-		},
+// graphqlStats builds the stats data exposed to the "stats" GraphQL query.
+func (s *Server) graphqlStats() graphql.StatsInfo {
+	return graphql.StatsInfo{
+		TotalRequests: s.stats.requestsTotal.Load(),
+		Requests24h:   s.stats.requests24h.Load(),
+		DomainQueries: s.stats.domainQueries.Load(),
+		IPQueries:     s.stats.ipQueries.Load(),
 	}
 }
 
-// resolveStatsQuery returns stats data for GraphQL.
-func (s *Server) resolveStatsQuery() GraphQLResponse {
-	return GraphQLResponse{
-		Data: map[string]interface{}{
-			"stats": map[string]interface{}{
-				"totalRequests": s.stats.requestsTotal.Load(),
-				"requests24h":   s.stats.requests24h.Load(),
-				"domainQueries": s.stats.domainQueries.Load(),
-				"ipQueries":     s.stats.ipQueries.Load(),
-			},
-		},
-	}
-}
-
-// resolveWhoisQuery performs a WHOIS lookup via GraphQL.
-func (s *Server) resolveWhoisQuery(query string) GraphQLResponse {
+// graphqlLookup performs a WHOIS lookup for the "whois" GraphQL query.
+func (s *Server) graphqlLookup(ctx context.Context, query string) (*whois.UnifiedResult, error) {
 	if s.lookupService == nil {
-		return GraphQLResponse{
-			Errors: []GraphQLError{{Message: "WHOIS lookup service not available"}},
-		}
+		return nil, fmt.Errorf("WHOIS lookup service not available")
 	}
-
-	ctx := context.Background()
-	result, err := s.lookupService.Lookup(ctx, query)
-	if err != nil {
-		return GraphQLResponse{
-			Errors: []GraphQLError{{Message: fmt.Sprintf("Lookup failed: %v", err)}},
-		}
-	}
-
-	return GraphQLResponse{
-		Data: map[string]interface{}{
-			"whois": map[string]interface{}{
-				"query":           result.Query,
-				"queryType":       result.QueryType,
-				"source":          result.Source,
-				"registrantName":  result.RegistrantName,
-				"registrantOrg":   result.RegistrantOrg,
-				"registrantEmail": result.RegistrantEmail,
-				"registrar":       result.Registrar,
-				"createdDate":     result.CreatedDate,
-				"expiryDate":      result.ExpiryDate,
-				"nameservers":     result.Nameservers,
-			},
-		},
-	}
+	return s.lookupService.Lookup(ctx, query)
 }
 
 // graphqlTmpl is the server-side template for the GraphQL explorer UI (AI.md PART 16).
-// No external CDN or JavaScript framework — progressive enhancement only.
+// No external CDN or JavaScript framework - progressive enhancement only.
 var graphqlTmpl = mustParseTemplate("graphql", "graphql.html")
 
 // graphqlPageData is the view model for the GraphQL explorer template.
@@ -286,14 +102,7 @@ type graphqlPageData struct {
 
 // writeGraphQLError writes a GraphQL error response.
 func (s *Server) writeGraphQLError(w http.ResponseWriter, status int, message string) {
-	resp := GraphQLResponse{
-		Errors: []GraphQLError{{Message: message}},
-	}
-	data, _ := json.MarshalIndent(resp, "", "  ")
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	w.Write(data)
-	w.Write([]byte("\n"))
+	graphql.WriteError(w, status, message)
 }
 
 // handleGraphiQL serves the GraphQL explorer page (server-side Go template, no external CDN).
@@ -312,7 +121,7 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pd := graphqlPageData{
-		translatablePageData: newPageData(r),
+		translatablePageData: s.newPageData(w, r),
 		Name:                 brandName,
 		EndpointURL:          endpointURL,
 	}
@@ -326,7 +135,7 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 			pd.Variables = r.FormValue("variables")
 			pd.OperationName = r.FormValue("operationName")
 
-			gqlReq := GraphQLRequest{
+			gqlReq := graphql.GraphQLRequest{
 				Query:         pd.Query,
 				OperationName: pd.OperationName,
 			}
@@ -337,9 +146,9 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if pd.ErrorMsg == "" {
-				_, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 				defer cancel()
-				gqlResp := s.executeGraphQL(gqlReq)
+				gqlResp := s.executeGraphQL(ctx, gqlReq)
 				out, _ := json.MarshalIndent(gqlResp, "", "  ")
 				pd.Response = string(out)
 			}

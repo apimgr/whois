@@ -85,7 +85,7 @@ type CertificatePaths struct {
 	CertPath string
 	KeyPath  string
 	// Source is one of: "system", "app-letsencrypt", "app-local"
-	Source   string
+	Source string
 }
 
 // NewCertManager creates a new SSL certificate manager
@@ -105,10 +105,10 @@ func NewCertManager(configDir, fqdn string) *CertManager {
 
 // LoadCertificate attempts to load an existing certificate following PART 15 lookup order
 // Priority:
-//   1. /etc/letsencrypt/live/domain/ (literal "domain" directory)
-//   2. /etc/letsencrypt/live/{fqdn}/
-//   3. {config_dir}/ssl/letsencrypt/{fqdn}/
-//   4. {config_dir}/ssl/local/{fqdn}/
+//  1. /etc/letsencrypt/live/domain/ (literal "domain" directory)
+//  2. /etc/letsencrypt/live/{fqdn}/
+//  3. {config_dir}/ssl/letsencrypt/{fqdn}/
+//  4. {config_dir}/ssl/local/{fqdn}/
 func (cm *CertManager) LoadCertificate() error {
 	cm.certMu.Lock()
 	defer cm.certMu.Unlock()
@@ -469,13 +469,13 @@ func (cm *CertManager) GetCertificateInfo() (map[string]interface{}, error) {
 	}
 
 	info := map[string]interface{}{
-		"subject":     x509Cert.Subject.CommonName,
-		"issuer":      x509Cert.Issuer.CommonName,
-		"not_before":  x509Cert.NotBefore,
-		"not_after":   x509Cert.NotAfter,
-		"dns_names":   x509Cert.DNSNames,
-		"is_ca":       x509Cert.IsCA,
-		"valid":       time.Now().Before(x509Cert.NotAfter) && time.Now().After(x509Cert.NotBefore),
+		"subject":    x509Cert.Subject.CommonName,
+		"issuer":     x509Cert.Issuer.CommonName,
+		"not_before": x509Cert.NotBefore,
+		"not_after":  x509Cert.NotAfter,
+		"dns_names":  x509Cert.DNSNames,
+		"is_ca":      x509Cert.IsCA,
+		"valid":      time.Now().Before(x509Cert.NotAfter) && time.Now().After(x509Cert.NotBefore),
 	}
 
 	return info, nil

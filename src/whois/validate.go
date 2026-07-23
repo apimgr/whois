@@ -22,7 +22,7 @@ func (e ValidationError) Error() string {
 var (
 	// Label must start and end with alphanumeric, can contain hyphens in between
 	domainLabelRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
-	
+
 	// Full domain regex
 	domainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 )

@@ -306,21 +306,21 @@ func TestRenderTemplateEmptyData(t *testing.T) {
 	}
 }
 
-// TestLoadTemplateWelcome verifies the embedded "welcome" template loads without error.
-func TestLoadTemplateWelcome(t *testing.T) {
+// TestLoadTemplateSecurityAlert verifies the embedded "security_alert" template loads without error.
+func TestLoadTemplateSecurityAlert(t *testing.T) {
 	em := NewEmailManager("/tmp/test-config")
-	tmpl, err := em.loadTemplate("welcome")
+	tmpl, err := em.loadTemplate("security_alert")
 	if err != nil {
-		t.Fatalf("loadTemplate(\"welcome\") unexpected error: %v", err)
+		t.Fatalf("loadTemplate(\"security_alert\") unexpected error: %v", err)
 	}
 	if tmpl == nil {
-		t.Fatal("loadTemplate(\"welcome\") returned nil template")
+		t.Fatal("loadTemplate(\"security_alert\") returned nil template")
 	}
 	if tmpl.Subject == "" {
-		t.Error("expected non-empty subject from welcome template")
+		t.Error("expected non-empty subject from security_alert template")
 	}
 	if tmpl.Body == "" {
-		t.Error("expected non-empty body from welcome template")
+		t.Error("expected non-empty body from security_alert template")
 	}
 }
 
@@ -336,15 +336,15 @@ func TestLoadTemplateTest(t *testing.T) {
 	}
 }
 
-// TestLoadTemplatePasswordReset verifies the embedded "password_reset" template loads without error.
-func TestLoadTemplatePasswordReset(t *testing.T) {
+// TestLoadTemplateBackupFailed verifies the embedded "backup_failed" template loads without error.
+func TestLoadTemplateBackupFailed(t *testing.T) {
 	em := NewEmailManager("/tmp/test-config")
-	tmpl, err := em.loadTemplate("password_reset")
+	tmpl, err := em.loadTemplate("backup_failed")
 	if err != nil {
-		t.Fatalf("loadTemplate(\"password_reset\") unexpected error: %v", err)
+		t.Fatalf("loadTemplate(\"backup_failed\") unexpected error: %v", err)
 	}
 	if tmpl.Subject == "" {
-		t.Error("expected non-empty subject from password_reset template")
+		t.Error("expected non-empty subject from backup_failed template")
 	}
 }
 
@@ -371,14 +371,14 @@ func TestLoadTemplateCustomOverridesEmbedded(t *testing.T) {
 	}
 
 	customContent := "Subject: Custom Subject\n---\nCustom body content."
-	if err := writeFile(customDir+"/welcome.txt", []byte(customContent)); err != nil {
+	if err := writeFile(customDir+"/security_alert.txt", []byte(customContent)); err != nil {
 		t.Fatalf("failed to write custom template: %v", err)
 	}
 
 	em := NewEmailManager(dir)
-	tmpl, err := em.loadTemplate("welcome")
+	tmpl, err := em.loadTemplate("security_alert")
 	if err != nil {
-		t.Fatalf("loadTemplate(\"welcome\") unexpected error: %v", err)
+		t.Fatalf("loadTemplate(\"security_alert\") unexpected error: %v", err)
 	}
 	if tmpl.Subject != "Custom Subject" {
 		t.Errorf("Subject = %q, want \"Custom Subject\" (custom file should override embedded)", tmpl.Subject)
@@ -390,7 +390,7 @@ func TestSendEmailWhenDisabledReturnsNil(t *testing.T) {
 	em := NewEmailManager("/tmp/test-config")
 	// em.enabled = false by default — do not call Enable()
 
-	err := em.SendEmail("to@example.com", "welcome", EmailData{})
+	err := em.SendEmail("to@example.com", "security_alert", EmailData{})
 	if err != nil {
 		t.Errorf("SendEmail when disabled returned error %v, want nil", err)
 	}
@@ -661,7 +661,7 @@ func TestSendEmailEnabledValidTemplateBadHost(t *testing.T) {
 	em.Configure("127.0.0.1", 9999, "", "", "none", "", "noreply@test.local")
 	em.Enable()
 
-	err := em.SendEmail("to@example.com", "welcome", EmailData{"name": "Test User"})
+	err := em.SendEmail("to@example.com", "security_alert", EmailData{"event": "Test Event"})
 	if err == nil {
 		t.Log("SendEmail: unexpectedly succeeded — a local SMTP server may be running")
 	}

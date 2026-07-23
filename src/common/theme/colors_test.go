@@ -73,9 +73,9 @@ func TestThemePaletteLight(t *testing.T) {
 // the correct palettes without consulting environment variables.
 func TestGetThemePalette_ExplicitModes(t *testing.T) {
 	cases := []struct {
-		name       string
-		mode       string
-		wantBg     string
+		name        string
+		mode        string
+		wantBg      string
 		wantPalette ThemePalette
 	}{
 		{name: "dark mode", mode: "dark", wantBg: "#1a1b26", wantPalette: ThemePaletteDark},

@@ -37,6 +37,9 @@ This software includes the following third-party libraries:
 | github.com/go-co-op/gocron/v2 | v2.21.2 | MIT | 2019 John Roesler |
 | github.com/oschwald/maxminddb-golang | v1.13.1 | ISC | 2015 Gregory J. Oschwald |
 | github.com/prometheus/client_golang | v1.23.2 | Apache-2.0 | The Prometheus Authors |
+| github.com/ProtonMail/go-crypto | v1.4.1 | BSD-3-Clause | 2019 ProtonTech AG |
+| github.com/redis/go-redis/v9 | v9.21.0 | BSD-2-Clause | 2013 The github.com/redis/go-redis Authors |
+| github.com/tursodatabase/libsql-client-go | v0.0.0-20260528064733-9d5d30a29a60 | MIT | Turso Technology Inc. |
 | golang.org/x/crypto | v0.53.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/sys | v0.46.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/term | v0.44.0 | BSD-3-Clause | 2009 The Go Authors |

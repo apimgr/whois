@@ -1,15 +1,15 @@
-Subject: {{t .Lang "email.backup_complete.subject"}}
+Subject: Backup Complete - {app_name}
+---
+BACKUP COMPLETE
 
-{{t .Lang "email.backup_complete.greeting"}},
+From: {app_name} ({fqdn})
+Time: {timestamp}
 
-{{t .Lang "email.backup_complete.body"}}
+Your backup completed successfully.
 
-{{t .Lang "email.backup_complete.details_label"}}:
-  {{t .Lang "email.backup_complete.filename_label"}}: {{.Filename}}
-  {{t .Lang "email.backup_complete.size_label"}}: {{.SizeHuman}}
-  {{t .Lang "email.backup_complete.type_label"}}: {{.BackupType}}
-  {{t .Lang "email.backup_complete.duration_label"}}: {{.Duration}}
-  {{t .Lang "email.backup_complete.checksum_label"}}: {{.Checksum}}
+Filename: {filename}
+Size: {size}
 
-{{t .Lang "email.common.signature"}}
-{{.SiteName}}
+--
+{app_name}
+{app_url}

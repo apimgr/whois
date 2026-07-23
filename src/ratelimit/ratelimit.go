@@ -9,12 +9,12 @@ import (
 
 // Limiter implements sliding window rate limiting
 type Limiter struct {
-	mu           sync.RWMutex
-	windows      map[string]*window
-	requests     int
-	duration     time.Duration
-	cleanupInt   time.Duration
-	stopChan     chan struct{}
+	mu         sync.RWMutex
+	windows    map[string]*window
+	requests   int
+	duration   time.Duration
+	cleanupInt time.Duration
+	stopChan   chan struct{}
 }
 
 // window represents a sliding window for rate limiting

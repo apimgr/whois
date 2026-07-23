@@ -112,6 +112,18 @@ server:
     dir: ""
 
   # ===========================================================================
+  # CORS (PART 16)
+  # ===========================================================================
+
+  cors:
+    # allowed_origins: ["*"] = allow all (default); [""] = disable CORS
+    # headers entirely; or an explicit list of origins.
+    allowed_origins:
+      - "*"
+    allow_credentials: false
+    max_age: 86400
+
+  # ===========================================================================
   # SSL / TLS (PART 15)
   # ===========================================================================
 
@@ -427,8 +439,6 @@ server:
 # =============================================================================
 
 web:
-  # cors: "*" = allow all origins (default); "" = no CORS; or comma-separated list
-  cors: "*"
 `
 }
 

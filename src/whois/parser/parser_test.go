@@ -236,9 +236,9 @@ func TestParseDomain_AlternateExpiryKeywords(t *testing.T) {
 
 func TestParseDate(t *testing.T) {
 	cases := []struct {
-		name    string
-		input   string
-		wantNil bool
+		name     string
+		input    string
+		wantNil  bool
 		wantYear int
 	}{
 		{name: "RFC3339", input: "2020-06-15T10:30:00Z", wantYear: 2020},

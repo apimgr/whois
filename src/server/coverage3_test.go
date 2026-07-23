@@ -1462,11 +1462,11 @@ func TestHandleSchedulerRunSuccess(t *testing.T) {
 
 	// Register a simple no-op task so RunTaskNow finds it.
 	task := &scheduler.Task{
-		ID:      "test-noop",
-		Name:    "Test No-Op",
+		ID:       "test-noop",
+		Name:     "Test No-Op",
 		Schedule: "@daily",
-		Enabled: true,
-		Handler: func(_ context.Context) error { return nil },
+		Enabled:  true,
+		Handler:  func(_ context.Context) error { return nil },
 	}
 	if err := s.scheduler.Register(task); err != nil {
 		t.Fatalf("Register task: %v", err)
