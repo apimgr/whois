@@ -1,0 +1,27 @@
+name: caswhois-test
+
+services:
+  caswhois:
+    image: ghcr.io/apimgr/caswhois:latest
+    pull_policy: always
+    container_name: caswhois-test
+    restart: "no"
+    environment:
+      DEBUG: 1
+      MODE: dev
+      TZ: America/New_York
+    ports:
+      - "64581:80"
+    volumes:
+      # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
+      # This file MUST be copied to a temp directory before running
+      # AI: NEVER run this from the project directory
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
+    networks:
+      - caswhois-test
+
+networks:
+  caswhois-test:
+    name: caswhois-test
+    external: false

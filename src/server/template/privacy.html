@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{{t .Lang "privacy.title"}} — {{.Name}}">
+<title>{{t .Lang "privacy.title"}} — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+  {{.AnnouncementsHTML}}
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy" aria-current="page">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms">{{t .Lang "nav.terms"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <div class="container">
+    <article class="privacy-policy">
+      <h1>{{t .Lang "privacy.title"}}</h1>
+      <p class="last-updated">{{t .Lang "privacy.last_updated"}}: {{.Footer.BuildDatetime}}</p>
+
+      {{ if .Content }}
+      <section id="privacy-override">
+        {{ .Content | markdownToHTML }}
+      </section>
+      {{ else }}
+
+      <section id="summary" class="privacy-summary">
+        <h2>{{t .Lang "privacy.summary_heading"}}</h2>
+        <div class="key-points">
+          <div class="key-point">
+            <span class="icon" aria-hidden="true">&#128274;</span>
+            <strong>{{t .Lang "privacy.point_stored_title"}}</strong>
+            <p>{{t .Lang "privacy.point_stored_desc"}}</p>
+          </div>
+          {{ if .DataSold }}
+          <div class="key-point key-point-warning">
+            <span class="icon" aria-hidden="true">&#9888;&#65039;</span>
+            <strong>{{t .Lang "privacy.point_sold_title"}}</strong>
+            <p>{{t .Lang "privacy.point_sold_desc"}} <a href="#ccpa-opt-out">{{t .Lang "privacy.point_sold_link"}}</a>.</p>
+          </div>
+          {{ else }}
+          <div class="key-point">
+            <span class="icon" aria-hidden="true">&#128683;</span>
+            <strong>{{t .Lang "privacy.point_not_sold_title"}}</strong>
+            <p>{{t .Lang "privacy.point_not_sold_desc"}}</p>
+          </div>
+          {{ end }}
+          <div class="key-point">
+            <span class="icon" aria-hidden="true">&#127918;&#65039;</span>
+            <strong>{{t .Lang "privacy.point_control_title"}}</strong>
+            <p>{{t .Lang "privacy.point_control_desc"}}</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="cookies">
+        <h2>{{t .Lang "privacy.cookies_heading"}}</h2>
+        <p>{{t .Lang "privacy.cookies_intro"}}</p>
+
+        <h3>{{t .Lang "privacy.cookies_essential_title"}}</h3>
+        <p>{{.EssentialCookieDesc}}</p>
+
+        <h3>{{t .Lang "privacy.cookies_preferences_title"}}</h3>
+        <p>{{.PreferencesCookieDesc}}</p>
+
+        <h3>{{t .Lang "privacy.cookies_analytics_title"}}</h3>
+        {{ if .TrackingType }}
+        <p>{{.AnalyticsDesc}}</p>
+        <p>{{t .Lang "privacy.cookies_analytics_provider_prefix"}} <strong>{{.TrackingTypeName}}</strong> {{t .Lang "privacy.cookies_analytics_provider_suffix"}}</p>
+        {{ else }}
+        <p>{{t .Lang "privacy.cookies_analytics_none"}}</p>
+        {{ end }}
+
+        <div class="manage-cookies">
+          <button type="button" data-action="cookie-preferences">{{t .Lang "privacy.manage_cookies_button"}}</button>
+        </div>
+      </section>
+
+      <section id="data-collection">
+        <h2>{{t .Lang "privacy.data_collection_heading"}}</h2>
+        {{ .DataCollection | markdownToHTML }}
+      </section>
+
+      <section id="data-usage">
+        <h2>{{t .Lang "privacy.data_usage_heading"}}</h2>
+        {{ .DataUsage | markdownToHTML }}
+      </section>
+
+      <section id="data-security">
+        <h2>{{t .Lang "privacy.data_security_heading"}}</h2>
+        {{ .DataSecurity | markdownToHTML }}
+      </section>
+
+      <section id="data-storage">
+        <h2>{{t .Lang "privacy.data_storage_heading"}}</h2>
+        <p><strong>{{t .Lang "privacy.data_storage_intro"}}</strong></p>
+
+        <h3>{{t .Lang "privacy.data_shared_when_heading"}}</h3>
+        <p>{{t .Lang "privacy.data_shared_when_intro"}}</p>
+        <ul>
+          {{ range .Sharing }}
+          <li><strong>{{ .Condition | humanize }}:</strong> {{ .When }} - {{ .Data }}</li>
+          {{ end }}
+        </ul>
+
+        <p><strong>{{t .Lang "privacy.data_shared_all_cases"}}</strong></p>
+        <ul>
+          <li>{{t .Lang "privacy.data_shared_necessary"}}</li>
+          <li>{{t .Lang "privacy.data_shared_opt_out"}}</li>
+          {{ if .DataSold }}
+          <li>{{t .Lang "privacy.data_shared_may_sell"}} <a href="#ccpa-opt-out">{{t .Lang "privacy.ccpa_heading"}}</a>.</li>
+          {{ else }}
+          <li>{{t .Lang "privacy.data_shared_never_sell"}}</li>
+          {{ end }}
+        </ul>
+      </section>
+
+      <section id="data-retention">
+        <h2>{{t .Lang "privacy.data_retention_heading"}}</h2>
+        <p>{{.RetentionPeriod}}</p>
+      </section>
+
+      <section id="third-parties">
+        <h2>{{t .Lang "privacy.third_parties_heading"}}</h2>
+        {{ if .ThirdPartyServices }}
+        <p>{{t .Lang "privacy.third_parties_intro"}}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>{{t .Lang "privacy.third_party_col_name"}}</th>
+              <th>{{t .Lang "privacy.third_party_col_purpose"}}</th>
+              <th>{{t .Lang "privacy.third_party_col_data"}}</th>
+              <th>{{t .Lang "privacy.third_party_col_policy"}}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{ range .ThirdPartyServices }}
+            <tr>
+              <td>{{ .Name }}</td>
+              <td>{{ .Purpose }}</td>
+              <td>{{ .DataSent }}</td>
+              <td><a href="{{ .PolicyURL }}" target="_blank" rel="noopener noreferrer">{{t $.Lang "privacy.third_party_policy_link"}}</a></td>
+            </tr>
+            {{ end }}
+          </tbody>
+        </table>
+        {{ else }}
+        <p><strong>{{t .Lang "privacy.third_parties_none"}}</strong></p>
+        <p>{{t .Lang "privacy.third_parties_analytics_note"}}</p>
+        {{ end }}
+      </section>
+
+      <section id="your-rights">
+        <h2>{{t .Lang "privacy.your_rights_heading"}}</h2>
+        <p>{{t .Lang "privacy.your_rights_intro"}}</p>
+        <ul>
+          <li><strong>{{t .Lang "privacy.rights_access_title"}}:</strong> {{t .Lang "privacy.rights_access_desc"}}</li>
+          {{ if .ExportAvailable }}
+          <li><strong>{{t .Lang "privacy.rights_export_title"}}:</strong> {{t .Lang "privacy.rights_export_desc"}}</li>
+          {{ end }}
+          {{ if .DeletionAvailable }}
+          <li><strong>{{t .Lang "privacy.rights_deletion_title"}}:</strong> {{t .Lang "privacy.rights_deletion_desc"}}</li>
+          {{ end }}
+          <li><strong>{{t .Lang "privacy.rights_correction_title"}}:</strong> {{t .Lang "privacy.rights_correction_desc"}}</li>
+          <li><strong>{{t .Lang "privacy.rights_cookie_control_title"}}:</strong> <button type="button" class="link-button" data-action="cookie-preferences">{{t .Lang "privacy.rights_cookie_control_desc"}}</button></li>
+        </ul>
+      </section>
+
+      {{ if .DataSold }}
+      <section id="ccpa-opt-out" class="ccpa-section">
+        <h2>{{t .Lang "privacy.ccpa_heading"}}</h2>
+        <p>{{t .Lang "privacy.ccpa_intro"}}</p>
+        <ul>
+          <li><strong>{{t .Lang "privacy.ccpa_right_know_title"}}</strong> {{t .Lang "privacy.ccpa_right_know_desc"}}</li>
+          <li><strong>{{t .Lang "privacy.ccpa_right_deletion_title"}}</strong> {{t .Lang "privacy.ccpa_right_deletion_desc"}}</li>
+          <li><strong>{{t .Lang "privacy.ccpa_right_opt_out_title"}}</strong> {{t .Lang "privacy.ccpa_right_opt_out_desc"}}</li>
+          <li><strong>{{t .Lang "privacy.ccpa_right_nondiscrimination_title"}}</strong> {{t .Lang "privacy.ccpa_right_nondiscrimination_desc"}}</li>
+        </ul>
+
+        <div class="ccpa-opt-out-box">
+          <h3>{{t .Lang "privacy.ccpa_box_heading"}}</h3>
+          <p>{{t .Lang "privacy.ccpa_box_desc"}}</p>
+          {{ if .CCPAOptedOut }}
+          <div class="ccpa-status opted-out">
+            <span class="status-icon" aria-hidden="true">&#10003;</span>
+            <span>{{t .Lang "privacy.ccpa_opted_out_status"}}</span>
+          </div>
+          <form method="post" action="/server/ccpa">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="choice" value="opt-in">
+            <button type="submit" class="btn-secondary">{{t .Lang "privacy.ccpa_opt_in_button"}}</button>
+          </form>
+          {{ else }}
+          <form method="post" action="/server/ccpa">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="choice" value="opt-out">
+            <button type="submit" class="btn-primary btn-ccpa-opt-out">{{t .Lang "privacy.ccpa_opt_out_button"}}</button>
+          </form>
+          {{ end }}
+        </div>
+
+        <p class="ccpa-note">{{t .Lang "privacy.ccpa_note"}}</p>
+      </section>
+      {{ end }}
+
+      <section id="contact">
+        <h2>{{t .Lang "privacy.contact_heading"}}</h2>
+        <p>{{t .Lang "privacy.contact_intro"}} <a href="/server/contact">{{t .Lang "privacy.contact_link"}}</a>.</p>
+      </section>
+      {{ end }}
+    </article>
+  </div>
+</main>
+
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
+
+<script src="/static/js/main.js" defer></script>
+</body>
+</html>

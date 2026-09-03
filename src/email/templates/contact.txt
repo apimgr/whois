@@ -1,0 +1,23 @@
+Subject: Contact Form - {subject}
+---
+CONTACT FORM SUBMISSION
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+Name:  {sender_name}
+Email: {sender_email}
+
+Subject: {subject}
+
+Message:
+{message}
+
+────────────────────────────────────────────────────────────────────────
+{app_name}
+{app_url}
+────────────────────────────────────────────────────────────────────────
+
+--
+{app_name}
+{app_url}

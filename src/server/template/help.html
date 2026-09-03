@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{{t .Lang "help.title"}} — {{.Name}}">
+<title>{{t .Lang "help.title"}} — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+  {{.AnnouncementsHTML}}
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help" aria-current="page">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms">{{t .Lang "nav.terms"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <div class="container">
+    <article class="help-page">
+      <h1>{{t .Lang "help.title"}}</h1>
+
+      <section id="getting-started">
+        <h2>{{t .Lang "help.getting_started_heading"}}</h2>
+        <p>{{t .Lang "help.getting_started_intro"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/example.com</code></pre>
+
+        <p>{{t .Lang "help.getting_started_response_label"}}</p>
+        <pre><code>{
+  "ok": true,
+  "data": {
+    "query": "example.com",
+    "query_type": "domain",
+    "source": "rdap",
+    "registrar": "...",
+    "created": "...",
+    "expiry": "...",
+    "nameservers": ["..."]
+  }
+}</code></pre>
+
+        <p>{{t .Lang "help.getting_started_ip_label"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/ip/8.8.8.8</code></pre>
+
+        <p>{{t .Lang "help.getting_started_asn_label"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/asn/AS15169</code></pre>
+      </section>
+
+      <section id="features">
+        <h2>{{t .Lang "help.features_heading"}}</h2>
+
+        <h3>{{t .Lang "help.feature_domain_title"}}</h3>
+        <p>{{t .Lang "help.feature_domain_desc"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/domain/example.com</code></pre>
+
+        <h3>{{t .Lang "help.feature_ip_title"}}</h3>
+        <p>{{t .Lang "help.feature_ip_desc"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/ip/2001:4860:4860::8888</code></pre>
+
+        <h3>{{t .Lang "help.feature_asn_title"}}</h3>
+        <p>{{t .Lang "help.feature_asn_desc"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/asn/AS13335</code></pre>
+
+        <h3>{{t .Lang "help.feature_validate_title"}}</h3>
+        <p>{{t .Lang "help.feature_validate_desc"}}</p>
+        <pre><code>curl {{.APIBase}}/whois/validate/example.com</code></pre>
+
+        <h3>{{t .Lang "help.feature_owner_search_title"}}</h3>
+        <p>{{t .Lang "help.feature_owner_search_desc"}}</p>
+        <pre><code>curl "{{.APIBase}}/whois/search?owner=Example+Org"</code></pre>
+
+        <h3>{{t .Lang "help.feature_bulk_title"}}</h3>
+        <p>{{t .Lang "help.feature_bulk_desc"}}</p>
+        <pre><code>curl -X POST -H "Authorization: Bearer &lt;server.token&gt;" \
+  -d '{"queries":["example.com","8.8.8.8"]}' \
+  {{.APIBase}}/whois/bulk</code></pre>
+
+        <h3>{{t .Lang "help.feature_servers_title"}}</h3>
+        <p>{{t .Lang "help.feature_servers_desc"}}</p>
+        <pre><code>curl {{.APIBase}}/whois-servers</code></pre>
+
+        <h3>{{t .Lang "help.feature_stats_title"}}</h3>
+        <p>{{t .Lang "help.feature_stats_desc"}}</p>
+        <pre><code>curl {{.APIBase}}/server/stats</code></pre>
+
+        <h3>{{t .Lang "help.feature_formats_title"}}</h3>
+        <p>{{t .Lang "help.feature_formats_desc"}}</p>
+        <pre><code>curl -H "Accept: text/plain" {{.APIBase}}/whois/example.com
+curl -H "Accept: application/json" {{.APIBase}}/whois/example.com</code></pre>
+      </section>
+
+      <div class="api-docs">
+        <h3>{{t .Lang "help.api_docs_heading"}}</h3>
+        <p>{{t .Lang "help.api_docs_desc"}}</p>
+        <ul>
+          <li><a href="/server/docs/swagger">{{t .Lang "help.api_docs_swagger_label"}}</a> - {{t .Lang "help.api_docs_swagger_desc"}}</li>
+          <li><a href="/server/docs/graphql">{{t .Lang "help.api_docs_graphql_label"}}</a> - {{t .Lang "help.api_docs_graphql_desc"}}</li>
+        </ul>
+      </div>
+
+      {{ if and .TorEnabled .TorRunning }}
+      <section id="tor-access" class="tor-access">
+        <h3>{{t .Lang "help.tor_heading"}}</h3>
+        <p>{{t .Lang "help.tor_intro"}}</p>
+
+        <h4>{{t .Lang "help.tor_address_heading"}}</h4>
+        <div class="code-block">
+          <code class="code-content">{{.OnionAddr}}</code>
+          <button type="button" class="copy-btn" data-copy="{{.OnionAddr}}" aria-label="{{t .Lang "help.tor_copy_label"}}">
+            <span class="copy-icon" aria-hidden="true">&#128203;</span>
+            <span class="copy-text" aria-live="polite">{{t .Lang "help.tor_copy_text"}}</span>
+          </button>
+        </div>
+
+        <h4>{{t .Lang "help.tor_connect_heading"}}</h4>
+        <ol>
+          <li>{{t .Lang "help.tor_step_download"}} <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">{{t .Lang "help.tor_browser_link"}}</a></li>
+          <li>{{t .Lang "help.tor_step_open"}}</li>
+          <li>{{t .Lang "help.tor_step_paste"}}</li>
+        </ol>
+
+        <p class="note">{{t .Lang "help.tor_note"}}</p>
+      </section>
+      {{ end }}
+
+      <section id="faq">
+        <h2>{{t .Lang "help.faq_heading"}}</h2>
+
+        <h3>{{t .Lang "help.faq_q_apikey"}}</h3>
+        <p>{{t .Lang "help.faq_a_apikey"}}</p>
+
+        <h3>{{t .Lang "help.faq_q_ratelimit"}}</h3>
+        <p>{{t .Lang "help.faq_a_ratelimit"}}</p>
+
+        <h3>{{t .Lang "help.faq_q_source"}}</h3>
+        <p>{{t .Lang "help.faq_a_source"}}</p>
+
+        <h3>{{t .Lang "help.faq_q_bulk"}}</h3>
+        <p>{{t .Lang "help.faq_a_bulk"}}</p>
+
+        <h3>{{t .Lang "help.faq_q_owner_search"}}</h3>
+        <p>{{t .Lang "help.faq_a_owner_search"}}</p>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>{{t .Lang "help.troubleshooting_heading"}}</h2>
+
+        <h3>{{t .Lang "help.trouble_q_429"}}</h3>
+        <p>{{t .Lang "help.trouble_a_429"}}</p>
+
+        <h3>{{t .Lang "help.trouble_q_notfound"}}</h3>
+        <p>{{t .Lang "help.trouble_a_notfound"}}</p>
+
+        <h3>{{t .Lang "help.trouble_q_stale"}}</h3>
+        <p>{{t .Lang "help.trouble_a_stale"}}</p>
+
+        <h3>{{t .Lang "help.trouble_q_bulk_auth"}}</h3>
+        <p>{{t .Lang "help.trouble_a_bulk_auth"}}</p>
+      </section>
+
+      {{ if .CustomHTML }}
+      <section id="additional-info">
+        <h2>{{t .Lang "help.additional_info_heading"}}</h2>
+        {{ .CustomHTML | markdownToHTML }}
+      </section>
+      {{ end }}
+    </article>
+  </div>
+</main>
+
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
+
+<script src="/static/js/main.js" defer></script>
+</body>
+</html>

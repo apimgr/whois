@@ -1,0 +1,65 @@
+# caswhois - WHOIS lookup and reverse WHOIS service
+# nginx proxy address - http://172.17.0.1:64580
+
+name: caswhois
+
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
+
+services:
+  caswhois:
+    image: ghcr.io/apimgr/caswhois:latest
+    container_name: caswhois-app
+    hostname: ${BASE_HOST_NAME:-$HOSTNAME}
+    restart: always
+    pull_policy: always
+    logging: *default-logging
+    environment:
+      # NO DEBUG/MODE - production defaults apply
+      PORT: 80
+      TZ: ${TZ:-America/New_York}
+      CACHE_URL: valkey://caswhois-cache:6379
+      # For remote libsql/Turso: set DATABASE_DRIVER and DATABASE_URL
+      # DATABASE_DRIVER: libsql
+      # DATABASE_URL: libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
+    volumes:
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
+    ports:
+      - '172.17.0.1:64580:80'
+    healthcheck:
+      test: /usr/local/bin/caswhois --status
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    depends_on:
+      caswhois-cache:
+        condition: service_healthy
+    networks:
+      - caswhois
+
+  caswhois-cache:
+    image: valkey/valkey:alpine
+    pull_policy: always
+    container_name: caswhois-cache
+    restart: always
+    logging: *default-logging
+    volumes:
+      - './volumes/data/db/valkey/caswhois:/data:z'
+    healthcheck:
+      test: valkey-cli ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - caswhois
+
+networks:
+  caswhois:
+    name: caswhois
+    external: false

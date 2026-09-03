@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="WHOIS result for {{.Query}}">
+<title>{{.Query}} — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+  {{.AnnouncementsHTML}}
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms">{{t .Lang "nav.terms"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <div class="container section-pad">
+
+    <form id="whois-form" class="search-form-wrap mb-lg" action="/whois" method="GET" novalidate>
+      <div class="search-row">
+        <label for="q" class="sr-only">{{t .Lang "whois.query_label"}}</label>
+        <input
+          id="q" name="q" type="text"
+          class="search-input"
+          placeholder="{{t .Lang "whois.placeholder"}}"
+          autocomplete="off" autocorrect="off" autocapitalize="none"
+          spellcheck="false"
+          value="{{.Query}}"
+          aria-label="{{t .Lang "whois.query_label"}}"
+        >
+        <button type="submit" class="btn-primary">{{t .Lang "whois.button"}}</button>
+      </div>
+    </form>
+
+    {{if .Err}}
+    <div class="state-box state-error" role="alert">{{.Err}}</div>
+    {{else if .Result}}
+    <div class="card">
+      <div class="result-meta mb-md">
+        <div class="meta-item">
+          <div class="meta-label">{{t .Lang "whois.result_query"}}</div>
+          <div class="meta-value long-string">{{.Result.Query}}</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">{{t .Lang "whois.result_type"}}</div>
+          <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">{{t .Lang "whois.result_server"}}</div>
+          <div class="meta-value long-string">{{.Result.Server}}</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">{{t .Lang "whois.result_timestamp"}}</div>
+          <div class="meta-value">
+            <time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time>
+          </div>
+        </div>
+      </div>
+      <pre class="whois-raw" aria-label="{{t .Lang "whois.result_raw"}}">{{.Result.Raw}}</pre>
+    </div>
+    {{else if .Query}}
+    <div class="state-box state-error" role="alert">{{t .Lang "whois.no_result"}}</div>
+    {{end}}
+
+    <p class="mt-md"><a href="/">{{t .Lang "whois.new_lookup"}}</a></p>
+  </div>
+</main>
+
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
+
+<script src="/static/js/main.js" defer></script>
+</body>
+</html>

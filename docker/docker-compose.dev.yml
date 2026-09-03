@@ -1,0 +1,42 @@
+# caswhois - development
+# nginx proxy address - http://172.17.0.1:64580
+
+name: caswhois
+
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
+
+services:
+  caswhois:
+    image: ghcr.io/apimgr/caswhois:latest
+    container_name: caswhois-app
+    hostname: ${BASE_HOST_NAME:-$HOSTNAME}
+    restart: always
+    pull_policy: always
+    logging: *default-logging
+    environment:
+      PORT: 80
+      DEBUG: 1
+      MODE: dev
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
+    ports:
+      - '172.17.0.1:64580:80'
+    healthcheck:
+      test: /usr/local/bin/caswhois --status
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    networks:
+      - caswhois
+
+networks:
+  caswhois:
+    name: caswhois
+    external: false

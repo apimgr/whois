@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{{t .Lang "graphql.subtitle"}}">
+<title>{{t .Lang "graphql.title"}} — {{.Name}}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<style>
+.gql-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.gql-pane { display: flex; flex-direction: column; gap: 0.5rem; }
+.gql-textarea {
+  font-family: monospace;
+  font-size: 0.875rem;
+  width: 100%;
+  min-height: 12rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  background: var(--color-bg-secondary, #161b22);
+  color: var(--color-fg, #c9d1d9);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.gql-response {
+  font-family: monospace;
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--color-bg-secondary, #161b22);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  padding: 0.75rem;
+  min-height: 12rem;
+  overflow: auto;
+}
+.gql-meta { font-size: 0.8rem; color: var(--color-fg-muted, #8b949e); }
+.gql-run { margin-top: 0.5rem; }
+@media (max-width: 640px) {
+  .gql-layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+  {{.AnnouncementsHTML}}
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
+
+<nav id="navigation" class="site-nav" aria-label="{{t .Lang "nav.main_navigation"}}">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="{{.Name}} home">{{.Name}}</a>
+    <ul class="nav-links" role="list">
+      <li><a href="/about">{{t .Lang "nav.about"}}</a></li>
+      <li><a href="/docs">{{t .Lang "nav.docs"}}</a></li>
+      <li><a href="/server/privacy">{{t .Lang "nav.privacy"}}</a></li>
+      <li><a href="/server/contact">{{t .Lang "nav.contact"}}</a></li>
+      <li><a href="/server/help">{{t .Lang "nav.help"}}</a></li>
+      <li><a href="/server/terms">{{t .Lang "nav.terms"}}</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="btn-theme" aria-label="{{t .Lang "theme.toggle"}}">
+        <span class="icon-sun" aria-hidden="true">&#9788;</span>
+        <span class="icon-moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<main id="main-content">
+  <div class="container section-pad">
+    <h1>{{t .Lang "graphql.title"}}</h1>
+    <p>{{t .Lang "graphql.subtitle"}}</p>
+    <p class="gql-meta">
+      {{t .Lang "graphql.endpoint_label"}}:
+      <code>{{.EndpointURL}}</code>
+    </p>
+
+    <form id="gql-form" action="{{.EndpointURL}}" method="POST"
+      data-endpoint="{{.EndpointURL}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="gql-layout">
+        <div class="gql-pane">
+          <label for="gql-query"><strong>{{t .Lang "graphql.query_label"}}</strong></label>
+          <textarea
+            id="gql-query" name="query"
+            class="gql-textarea"
+            aria-label="{{t .Lang "graphql.query_label"}}"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="none"
+          >{{.Query}}</textarea>
+
+          <label for="gql-vars"><strong>{{t .Lang "graphql.variables_label"}}</strong></label>
+          <textarea
+            id="gql-vars" name="variables"
+            class="gql-textarea gql-textarea-vars"
+            aria-label="{{t .Lang "graphql.variables_label"}}"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="none"
+          >{{.Variables}}</textarea>
+
+          <label for="gql-op"><strong>{{t .Lang "graphql.operation_label"}}</strong></label>
+          <input
+            id="gql-op" name="operationName" type="text"
+            class="search-input"
+            aria-label="{{t .Lang "graphql.operation_label"}}"
+            value="{{.OperationName}}"
+            autocorrect="off" autocapitalize="none"
+            spellcheck="false"
+          >
+
+          <div class="gql-run">
+            <button type="submit" class="btn-primary">{{t .Lang "graphql.submit"}}</button>
+          </div>
+        </div>
+
+        <div class="gql-pane">
+          <label><strong>{{t .Lang "graphql.response_label"}}</strong></label>
+          {{if .ErrorMsg}}
+          <div class="state-box state-error" role="alert">{{.ErrorMsg}}</div>
+          {{end}}
+          <pre id="gql-response" class="gql-response" aria-label="{{t .Lang "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
+        </div>
+      </div>
+    </form>
+  </div>
+</main>
+
+{{.ConsentBannerHTML}}
+{{footer .Footer}}
+
+<script src="/static/js/main.js" defer></script>
+<script>
+(function() {
+  var form = document.getElementById('gql-form');
+  var responseEl = document.getElementById('gql-response');
+  var csrfInput = form ? form.querySelector('input[name="csrf_token"]') : null;
+  if (!form || !responseEl) return;
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var endpoint = form.dataset.endpoint;
+    var query = document.getElementById('gql-query').value.trim();
+    var varsRaw = document.getElementById('gql-vars').value.trim();
+    var opName = document.getElementById('gql-op').value.trim();
+
+    var variables = null;
+    if (varsRaw) {
+      try { variables = JSON.parse(varsRaw); }
+      catch (_) {
+        responseEl.textContent = '{{t .Lang "graphql.error_invalid_json"}}';
+        return;
+      }
+    }
+
+    var body = { query: query };
+    if (variables !== null) body.variables = variables;
+    if (opName) body.operationName = opName;
+
+    responseEl.textContent = '{{t .Lang "common.loading"}}';
+
+    var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    if (csrfInput) headers['X-CSRF-Token'] = csrfInput.value;
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      responseEl.textContent = JSON.stringify(data, null, 2);
+    })
+    .catch(function(err) {
+      responseEl.textContent = '{{t .Lang "whois.error_network"}} ' + err.message;
+    });
+  });
+})();
+</script>
+</body>
+</html>

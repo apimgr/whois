@@ -1,0 +1,15 @@
+Subject: SSL Certificate Expiring - {app_name}
+---
+SSL CERTIFICATE EXPIRING
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+The SSL certificate for {fqdn} is expiring soon.
+
+Expires in: {expires_in} days
+Expiry date: {expiry_date}
+
+--
+{app_name}
+{app_url}
