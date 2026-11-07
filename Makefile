@@ -243,7 +243,7 @@ dev:
 lint:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@echo "Running linters..."
-	@$(GO_DOCKER) sh -c "go vet ./... && staticcheck ./... 2>/dev/null || true"
+	@$(GO_DOCKER) sh -c "go vet ./... && GOTOOLCHAIN=go1.26.4 staticcheck ./..."
 
 # =============================================================================
 # CLEAN - Remove build artifacts

@@ -8,3 +8,4 @@ state, catches up missed work, and isolates task panics.
 AI.md PART 18 specifically requires an in-process scheduler with no external
 scheduler dependency; that requirement takes precedence over the generic
 library list's gocron example.
+- whois: Makefile VERSION fallback should be 0.1.0 instead of devel
