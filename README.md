@@ -1,8 +1,8 @@
 # caswhois
 
-[![Security](https://github.com/apimgr/whois/actions/workflows/security.yml/badge.svg)](https://github.com/apimgr/whois/actions/workflows/security.yml)
-[![Release](https://img.shields.io/github/v/release/apimgr/caswhois)](https://github.com/apimgr/whois/releases)
-[![License](https://img.shields.io/github/license/apimgr/caswhois)](LICENSE.md)
+[![CI](https://github.com/apimgr/whois/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/whois/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/apimgr/whois)](https://github.com/apimgr/whois/releases)
+[![License](https://img.shields.io/github/license/apimgr/whois)](LICENSE.md)
 
 A comprehensive WHOIS lookup service that provides detailed information about domain names, IP addresses, and ASN (Autonomous System Numbers). Features both REST API endpoints and a web interface with intelligent caching and rate limiting.
 
@@ -16,7 +16,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - **Intelligent Caching**: Reduces upstream load with configurable TTLs
 - **Persistent Dataset**: Every successful lookup is stored permanently in SQLite
 - **Multiple Output Formats**: Structured JSON, plain text, and server-rendered HTML
-- **File-Only Configuration**: All settings live in `server.yml` (no admin web UI)
+- **File-Only Configuration**: Settings live in `server.yml`; credentials live in `secrets.yml` (no admin web UI)
 - **Rate Limiting**: Protect against abuse while maintaining usability
 - **GeoIP Integration**: Geographic information for IP addresses
 - **Tor Hidden Service**: Optional; enabled when configured and Tor is available
@@ -50,7 +50,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - ✅ **Rate Limiting**: Configurable per-IP read/write limits
 - ✅ **Multiple Formats**: JSON, text, and HTML output
 - ✅ **Bulk Queries**: Batch lookups for server-token holders
-- ✅ **File-Only Config**: All settings in `server.yml` (no admin web UI)
+- ✅ **File-Only Config**: Settings in `server.yml`, credentials in `secrets.yml` (no admin web UI)
 - ✅ **Metrics**: Prometheus endpoint for monitoring
 - ✅ **Health Checks**: Health endpoint for monitoring
 - ✅ **SSL/TLS**: Let's Encrypt auto-renewal
@@ -66,37 +66,37 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 **Quick Start:**
 ```bash
 # Create temp directory for docker-compose
-mkdir -p /tmp/caswhois-deploy && cd /tmp/caswhois-deploy
+mkdir -p "${TMPDIR:-/tmp}/apimgr/caswhois-deploy" && cd "${TMPDIR:-/tmp}/apimgr/caswhois-deploy"
 
 # Download docker-compose.yml
-curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/caswhois/main/docker/docker-compose.yml
+curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/whois/main/docker/docker-compose.yml
 
 # Start the service
-docker-compose up -d
+docker compose up -d
 
 # Check logs
-docker-compose logs -f caswhois
+docker compose logs -f caswhois
 ```
 
-Access the service at `http://localhost:64580`
+Use the local URL and port printed at startup. The first-run port is selected from the configured range and can be fixed in `server.yml`.
 
 **Production Setup:**
 ```bash
 # Clone repository
 git clone https://github.com/apimgr/whois.git
-cd caswhois/docker
+cd whois/docker
 
 # Edit docker-compose.yml (set timezone, ports, etc.)
 nano docker-compose.yml
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
 
 ### Binary Installation
@@ -104,7 +104,7 @@ docker-compose down
 **Download:**
 ```bash
 # Download latest release
-VERSION=$(curl -s https://api.github.com/repos/apimgr/caswhois/releases/latest | grep tag_name | cut -d '"' -f 4)
+VERSION=$(curl -s https://api.github.com/repos/apimgr/whois/releases/latest | grep tag_name | cut -d '"' -f 4)
 wget https://github.com/apimgr/whois/releases/download/${VERSION}/caswhois-linux-amd64
 
 # Make executable
@@ -151,7 +151,7 @@ The client binary (`caswhois-cli`) provides CLI/TUI/GUI interfaces:
 **Installation:**
 ```bash
 # Download client
-VERSION=$(curl -s https://api.github.com/repos/apimgr/caswhois/releases/latest | grep tag_name | cut -d '"' -f 4)
+VERSION=$(curl -s https://api.github.com/repos/apimgr/whois/releases/latest | grep tag_name | cut -d '"' -f 4)
 wget https://github.com/apimgr/whois/releases/download/${VERSION}/caswhois-cli-linux-amd64
 
 # Make executable
@@ -182,14 +182,14 @@ caswhois-cli --gui
 
 Configuration file: `/etc/apimgr/caswhois/server.yml`
 
-All settings live in `server.yml`. There is no admin web UI; the operator edits the
-file and the server hot-reloads safe changes (a restart is required only for listen
-address or port changes).
+Operational settings live in `server.yml` and credentials in `secrets.yml`. There is no
+admin web UI; the operator edits the files and the server hot-reloads supported changes.
+The generated files document their defaults and restart requirements.
 
 **Key Settings:**
 ```yaml
 server:
-  address: ":64580"
+  address: "0.0.0.0"
   mode: production
   rate_limit:
     read: 120
@@ -198,7 +198,7 @@ server:
     burst: 10
   database:
     driver: sqlite
-    path: /var/lib/apimgr/caswhois/db/caswhois.db
+    dir: /var/lib/apimgr/caswhois/db
   cache:
     type: memory
     ttl:
@@ -261,7 +261,7 @@ curl -q -LSsf -H "Accept: text/plain" http://localhost:64580/api/v1/whois/exampl
 **Bulk Lookup (requires authentication):**
 ```bash
 curl -q -LSsf -X POST http://localhost:64580/api/v1/whois/bulk \
-  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "queries": ["example.com", "8.8.8.8", "AS15169"]
@@ -336,9 +336,6 @@ cd caswhois
 # Quick development build (to temp directory)
 make dev
 
-# Production test build (to binaries/)
-make local
-
 # Full release build (all 8 platforms)
 make build
 
@@ -397,6 +394,6 @@ WHOIS data is provided by upstream WHOIS servers. This service is a tool for que
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE.md](LICENSE.md) for details.
 
 Third-party licenses: see [LICENSE.md](LICENSE.md)
