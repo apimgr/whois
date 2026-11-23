@@ -33,7 +33,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 ## Official Site
 
 - Website: https://caswhois.apimgr.dev
-- Documentation: https://caswhois.readthedocs.io
+- Documentation: https://apimgr-whois.readthedocs.io
 - Source: https://github.com/apimgr/whois
 
 ---
