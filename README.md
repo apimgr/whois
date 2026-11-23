@@ -15,11 +15,11 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - **Multi-Source Queries**: Domain names, IPv4, IPv6, and ASN lookups
 - **Intelligent Caching**: Reduces upstream load with configurable TTLs
 - **Persistent Dataset**: Every successful lookup is stored permanently in SQLite
-- **Multiple Output Formats**: JSON, XML, plain text, and HTML
+- **Multiple Output Formats**: Structured JSON, plain text, and server-rendered HTML
 - **File-Only Configuration**: All settings live in `server.yml` (no admin web UI)
 - **Rate Limiting**: Protect against abuse while maintaining usability
 - **GeoIP Integration**: Geographic information for IP addresses
-- **Tor Hidden Service**: Auto-enabled when Tor is installed
+- **Tor Hidden Service**: Optional; enabled when configured and Tor is available
 - **Monitoring**: Prometheus metrics built-in
 
 **Target Users:**
@@ -48,7 +48,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - ✅ **Persistent Records**: Every successful lookup stored permanently in SQLite
 - ✅ **Owner Search**: Registrant/owner reverse search over the local dataset
 - ✅ **Rate Limiting**: Configurable per-IP read/write limits
-- ✅ **Multiple Formats**: JSON, XML, text, HTML output
+- ✅ **Multiple Formats**: JSON, text, and HTML output
 - ✅ **Bulk Queries**: Batch lookups for server-token holders
 - ✅ **File-Only Config**: All settings in `server.yml` (no admin web UI)
 - ✅ **Metrics**: Prometheus endpoint for monitoring
@@ -217,12 +217,12 @@ Caching backends: `memory` (default), `redis`, or `valkey`. Database drivers: `s
 
 ### REST API
 
-All endpoints support content negotiation (JSON/XML/text based on `Accept` header).
+The API returns JSON by default. Endpoints that support plain text can be requested with `Accept: text/plain`; HTML routes render server-side pages.
 
 **Health Check:**
 ```bash
-curl -q -LSsf http://localhost:64580/healthz
-curl -q -LSsf http://localhost:64580/api/v1/healthz
+curl -q -LSsf http://localhost:64580/server/healthz
+curl -q -LSsf http://localhost:64580/api/v1/server/healthz
 ```
 
 **WHOIS Lookup (Auto-detect):**
@@ -254,14 +254,8 @@ curl -q -LSsf http://localhost:64580/api/v1/whois/asn/15169
 # JSON (default)
 curl -q -LSsf http://localhost:64580/api/v1/whois/example.com
 
-# XML
-curl -q -LSsf -H "Accept: application/xml" http://localhost:64580/api/v1/whois/example.com
-
 # Plain text
 curl -q -LSsf -H "Accept: text/plain" http://localhost:64580/api/v1/whois/example.com
-
-# Or use query parameter
-curl -q -LSsf http://localhost:64580/api/v1/whois/example.com?format=xml
 ```
 
 **Bulk Lookup (requires authentication):**
@@ -276,7 +270,7 @@ curl -q -LSsf -X POST http://localhost:64580/api/v1/whois/bulk \
 
 **Statistics:**
 ```bash
-curl -q -LSsf http://localhost:64580/api/v1/stats
+curl -q -LSsf http://localhost:64580/api/v1/server/stats
 ```
 
 **WHOIS Servers:**

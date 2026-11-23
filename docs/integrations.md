@@ -1,109 +1,38 @@
 # Integrations
 
-## Machine-Readable Endpoints
+## Autodiscovery
 
-### Autodiscovery
-
-`GET /api/autodiscover` returns a JSON document describing the service capabilities. This endpoint is intended for automated clients and platform integrations that need to discover available API versions, endpoints, and features without prior configuration.
+`GET /api/autodiscover` provides service metadata and the client release information used by the companion CLI updater.
 
 ```bash
-curl https://your-domain.com/api/autodiscover
+curl https://whois.example.net/api/autodiscover
 ```
 
-```json
-{
-  "ok": true,
-  "data": {
-    "service": "caswhois",
-    "version": "0.1.0",
-    "api_versions": ["v1"],
-    "endpoints": {
-      "whois": "/api/v1/whois/{query}",
-      "health": "/server/healthz",
-      "metrics": "/metrics",
-      "stats": "/api/v1/server/stats"
-    },
-    "features": {
-      "geoip": true,
-      "metrics": true,
-      "email": false,
-      "tor": false
-    }
-  }
-}
-```
+## Health checks
 
-### Health Check
+The health handler is available at `/server/healthz` and `/api/v1/server/healthz`. `/api/healthz` is an unversioned alias; `/healthz` is available when enabled in configuration. JSON is the default response. Send `Accept: text/plain` for a text response.
 
-`GET /server/healthz` returns structured health data for monitoring systems and load balancers. Also available at `/api/v1/server/healthz` and `/healthz`.
+## Metrics
 
-Content negotiation:
+Metrics are served at the configured `server.metrics.endpoint` when metrics are enabled. When a metrics token is configured, send it as a bearer token. Keep this endpoint on a trusted network and do not expose operator credentials in scrape configuration.
 
-- `Accept: application/json` → JSON response
-- `Accept: text/plain` → plain-text key=value response (suitable for shell scripts)
-- Default (browser) → JSON
-
-### Prometheus Metrics
-
-`GET /metrics` exposes Prometheus-format metrics. Optionally token-protected via `metrics_token` in `server.yml`.
-
-Scraped metrics include:
-
-- HTTP request counters and latency histograms by method, path, and status
-- System metrics: CPU usage, memory allocation
-- Go runtime metrics: goroutines, GC pauses
-- WHOIS-specific: total queries, domain/IP/ASN breakdown, cache hit ratio
-
-### Well-Known Namespace
-
-| Path | Standard | Purpose |
-|------|---------|---------|
-| `/.well-known/security.txt` | RFC 9116 | Security contact and disclosure policy |
-
-### SEO Files
+## Well-known and crawler endpoints
 
 | Path | Purpose |
 |------|---------|
-| `/sitemap.xml` | XML sitemap for search engines |
-| `/robots.txt` | Crawler directive file |
+| `/.well-known/security.txt` | Security disclosure contacts |
+| `/.well-known/llms.txt` and `/llms.txt` | Machine-readable service guidance |
+| `/sitemap.xml` | Public page sitemap |
+| `/robots.txt` | Crawler policy |
 
-## Tor Hidden Service
+## WHOIS data sources
 
-When `tor_binary` is set in `server.yml` and the `tor` binary is available on PATH, caswhois automatically creates a v3 onion service on startup. The `.onion` address is logged at startup and persists across restarts (key stored in `{data_dir}/tor/`).
+Lookup uses IANA RDAP bootstrap data when available, preferring public RDAP endpoints and falling back to WHOIS. The server does not accept a caller-supplied upstream host. Upstream services can rate-limit or fail; cached data may be returned where available.
 
-No additional configuration is required. The onion service forwards to the same HTTP listener as the clearnet service.
+## Tor
 
-To enable:
+Tor support is optional. When configured and available, the service can publish an onion address. It shares the WHOIS API and web interface; see `server.tor` in the generated configuration and the service's help page for current status.
 
-```yaml
-tor_binary: "/usr/bin/tor"
-tor_use_network: true
-```
+## Bulk lookup
 
-## WHOIS Server List
-
-`GET /api/v1/whois-servers` returns the list of WHOIS servers used by the lookup engine, organized by TLD and registry. Useful for auditing or building custom lookup tools.
-
-## Bulk Lookup (Authenticated)
-
-`POST /api/v1/whois/bulk` accepts up to 100 queries in a single request. Requires the server token:
-
-```bash
-curl -X POST https://your-domain.com/api/v1/whois/bulk \
-  -H "Authorization: Bearer tok_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"queries": ["example.com", "8.8.8.8", "AS15169"]}'
-```
-
-## No Other Integrations
-
-caswhois does not currently support:
-
-- OAuth / OIDC provider or client
-- WebSockets or server-sent events
-- Webhooks
-- Federation protocols
-- Native app association files (Apple App Site Association, Android Asset Links)
-- GraphQL
-
-These are not part of the current feature set and have no planned implementation.
+`POST /api/v1/whois/bulk` requires the operator bearer token. The batch limit and request body limits are enforced by the server. See [API Reference](api.md) for the request path and authentication format.

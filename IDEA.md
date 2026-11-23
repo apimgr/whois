@@ -76,7 +76,7 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 **Non-goals:**
 
 - This service does NOT register or modify domain records
-- No user accounts, no sessions, no cookies — bearer token only
+- No user accounts or login sessions; API access uses bearer tokens. Required theme, consent, and owner-token cookies are limited to their documented purposes.
 - No admin web UI — all configuration via server.yml only
 - No PostgreSQL or MySQL — SQLite/libsql only
 - No external cron — built-in scheduler only
@@ -113,15 +113,15 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 | Operator | `Authorization: Bearer {server.token}` | All endpoints including bulk, scheduler, backups, metrics (if configured) |
 
 **server.token rules:**
-- Auto-generated on first run (`tok_` + 32 base62 chars) and stored in server.yml
+- Auto-generated on first run (`adm_` + 32 base62 chars) and stored in secrets.yml per AI.md PART 11
 - Never stored in the database
 - Validated by SHA-256-hashing the inbound bearer and comparing with `subtle.ConstantTimeCompare`
 - Bypasses rate limiting; allows bulk lookup
 
-**api_tokens (per-resource tokens):**
-- Stored as SHA-256 hash + prefix only in the `api_tokens` table
-- Used for resource-owner access; scoped to a specific resource_type/resource_id
-- Never stored plain
+**api_tokens (anonymous owner and linked tokens):**
+- Owner and linked tokens use the `own_` prefix and resolve to an anonymous owner identity
+- Token hashes are stored for lookup; encrypted token copies support the token-management behavior required by AI.md PART 8
+- There are no profiles, logins, passwords, or user accounts
 
 ### Data model & sensitivity
 
@@ -134,15 +134,15 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 - **scheduler_tasks**: id, name, enabled, schedule, last_run, next_run, last_status, last_error, run_count, fail_count
 - **scheduler_history**: id, task_id → scheduler_tasks, started_at, finished_at, status, error, duration_ms
 - **backups**: id, filename, filepath, size_bytes, type, created_at, checksum, notes
-- **api_tokens**: id, token_hash (SHA-256), token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, revoked_reason
+- **api_tokens**: id, owner_id, token_hash (SHA-256), token_prefix, token_last4, token_enc, kind, name, created_at, expires_at, last_used_at, revoked_at, revoked_reason
 - **whois_records**: id, query, query_type, source (`rdap`|`whois`), registrant_name, registrant_org, registrant_email, registrant_country, registrar, created_date, updated_date, expiry_date, nameservers (JSON array), status (JSON array), whois_server, rdap_server, raw_whois (full text, nullable), raw_rdap (JSON, nullable), network_name, network_range, network_type, asn_number, asn_name, rir, first_seen, last_seen, last_updated — permanent record; upserted (last_seen + raw updated) on every successful lookup; indexed on all registrant fields + expiry_date + network_range + asn_number; never auto-deleted (operators can configure max_age for pruning old stale records; default: keep forever); forms the free, open, self-hosted WHOIS/RDAP dataset
 
 **Sensitivity classification:**
 
 | Data | Sensitivity | Notes |
 |------|-------------|-------|
-| server.token (server.yml) | HIGH | Operator secret; SHA-256 compared; never logged raw |
-| api_token hashes (DB) | HIGH | Stored as SHA-256 only; prefix for identification |
+| server.token (secrets.yml) | HIGH | Operator secret; SHA-256 compared; never logged raw |
+| Owner and linked API tokens (DB) | HIGH | SHA-256 lookup hash and encrypted recovery copy; raw token is never logged |
 | WHOIS/RDAP results (in-memory cache) | LOW | Publicly available data; no PII beyond what WHOIS/RDAP exposes |
 | whois_records (persistent DB) | LOW | Publicly available data aggregated from upstream RDAP/WHOIS; intended to be an open dataset |
 | audit_log.actor_ip | MEDIUM | IP addresses are PII in some jurisdictions; not exposed via API |
@@ -152,7 +152,7 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 ### Trust boundaries & external services
 
 **Trusted (operator-controlled):**
-- `server.yml` config file (filesystem, root-owned or user-owned)
+- `server.yml` and `secrets.yml` configuration files (filesystem, root-owned or user-owned)
 - Local SQLite database file
 - Docker volume mounts
 
@@ -181,13 +181,13 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 ### Threat model & abuse cases
 
 **Primary assets being protected:**
-- The `server.token` operator secret in server.yml
+- The `server.token` operator secret in secrets.yml
 - API token hashes in the database
 - The upstream WHOIS server quota (ARIN, RIPE, etc. may rate-limit the server's IP)
 - The server's CPU, memory, and network bandwidth
 
 **Trusted vs untrusted inputs:**
-- Trusted: filesystem paths set at startup, server.yml, SQLite DB, Docker environment
+- Trusted: filesystem paths set at startup, server.yml, secrets.yml, SQLite DB, Docker environment
 - Untrusted: all HTTP inputs (path, query string, headers, body), WHOIS query strings, bulk payloads
 - Conditionally trusted: Bearer tokens — trusted only after SHA-256 hash comparison passes
 
@@ -220,8 +220,7 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 **Intentional security decisions (documented here per AI.md PART 1):**
 
 - **No admin web UI**: All configuration is file-only (server.yml). This eliminates an entire class of CSRF/XSS/privilege-escalation risks. Operators who need to change config must have filesystem access — this is a feature, not a limitation.
-- **Bearer token only; no sessions**: PART 1 requires no session cookies, no user accounts. This is by design — the threat model for a WHOIS service does not benefit from user sessions; it only adds attack surface.
-- **server.token stored plaintext in server.yml**: The token is a secret known to the operator; the file is assumed to be accessible only to the operator (root-owned or 600 permissions). Hash-only storage in the DB is the actual protection; the server.yml is the operator's own config file.
+- **Bearer token only; no login sessions**: There are no user accounts, passwords, or login sessions. Required theme, consent, and owner-token cookies are limited to their documented purposes.
 - **Anonymous GET allowed on all public endpoints**: WHOIS data is publicly available. Blocking anonymous access adds friction with no security value. Rate limiting is the appropriate abuse control.
 - **Upstream RDAP/WHOIS results accepted without cryptographic verification**: Neither RDAP nor WHOIS protocols have signing mechanisms. Results are proxied as-is; cache invalidation on TTL expiry is the integrity mechanism. RDAP is preferred because it returns structured JSON (easier to parse reliably), not because it is more trustworthy.
 - **Port chosen randomly (64000–64999) on first run**: Avoids well-known port conflicts; not a security measure. Operators behind a reverse proxy map to port 80 inside the container.

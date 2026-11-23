@@ -7,12 +7,12 @@
 - ✅ Server-side WHOIS queries (domain, IP, ASN)
 - ✅ Built-in scheduler (no external cron needed)
 - ✅ GeoIP integration (MaxMind GeoLite2)
-- ✅ Prometheus metrics at `/metrics`
-- ✅ Backup & restore with optional Argon2id encryption
+- ✅ Prometheus metrics at the configured metrics endpoint
+- ✅ Backup and restore with configurable encryption
 - ✅ Self-updating via GitHub releases
 - ✅ Service management (systemd, launchd, OpenRC, runit, s6, Windows SCM)
 - ✅ Optional Tor v3 hidden service
-- ✅ Zero-config first run — random port, auto-generated token
+- ✅ First-run configuration and generated operator credentials
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ chmod +x caswhois-linux-amd64
 ./caswhois-linux-amd64
 ```
 
-Visit `http://localhost:64000` to access the web interface.
+Use the listener address and port printed at startup to access the web interface.
 
 ## Documentation
 
@@ -37,7 +37,8 @@ Visit `http://localhost:64000` to access the web interface.
 - [API Reference](api.md)
 - [Security](security.md)
 - [Integrations](integrations.md)
+- [Translating](translating.md)
 
 ## License
 
-MIT License - see [LICENSE.md](../LICENSE.md) for details
+MIT License - see [LICENSE.md](https://github.com/apimgr/whois/blob/main/LICENSE.md) for details.
