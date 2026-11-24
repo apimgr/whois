@@ -57,11 +57,11 @@ The metrics endpoint is configured by `server.metrics.endpoint` and, when enable
 
 ## Responses and limits
 
-JSON responses use an `ok` boolean and a `data` or `error` member. Use the HTTP status code as the primary success or failure signal. Requests are rate limited by endpoint class; bulk operations also require operator authentication. Health can be requested as plain text with `Accept: text/plain`.
+JSON responses use an `ok` boolean and a `data` or `error` member. Use the HTTP status code as the primary success or failure signal. Requests are rate limited by endpoint class; bulk operations also require operator authentication. Add `.txt` to a versioned endpoint path or send `Accept: text/plain` to request its plain-text representation. Errors remain JSON so clients retain the standard error envelope.
 
 ## Interactive documentation
 
-- Swagger UI: `/server/docs/swagger`
+- Swagger UI: `/server/docs/swagger`; its JavaScript and CSS assets are served locally, so the page does not depend on a third-party CDN
 - OpenAPI JSON: `/api/v1/server/swagger` (also `/api/swagger`)
 - GraphQL UI: `/server/docs/graphql`
 - GraphQL POST: `/api/v1/server/graphql` (also `/api/graphql`)

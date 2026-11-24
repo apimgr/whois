@@ -30,8 +30,9 @@ Build outputs are generated artifacts and should not be committed. Run build com
 
 ```bash
 make test      # Go tests, coverage threshold, and locale parity validation
-make lint      # go vet and staticcheck in Docker
 ```
+
+`make test` runs `go vet`, `govulncheck`, the Go tests, the coverage threshold, and locale parity validation inside the Go container. CI also runs the configured static analysis jobs.
 
 The binary-validation suite is separate from `make test` and requires Docker:
 
@@ -39,9 +40,10 @@ The binary-validation suite is separate from `make test` and requires Docker:
 ./tests/run_tests.sh   # basic Docker tier
 ./tests/docker.sh      # same tier directly
 ./tests/incus.sh       # full init-system integration, run explicitly
+./tests/e2e.sh         # on-demand Chromium browser tests (SSR, no-JS, and full-JS)
 ```
 
-The project test suite is colocated with packages under `src/`. Keep test and build output in the project-scoped temporary locations selected by the Makefile.
+The project test suite is colocated with packages under `src/`. Browser tests live in `tests/e2e/`; `tests/e2e.sh` creates a project-scoped temporary directory and a disposable headless Chromium container. Keep test and build output in the project-scoped temporary locations selected by the Makefile.
 
 ## Running locally
 

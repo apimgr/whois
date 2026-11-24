@@ -15,6 +15,7 @@ binary:            caswhois
 binary_cli:        caswhois-cli
 module:            github.com/apimgr/whois
 api_version:       v1
+owner_token:       caswhois_owner_token_oibocvwt
 official_site:     https://caswhois.apimgr.dev
 maintainer_name:   CasJay
 maintainer_email:  casjay@yahoo.com
