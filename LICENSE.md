@@ -45,6 +45,7 @@ This software includes the following third-party libraries:
 | golang.org/x/term | v0.44.0 | BSD-3-Clause | 2009 The Go Authors |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT/Apache-2.0 | 2006-2011 Kirill Simonov |
 | modernc.org/sqlite | v1.51.0 | MIT/BSD | 2017 The modernc.org Authors |
+| swagger-ui-dist | v5.33.2 | Apache-2.0 | 2020-2021 SmartBear Software Inc. |
 
 Full license texts: https://spdx.org/licenses/
 
