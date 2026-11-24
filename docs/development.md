@@ -2,6 +2,12 @@
 
 caswhois is a Go project. Builds and tests run inside Docker through the repository Makefile; do not run Go build or test commands directly on the host.
 
+## Prerequisites
+
+- Latest stable Go release (used inside the project's Go container)
+- Make
+- Docker with BuildKit for build, lint, and test workflows
+
 ## Repository layout
 
 - `src/` contains the server, CLI, configuration, database, WHOIS/RDAP, and supporting packages.
@@ -18,13 +24,21 @@ make build     # release binaries for the configured platform matrix
 make docker    # build the production container image
 ```
 
-`make build` and `make local` also update Go module metadata as part of their workflow. Build outputs are generated artifacts and should not be committed.
+Build outputs are generated artifacts and should not be committed. Run build commands from the repository root; the Makefile runs Go tooling inside Docker.
 
 ## Validation
 
 ```bash
 make test      # Go tests, coverage threshold, and locale parity validation
 make lint      # go vet and staticcheck in Docker
+```
+
+The binary-validation suite is separate from `make test` and requires Docker:
+
+```bash
+./tests/run_tests.sh   # basic Docker tier
+./tests/docker.sh      # same tier directly
+./tests/incus.sh       # full init-system integration, run explicitly
 ```
 
 The project test suite is colocated with packages under `src/`. Keep test and build output in the project-scoped temporary locations selected by the Makefile.

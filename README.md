@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/apimgr/whois/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/whois/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/apimgr/whois)](https://github.com/apimgr/whois/releases)
+[![Documentation Status](https://readthedocs.org/projects/apimgr-caswhois/badge/?version=latest)](https://apimgr-caswhois.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/github/license/apimgr/whois)](LICENSE.md)
 
 A comprehensive WHOIS lookup service that provides detailed information about domain names, IP addresses, and ASN (Autonomous System Numbers). Features both REST API endpoints and a web interface with intelligent caching and rate limiting.
@@ -33,7 +34,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 ## Official Site
 
 - Website: https://caswhois.apimgr.dev
-- Documentation: https://apimgr-whois.readthedocs.io
+- Documentation: https://apimgr-caswhois.readthedocs.io
 - Source: https://github.com/apimgr/whois
 
 ---
@@ -351,13 +352,16 @@ docker-compose -f docker-compose.dev.yml up --build
 
 **Testing:**
 ```bash
-# Run all tests
+# Go unit tests and coverage gate
+make test
+
+# Basic compiled-binary integration tests (Docker required)
 ./tests/run_tests.sh
 
-# Docker integration tests
+# Run the basic Docker suite directly
 ./tests/docker.sh
 
-# Incus integration tests (preferred)
+# Full init-system integration tests (run explicitly)
 ./tests/incus.sh
 ```
 

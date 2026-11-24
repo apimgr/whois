@@ -30,9 +30,13 @@ The generated `server.yml` includes documented defaults. Common sections include
 | `server.ssl` | TLS certificates and Let's Encrypt settings |
 | `server.tor` | Optional Tor hidden service settings |
 | `server.contact.dpo` | Optional public DPO name and email |
-| `web` | Web presentation settings such as footer customization |
+| `web.security` | Repository vulnerability-report URL, optional policy override, and security.txt expiry |
+| `web.footer` | Shared footer customization |
+| `web.announcements` | Optional scheduled site banners |
 
 Configuration is file based. There is no admin settings panel or runtime configuration API. To configure a public privacy contact, set `server.contact.dpo.name` and `server.contact.dpo.email`; the DPO page falls back to `server.contact.general.email` and never exposes the admin address.
+
+Use `server.contact.security.email` for the optional security-reporting email address. `web.security.report_url` defaults to the repository's private vulnerability reporting page; `web.security.policy` is an optional Markdown override. The generated `/.well-known/security.txt` also publishes the security policy URL and expiry date.
 
 ## Database
 

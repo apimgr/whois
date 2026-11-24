@@ -30,4 +30,6 @@ Use HTTPS whenever requests cross an untrusted network. caswhois supports manual
 
 ## Security reporting
 
-The server publishes its security contact in `/.well-known/security.txt`. Use the configured security contact for vulnerability reports. Do not include an operator token or other secret in a report.
+The server publishes `/.well-known/security.txt` with the repository's private vulnerability reporting URL, the policy URL, and an expiry date. If `server.contact.security.email` is configured, that address is listed as an additional contact. The same information is available on `/server/security` and through `GET /api/v1/server/security`. Do not include an operator token or other secret in a report.
+
+The repository reporting URL is controlled by `web.security.report_url` and defaults to GitHub private vulnerability reporting. `web.security.policy` customizes the policy shown at `/server/security/policy`; an empty value uses the built-in policy. The general `/server/contact` form is separately controlled by `server.pages.contact.enabled` and is not presented as a security-report channel.

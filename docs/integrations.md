@@ -25,6 +25,13 @@ Metrics are served at the configured `server.metrics.endpoint` when metrics are 
 | `/sitemap.xml` | Public page sitemap |
 | `/robots.txt` | Crawler policy |
 
+## API documentation
+
+- Swagger UI: `/server/docs/swagger`
+- OpenAPI JSON: `/api/v1/server/swagger` and `/api/swagger`
+- GraphiQL: `/server/docs/graphql`
+- GraphQL POST: `/api/v1/server/graphql` and `/api/graphql`
+
 ## WHOIS data sources
 
 Lookup uses IANA RDAP bootstrap data when available, preferring public RDAP endpoints and falling back to WHOIS. The server does not accept a caller-supplied upstream host. Upstream services can rate-limit or fail; cached data may be returned where available.

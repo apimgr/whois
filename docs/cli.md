@@ -18,24 +18,31 @@ The main server binary. All flags are optional; defaults are loaded from `server
 | `--port PORT` | int | auto | Listen port (64000–64999 range) |
 | `--daemon` | — | — | Detach from terminal (not applicable in containers) |
 | `--debug` | — | — | Enable debug logging |
-| `--color` | string | auto | Colour output: `always`, `never`, or `auto` |
-| `--lang` | string | `en` | Language: `en`, `es`, `zh`, `fr`, `ar`, `de`, `ja` |
-| `--shell` | string | — | Print shell completions: `bash`, `zsh`, or `fish` |
+| `--color` | string | auto | Colour output: `auto`, `yes`, or `no` (`--no-color` is an alias for `no`) |
+| `--lang` | string | auto | Language for output; falls back to English when no supported `LANG` value is found |
+| `--shell` | string | — | Shell integration: `completions` or `init`, optionally followed by `bash`, `zsh`, or `fish` |
 | `--cache DIR` | string | OS default | Cache directory |
 | `--backup DIR` | string | OS default | Backup directory |
 | `--pid FILE` | string | OS default | PID file path |
 | `--baseurl URL` | string | — | Base URL override |
+| `--service CMD` | string | — | Service action: install, uninstall, disable, start, stop, restart, reload, status |
+| `--maintenance CMD` | string | — | Maintenance action (see below) |
+| `--update CMD` | string | — | Update action: `check`, `yes`, or `branch stable|beta|daily` |
+
+The same server operations are available as positional commands: `serve`, `version`, `migrate`, `client`, `install`, `uninstall`, `start`, `stop`, `restart`, `status`, `update`, and `scheduler`. Run `caswhois <command> --help` where supported for command-specific usage.
 
 ## Service Management
 
-```
-caswhois --service <cmd>
+```bash
+caswhois --service=start
+caswhois --service=--install
 ```
 
 | Command | Description |
 |---------|-------------|
-| `install` | Install as system service and start |
-| `uninstall` | Stop, disable, and remove service unit file |
+| `--install` | Install, enable, and start service |
+| `--uninstall` | Stop, disable, and remove the service unit (keeps the binary) |
+| `disable` | Disable service startup |
 | `start` | Start the installed service |
 | `stop` | Stop the running service |
 | `restart` | Restart the service |
@@ -55,8 +62,14 @@ caswhois --maintenance <cmd>
 |---------|-------------|
 | `backup` | Trigger a full backup immediately |
 | `restore FILE` | Restore from the specified backup archive |
-| `update` | Alias for `--update yes` |
-| `help` | Show maintenance subcommand help |
+| `mode production\|development` | Change the configured server mode |
+| `setup` | Reset server configuration to defaults (root only) |
+| `pgp generate\|rotate\|publish\|export\|import\|delete` | Manage the PGP keypair |
+| `token list\|revoke PREFIX` | List or revoke legacy resource tokens |
+| `data export [IP]\|delete IP` | Export or anonymize stored requester data |
+| `compliance report` | Print the compliance summary |
+| `update [CMD]` | Alias for the update operation |
+| `help` | Show maintenance command help |
 
 ## Updates
 
@@ -77,14 +90,20 @@ Generate shell completions and add them to your shell profile:
 
 ```bash
 # Bash
-caswhois --shell bash >> ~/.bash_completion
+caswhois --shell completions bash >> ~/.bash_completion
 
 # Zsh
-caswhois --shell zsh >> ~/.zshrc
+caswhois --shell completions zsh >> ~/.zshrc
 
 # Fish
-caswhois --shell fish > ~/.config/fish/completions/caswhois.fish
+caswhois --shell completions fish > ~/.config/fish/completions/caswhois.fish
 ```
+
+To print the shell's initialization command instead, use `caswhois --shell init bash`, `caswhois --shell init zsh`, or `caswhois --shell init fish`.
+
+## Companion Client
+
+`caswhois-cli` supports `domain`, `ip`, `asn`, `lookup`, and `validate` commands, or a query directly for automatic type detection. `--server URL` selects the server; `--token` or `--token-file` supplies an API token when an endpoint requires one. Output formats are `json`, `table`, and `plain`. See `caswhois-cli --help` for the flags and environment variables accepted by the installed version.
 
 ## Version Output
 

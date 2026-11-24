@@ -37,6 +37,7 @@ Use the listener address and port printed at startup to access the web interface
 - [API Reference](api.md)
 - [Security](security.md)
 - [Integrations](integrations.md)
+- [Development](development.md)
 - [Translating](translating.md)
 
 ## License
