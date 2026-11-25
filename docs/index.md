@@ -20,8 +20,10 @@ The home page (`/`) and lookup form (`/whois`) are server rendered. Public
 information pages include `/about`, `/docs`, `/server/privacy`,
 `/server/contact`, `/server/help`, `/server/terms`, `/server/dpo`, and
 `/server/security`. The application also serves `/server/docs/swagger` and
-`/server/docs/graphql`. The current interface has no account login, admin
-settings panel, owner-token management page, or language-preferences page.
+`/server/docs/graphql`, and provides owner-token management and language,
+theme, consent, and privacy preferences under `/server/preferences`. It has no
+account login or admin settings panel; operator configuration remains in
+`server.yml`.
 
 ## Quick Start
 

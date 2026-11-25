@@ -53,7 +53,10 @@ Lookup uses IANA RDAP bootstrap data when available, preferring public RDAP endp
 The server attempts to start a Tor hidden service when the local `tor` binary
 is available; missing Tor or a startup failure does not stop the HTTP server.
 Outbound WHOIS-over-Tor behavior is controlled by `server.tor.use_network`.
-I2P and MCP integrations are not currently implemented.
+The MCP endpoint is available at `/api/v1/server/mcp` (with `/api/mcp` and
+`/mcp` aliases). See [API Reference](api.md#model-context-protocol) and
+`/server/help/mcp` for setup and tool details. I2P eepsite support is not
+currently implemented.
 
 ## Bulk lookup
 

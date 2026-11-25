@@ -2,8 +2,8 @@
 
 caswhois is distributed as a static binary and as a Docker image. On first
 start it creates its configuration and data directories, writes the operator
-bearer token to `secrets.yml`, and writes the installation secret to
-`server.yml`.
+bearer token and encryption key to `secrets.yml`, and creates application
+secrets in the SQLite database.
 
 ## Binary
 
@@ -15,7 +15,7 @@ chmod +x caswhois-linux-amd64
 ./caswhois-linux-amd64
 ```
 
-The default listener port is selected on first run in the configured range; check startup output or `server.yml` for the actual value. Visit the printed local URL to use the WHOIS lookup page. Protect both files: `secrets.yml` contains the operator token, while `server.yml` currently contains the installation secret as well as operational settings.
+The default listener port is selected on first run in the configured range; check startup output or `server.yml` for the actual value. Visit the printed local URL to use the WHOIS lookup page. Protect `secrets.yml`, the database, and their containing directories; `server.yml` contains operational settings.
 
 ## Docker
 

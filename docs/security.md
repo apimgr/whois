@@ -10,7 +10,11 @@ Send the token in an authorization header:
 Authorization: Bearer <operator-token>
 ```
 
-The server compares a SHA-256 digest of the presented value in constant time. Never place the token in a URL, source control, issue, or log. Rotate it by updating the secret file and restarting the service. The current API token table still stores legacy resource-bound token records; owner identities, primary/linked owner tokens, and the token-management API are not implemented.
+The server compares a SHA-256 digest of the presented value in constant time.
+Never place the token in a URL, source control, issue, or log. Rotate it by
+updating the secret file and restarting the service. Anonymous owner identities
+use a separate primary token and optional linked tokens, managed from
+`/server/preferences/tokens`; those tokens do not replace the operator token.
 
 ## Access levels
 

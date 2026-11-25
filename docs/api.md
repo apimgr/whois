@@ -7,7 +7,9 @@ Bulk lookup and server-operation routes require the operator bearer token from
 
 ## Base URL and authentication
 
-The default API base is `/api/v1`; the configured version is exposed by the server. For a deployed service, prepend its origin, for example `https://whois.example.net/api/v1`.
+The public service API base is `https://caswhois.apimgr.dev/api/v1`. For a
+self-hosted service, replace that origin with your server's URL. The configured
+API version is exposed by the server.
 
 ```http
 Authorization: Bearer <server-token>
@@ -19,20 +21,20 @@ Do not place a token in a URL or share it. The operator token is required for bu
 
 | Method | Path | Access | Purpose |
 |--------|------|--------|---------|
-| GET | `/api/v1/whois/{query}` | Public | Detect and look up a domain, IP address, or ASN |
-| GET | `/api/v1/whois/domain/{domain}` | Public | Domain lookup |
-| GET | `/api/v1/whois/ip/{ip}` | Public | IPv4 or IPv6 lookup |
-| GET | `/api/v1/whois/asn/{asn}` | Public | ASN lookup |
-| GET | `/api/v1/whois/validate/{query}` | Public | Validate a query without looking it up |
-| GET | `/api/v1/whois/search?owner={text}` | Public | Search the local registrant dataset |
-| POST | `/api/v1/whois/bulk` | Operator | Look up a batch of queries |
-| GET | `/api/v1/whois-servers` | Public | List known WHOIS servers |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois/{query}` | Public | Detect and look up a domain, IP address, or ASN |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois/domain/{domain}` | Public | Domain lookup |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois/ip/{ip}` | Public | IPv4 or IPv6 lookup |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois/asn/{asn}` | Public | ASN lookup |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois/validate/{query}` | Public | Validate a query without looking it up |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois/search?owner={text}` | Public | Search the local registrant dataset |
+| POST | `https://caswhois.apimgr.dev/api/v1/whois/bulk` | Operator | Look up a batch of queries |
+| GET | `https://caswhois.apimgr.dev/api/v1/whois-servers` | Public | List known WHOIS servers |
 
 Example:
 
 ```bash
-curl -H 'Accept: application/json' 'https://whois.example.net/api/v1/whois/example.com'
-curl -H 'Accept: application/json' 'https://whois.example.net/api/v1/whois/ip/2001:4860:4860::8888'
+curl -q -LSsf -H 'Accept: application/json' 'https://caswhois.apimgr.dev/api/v1/whois/example.com'
+curl -q -LSsf -H 'Accept: application/json' 'https://caswhois.apimgr.dev/api/v1/whois/ip/2001:4860:4860::8888'
 ```
 
 WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized records are retained in the local database. Upstream data is public registry data and may be incomplete or stale.
@@ -41,21 +43,23 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 
 | Method | Path | Access | Purpose |
 |--------|------|--------|---------|
-| GET | `/api/v1/server/healthz` | Public | Health and build information |
-| GET | `/api/v1/server/stats` | Public | Lookup and service statistics |
-| GET | `/api/v1/server/schedulers` | Operator | Scheduler status |
-| POST | `/api/v1/server/schedulers/run` | Operator | Trigger a scheduler task |
-| GET | `/api/v1/server/backups` | Operator | Backup status |
-| POST | `/api/v1/server/backups/run` | Operator | Trigger a backup |
-| POST | `/api/v1/server/mcp` | Owner or operator | MCP Streamable HTTP endpoint; aliases: `/api/mcp`, `/mcp` |
-| GET | `/api/v1/server/about` | Public | About-page content |
-| GET | `/api/v1/server/privacy` | Public | Privacy policy data |
-| GET, POST | `/api/v1/server/contact` | Public | Contact form description and submission |
-| GET | `/api/v1/server/help` | Public | Help content |
-| GET | `/api/v1/server/terms` | Public | Terms of service |
-| GET | `/api/v1/server/dpo` | Public | Data protection contact |
-| GET | `/api/v1/server/security` | Public | Security policy/contact data |
-| GET | `/api/v1/server/security/policy` | Public | Security policy content |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/healthz` | Public | Health and build information |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/stats` | Public | Lookup and service statistics |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/schedulers` | Operator | Scheduler status |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/schedulers/run` | Operator | Trigger a scheduler task |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/backups` | Operator | Backup status |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/backups/run` | Operator | Trigger a backup |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/mcp` | Owner or operator | MCP Streamable HTTP endpoint; aliases: `/api/mcp`, `/mcp` |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/about` | Public | About-page content |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/privacy` | Public | Privacy policy data |
+| GET, POST | `https://caswhois.apimgr.dev/api/v1/server/contact` | Public | Contact form description and submission |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/help` | Public | Help content |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/terms` | Public | Terms of service |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/dpo` | Public | Data protection contact |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/security` | Public | Security policy/contact data |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/security/policy` | Public | Security policy content |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | List tokens belonging to the bearer token's owner |
+| POST, PATCH, DELETE | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | Create and manage primary or linked owner tokens |
 
 The browser pages use unversioned paths such as `/server/healthz` and
 `/server/contact`; their API counterparts use the versioned prefix shown in
@@ -75,7 +79,7 @@ with `MCP-Protocol-Version: 2026-07-28` and a matching `Mcp-Method` header.
 POST only, keeps no sessions, and validates browser `Origin` headers.
 
 ```bash
-curl -q -LSsf -X POST https://whois.example.net/api/v1/server/mcp \
+curl -q -LSsf -X POST https://caswhois.apimgr.dev/api/v1/server/mcp \
   -H "Authorization: Bearer $MCP_TOKEN" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json' \
@@ -111,5 +115,8 @@ other non-interactive HTTP tools receive text by default; send
 ## Command line client
 
 The companion `caswhois-cli` client supports lookup and query validation. See
-[CLI Reference](cli.md) for its commands and options. Owner-token management
-and the MCP endpoint are not currently implemented.
+[CLI Reference](cli.md) for its commands and options. Anonymous owner tokens can
+be created, listed, revealed, rotated, and revoked through the server-rendered
+`/server/preferences/tokens` page or the corresponding authenticated API routes.
+The MCP endpoint is documented at `/server/help/mcp` and supports public and
+operator tools according to the supplied bearer token.

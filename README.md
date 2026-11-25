@@ -48,6 +48,9 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - ✅ **Smart Caching**: Expiring cache reduces repeated upstream requests
 - ✅ **Persistent Records**: Every successful lookup stored permanently in SQLite
 - ✅ **Owner Search**: Registrant/owner reverse search over the local dataset
+- ✅ **Owner Tokens**: Anonymous primary and linked token management at `/server/preferences/tokens`
+- ✅ **Preferences**: Server-rendered theme, language, consent, privacy, and preference-sync pages
+- ✅ **MCP**: Bearer-authenticated Model Context Protocol endpoint and connection guide
 - ✅ **Rate Limiting**: Always-on per-IP read, write, health, sensitive-action, authentication-failure, and global burst limits
 - ✅ **Multiple Formats**: JSON, text, and HTML output
 - ✅ **Bulk Queries**: Batch lookups for server-token holders
@@ -105,8 +108,7 @@ docker compose down
 **Download:**
 ```bash
 # Download latest release
-VERSION=$(curl -s https://api.github.com/repos/apimgr/whois/releases/latest | grep tag_name | cut -d '"' -f 4)
-wget https://github.com/apimgr/whois/releases/download/${VERSION}/caswhois-linux-amd64
+curl -q -LSsf -o caswhois-linux-amd64 https://github.com/apimgr/whois/releases/latest/download/caswhois-linux-amd64
 
 # Make executable
 chmod +x caswhois-linux-amd64
@@ -152,8 +154,7 @@ The companion `caswhois-cli` provides command-line WHOIS lookups and validation:
 **Installation:**
 ```bash
 # Download client
-VERSION=$(curl -s https://api.github.com/repos/apimgr/whois/releases/latest | grep tag_name | cut -d '"' -f 4)
-wget https://github.com/apimgr/whois/releases/download/${VERSION}/caswhois-cli-linux-amd64
+curl -q -LSsf -o caswhois-cli-linux-amd64 https://github.com/apimgr/whois/releases/latest/download/caswhois-cli-linux-amd64
 
 # Make executable
 chmod +x caswhois-cli-linux-amd64
@@ -181,7 +182,7 @@ caswhois-cli validate example.com
 Configuration file: `/etc/apimgr/caswhois/server.yml` on Linux when running as root.
 
 Operational settings live in `server.yml`; the operator bearer token is stored in
-`secrets.yml`. The current installation secret is stored in `server.yml`. There is no
+`secrets.yml`; generated installation secrets are stored in the database. There is no
 admin web UI; the operator edits the files and the server hot-reloads supported changes.
 The generated configuration documents defaults and restart requirements.
 
@@ -232,46 +233,46 @@ rendered on the server.
 
 **Health Check:**
 ```bash
-curl -q -LSsf -H "Accept: text/html" http://localhost:64580/server/healthz
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/server/healthz
+curl -q -LSsf -H "Accept: text/html" https://caswhois.apimgr.dev/server/healthz
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/server/healthz
 ```
 
 **WHOIS Lookup (Auto-detect):**
 ```bash
 # Domain lookup
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/example.com
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/example.com
 
 # IP lookup
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/8.8.8.8
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/8.8.8.8
 
 # ASN lookup
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/AS15169
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/AS15169
 ```
 
 **Specific Type Lookup:**
 ```bash
 # Force domain lookup
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/domain/example.com
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/domain/example.com
 
 # Force IP lookup
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/ip/8.8.8.8
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/ip/8.8.8.8
 
 # Force ASN lookup
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/asn/15169
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/asn/15169
 ```
 
 **Output Formats:**
 ```bash
 # JSON (default)
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/example.com
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois/example.com
 
 # Plain text
-curl -q -LSsf -H "Accept: text/plain" http://localhost:64580/api/v1/whois/example.com
+curl -q -LSsf -H "Accept: text/plain" https://caswhois.apimgr.dev/api/v1/whois/example.com
 ```
 
 **Bulk Lookup (requires authentication):**
 ```bash
-curl -q -LSsf -X POST http://localhost:64580/api/v1/whois/bulk \
+curl -q -LSsf -X POST https://caswhois.apimgr.dev/api/v1/whois/bulk \
   -H "Authorization: Bearer $OPERATOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -281,19 +282,19 @@ curl -q -LSsf -X POST http://localhost:64580/api/v1/whois/bulk \
 
 **Statistics:**
 ```bash
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/server/stats
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/server/stats
 ```
 
 **WHOIS Servers:**
 ```bash
-curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois-servers
+curl -q -LSsf -H "Accept: application/json" https://caswhois.apimgr.dev/api/v1/whois-servers
 ```
 
 ### Prometheus Metrics
 
 Metrics endpoint (internal use only):
 ```bash
-curl -q -LSsf http://localhost:64580/metrics
+curl -q -LSsf https://caswhois.apimgr.dev/metrics
 ```
 
 ---

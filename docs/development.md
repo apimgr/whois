@@ -42,9 +42,10 @@ The binary-validation suite is separate from `make test` and requires Docker:
 ./tests/incus.sh       # full init-system integration, run explicitly
 ```
 
-The Go test suite is colocated with packages under `src/`. A browser E2E
-harness is not currently present. Keep test and build output in the
-project-scoped temporary locations selected by the Makefile.
+The Go test suite is colocated with packages under `src/`. Browser E2E checks
+are available through `./tests/e2e.sh`; they require Docker and Chromium. Keep
+test and build output in the project-scoped temporary locations selected by
+the Makefile.
 
 ## Running locally
 

@@ -1,8 +1,9 @@
 # Configuration
 
 caswhois reads `server.yml` from its configured config directory. On first run
-it creates `server.yml` and `secrets.yml`. The operator token is stored in
-`secrets.yml`; the current installation secret is stored in `server.yml`.
+it creates `server.yml` and `secrets.yml`. The operator token and encryption
+key are stored in `secrets.yml`; generated application secrets are stored in
+the database's `app_secrets` table.
 
 ## Configuration precedence
 
@@ -19,9 +20,10 @@ caswhois --help
 caswhois --config /path/to/config --port 64580
 ```
 
-Known configuration fields are validated during loading; unknown YAML keys are
-currently ignored. Safe settings can be hot reloaded; listener, database, and
-other startup-only settings require a restart.
+Configuration values are validated during loading. Unknown YAML keys are
+errors and prevent an invalid configuration from being applied. Safe settings
+can be hot reloaded; listener, database, and other startup-only settings
+require a restart.
 
 ## Main settings
 

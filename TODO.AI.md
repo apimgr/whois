@@ -7,6 +7,9 @@ The following applicable AI.md requirements remain after comparing the specifica
 - [ ] Design and implement the AI.md owner/token model (`owners`, encrypted token copies, primary/linked scopes, ownership-aware resources, token management API and pages). Resolve legacy `api_tokens` migration before changing persisted token behavior: the existing schema binds tokens to individual resources and contains no owner identity.
 - [ ] Move generated installation/application secrets to `app_secrets` and complete secret generation, rotation, audit, backup, and restore behavior in AI.md PART 10–11.
 - [ ] Implement the coordinated security disclosure flow from AI.md PART 11, including `security.txt`, one-shot security IDs, typed security reports, encrypted storage, operator review, and thank-you page.
+- [ ] Implement the SQLite concurrency contract from AI.md PART 10: independent writer/read-only handles, short serialized write transactions with bounded retries, buffered hot counters, busy-wait metrics, and concurrent reader/writer coverage.
+- [ ] Complete the canonical `whois_records` schema in AI.md PART 10; current storage lacks required source, RDAP, network, ASN, RIR, and date fields.
+- [ ] Implement AI.md PART 31.2 I2P support, including container-sensitive defaults, i2pd/SAM provider resolution, persisted eepsite identity, health/status, help-page content, scheduler health task, and image packages.
 
 ## P1 — Required server behavior and pages
 
