@@ -59,7 +59,15 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security` | Public | Security policy/contact data |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security/policy` | Public | Security policy content |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | List tokens belonging to the bearer token's owner |
-| POST, PATCH, DELETE | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | Create and manage primary or linked owner tokens |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary` | Public or owner | Create a primary owner token |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary/reveal` | Owner | Reveal the primary token once |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary/rotate` | Owner | Rotate the primary token |
+| DELETE | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary` | Owner | Revoke the primary token and its owner |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | Create a linked token |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}/reveal` | Owner | Reveal a linked token once |
+| POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}/rotate` | Owner | Rotate a linked token |
+| PATCH | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}` | Owner | Rename a linked token or change its expiry |
+| DELETE | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}` | Owner | Revoke a linked token |
 
 The browser pages use unversioned paths such as `/server/healthz` and
 `/server/contact`; their API counterparts use the versioned prefix shown in
