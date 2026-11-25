@@ -6,7 +6,7 @@ caswhois is a Go project. Builds and tests run inside Docker through the reposit
 
 - Latest stable Go release (used inside the project's Go container)
 - Make
-- Docker with BuildKit for build, lint, and test workflows
+- Docker for the Makefile build and test targets
 
 ## Repository layout
 
@@ -40,10 +40,11 @@ The binary-validation suite is separate from `make test` and requires Docker:
 ./tests/run_tests.sh   # basic Docker tier
 ./tests/docker.sh      # same tier directly
 ./tests/incus.sh       # full init-system integration, run explicitly
-./tests/e2e.sh         # on-demand Chromium browser tests (SSR, no-JS, and full-JS)
 ```
 
-The project test suite is colocated with packages under `src/`. Browser tests live in `tests/e2e/`; `tests/e2e.sh` creates a project-scoped temporary directory and a disposable headless Chromium container. Keep test and build output in the project-scoped temporary locations selected by the Makefile.
+The Go test suite is colocated with packages under `src/`. A browser E2E
+harness is not currently present. Keep test and build output in the
+project-scoped temporary locations selected by the Makefile.
 
 ## Running locally
 

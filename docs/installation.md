@@ -1,6 +1,9 @@
 # Installation
 
-caswhois is distributed as a static binary and as a Docker image. On first start it creates its configuration and data directories and writes generated credentials to `secrets.yml`.
+caswhois is distributed as a static binary and as a Docker image. On first
+start it creates its configuration and data directories, writes the operator
+bearer token to `secrets.yml`, and writes the installation secret to
+`server.yml`.
 
 ## Binary
 
@@ -12,7 +15,7 @@ chmod +x caswhois-linux-amd64
 ./caswhois-linux-amd64
 ```
 
-The default listener port is selected on first run in the configured range; check startup output or `server.yml` for the actual value. Visit the printed local URL to use the WHOIS lookup page. The operator token and encryption secret are stored in `secrets.yml` and must be protected.
+The default listener port is selected on first run in the configured range; check startup output or `server.yml` for the actual value. Visit the printed local URL to use the WHOIS lookup page. Protect both files: `secrets.yml` contains the operator token, while `server.yml` currently contains the installation secret as well as operational settings.
 
 ## Docker
 
@@ -20,13 +23,13 @@ Use the repository's production compose file from a deployment directory, or run
 
 ```bash
 docker run -d --name caswhois \
-  -p 64580:64580 \
+  -p 64580:80 \
   -v caswhois-config:/config \
   -v caswhois-data:/data \
   ghcr.io/apimgr/whois:latest
 ```
 
-The selected host port must match the listener configuration. Protect the mounted configuration and data because they contain operator secrets and the accumulated WHOIS dataset.
+The image listens on container port 80 by default. Protect the mounted configuration and data because they contain operator secrets and the accumulated WHOIS dataset.
 
 ## Service installation
 

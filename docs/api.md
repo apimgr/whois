@@ -1,6 +1,8 @@
 # API Reference
 
-caswhois exposes a versioned REST API, an OpenAPI document, and a GraphQL endpoint. Public WHOIS lookups do not require a token. Operator operations require the bearer token from `secrets.yml`.
+caswhois exposes a versioned REST API, an OpenAPI document, and a GraphQL
+endpoint. Public WHOIS lookups do not require a token. The bulk lookup and
+server-operation routes require the operator bearer token from `secrets.yml`.
 
 ## Base URL and authentication
 
@@ -16,20 +18,20 @@ Do not place a token in a URL or share it. The operator token is required for bu
 
 | Method | Path | Access | Purpose |
 |--------|------|--------|---------|
-| GET | `/whois/{query}` | Public | Detect and look up a domain, IP address, or ASN |
-| GET | `/whois/domain/{domain}` | Public | Domain lookup |
-| GET | `/whois/ip/{ip}` | Public | IPv4 or IPv6 lookup |
-| GET | `/whois/asn/{asn}` | Public | ASN lookup |
-| GET | `/whois/validate/{query}` | Public | Validate a query without looking it up |
-| GET | `/whois/search?owner={text}` | Public | Search the local registrant dataset |
-| POST | `/whois/bulk` | Operator | Look up a batch of queries |
-| GET | `/whois-servers` | Public | List known WHOIS servers |
+| GET | `/api/v1/whois/{query}` | Public | Detect and look up a domain, IP address, or ASN |
+| GET | `/api/v1/whois/domain/{domain}` | Public | Domain lookup |
+| GET | `/api/v1/whois/ip/{ip}` | Public | IPv4 or IPv6 lookup |
+| GET | `/api/v1/whois/asn/{asn}` | Public | ASN lookup |
+| GET | `/api/v1/whois/validate/{query}` | Public | Validate a query without looking it up |
+| GET | `/api/v1/whois/search?owner={text}` | Public | Search the local registrant dataset |
+| POST | `/api/v1/whois/bulk` | Operator | Look up a batch of queries |
+| GET | `/api/v1/whois-servers` | Public | List known WHOIS servers |
 
 Example:
 
 ```bash
-curl 'https://whois.example.net/api/v1/whois/example.com'
-curl 'https://whois.example.net/api/v1/whois/ip/2001:4860:4860::8888'
+curl -H 'Accept: application/json' 'https://whois.example.net/api/v1/whois/example.com'
+curl -H 'Accept: application/json' 'https://whois.example.net/api/v1/whois/ip/2001:4860:4860::8888'
 ```
 
 WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized records are retained in the local database. Upstream data is public registry data and may be incomplete or stale.
@@ -38,26 +40,44 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 
 | Method | Path | Access | Purpose |
 |--------|------|--------|---------|
-| GET | `/server/healthz` | Public | Health and build information |
-| GET | `/server/stats` | Public | Lookup and service statistics |
-| GET | `/server/schedulers` | Operator | Scheduler status |
-| POST | `/server/schedulers/run` | Operator | Trigger a scheduler task |
-| GET | `/server/backups` | Operator | Backup status |
-| POST | `/server/backups/run` | Operator | Trigger a backup |
-| GET | `/server/privacy` | Public | Privacy policy data |
-| GET | `/server/contact` | Public | Contact form description and challenge |
-| POST | `/server/contact` | Public | Submit a contact report |
-| GET | `/server/help` | Public | Help content |
-| GET | `/server/terms` | Public | Terms of service |
-| GET | `/server/dpo` | Public | Data protection contact |
+| GET | `/api/v1/server/healthz` | Public | Health and build information |
+| GET | `/api/v1/server/stats` | Public | Lookup and service statistics |
+| GET | `/api/v1/server/schedulers` | Operator | Scheduler status |
+| POST | `/api/v1/server/schedulers/run` | Operator | Trigger a scheduler task |
+| GET | `/api/v1/server/backups` | Operator | Backup status |
+| POST | `/api/v1/server/backups/run` | Operator | Trigger a backup |
+| GET | `/api/v1/server/about` | Public | About-page content |
+| GET | `/api/v1/server/privacy` | Public | Privacy policy data |
+| GET, POST | `/api/v1/server/contact` | Public | Contact form description and submission |
+| GET | `/api/v1/server/help` | Public | Help content |
+| GET | `/api/v1/server/terms` | Public | Terms of service |
+| GET | `/api/v1/server/dpo` | Public | Data protection contact |
+| GET | `/api/v1/server/security` | Public | Security policy/contact data |
+| GET | `/api/v1/server/security/policy` | Public | Security policy content |
 
-The same paths are under the versioned API base. `/api/healthz` is a direct health alias. `/api/swagger` is an alias for the OpenAPI document. GraphQL is available at `/api/v1/server/graphql` and the `/api/graphql` alias.
+The browser pages use unversioned paths such as `/server/healthz` and
+`/server/contact`; their API counterparts use the versioned prefix shown in
+the table. `/api/healthz` is a direct health alias. `/api/swagger` is an alias
+for the OpenAPI document. GraphQL is available at `/api/v1/server/graphql`
+and the `/api/graphql` alias. The API response does not honor cookies as
+credentials.
 
-The metrics endpoint is configured by `server.metrics.endpoint` and, when enabled, requires its configured bearer token.
+The metrics endpoint is configured by `server.metrics.endpoint` and is
+available when `server.metrics.enabled` is true. If `server.metrics.token` is
+configured, send that metrics token as a bearer token; it is separate from the
+operator token. Rate-limit counters use bounded `limit` and `status` labels;
+they never expose client IP addresses or token values.
 
 ## Responses and limits
 
-JSON responses use an `ok` boolean and a `data` or `error` member. Use the HTTP status code as the primary success or failure signal. Requests are rate limited by endpoint class; bulk operations also require operator authentication. Add `.txt` to a versioned endpoint path or send `Accept: text/plain` to request its plain-text representation. Errors remain JSON so clients retain the standard error envelope.
+JSON responses use an `ok` boolean and a `data` or `error` member. Use the
+HTTP status code as the primary success or failure signal. Requests are rate
+limited by endpoint class; bulk operations also require operator
+authentication. Add `.txt` to a versioned endpoint path or send
+`Accept: text/plain` to request a plain-text success response. API routes
+return JSON errors so clients retain the standard error envelope. Curl and
+other non-interactive HTTP tools receive text by default; send
+`Accept: application/json` to force JSON.
 
 ## Interactive documentation
 
@@ -68,4 +88,6 @@ JSON responses use an `ok` boolean and a `data` or `error` member. Use the HTTP 
 
 ## Command line client
 
-The companion `caswhois-cli` client supports lookup, configuration, and interactive use. See [CLI Reference](cli.md) for its commands and options.
+The companion `caswhois-cli` client supports lookup and query validation. See
+[CLI Reference](cli.md) for its commands and options. Owner-token management
+and the MCP endpoint are not currently implemented.

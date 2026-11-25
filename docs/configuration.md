@@ -1,17 +1,27 @@
 # Configuration
 
-caswhois reads `server.yml` from its configured config directory. On first run it creates the configuration and a separate `secrets.yml`; operator credentials and encryption secrets belong in `secrets.yml`, not in `server.yml`.
+caswhois reads `server.yml` from its configured config directory. On first run
+it creates `server.yml` and `secrets.yml`. The operator token is stored in
+`secrets.yml`; the current installation secret is stored in `server.yml`.
 
 ## Configuration precedence
 
-Built-in defaults are overridden by `server.yml`, environment variables, and then command-line flags. Environment variables use the `CASWHOIS_` prefix. Boolean values accept `true`/`false`, `yes`/`no`, `1`/`0`, and `on`/`off`.
+Command-line flags override environment variables, which override file values
+and built-in defaults for settings that support them. The server currently
+reads `MODE`, `DEBUG`, `PORT`, `LISTEN`, `CONFIG_DIR`, `DATA_DIR`, `LOG_DIR`,
+`BACKUP_DIR`, `DATABASE_DIR`, `DATABASE_URL`, `DATABASE_DRIVER`, and the
+`SMTP_*` mail settings, among other platform-specific variables. It does not
+apply a general `CASWHOIS_` prefix to every configuration field. Boolean values include `true`/`false`,
+`yes`/`no`, `1`/`0`, and `on`/`off` where boolean parsing is used.
 
 ```bash
 caswhois --help
 caswhois --config /path/to/config --port 64580
 ```
 
-Unknown configuration keys and invalid values are reported during configuration loading. Safe settings can be hot reloaded; listener, database, and other startup-only settings require a restart.
+Known configuration fields are validated during loading; unknown YAML keys are
+currently ignored. Safe settings can be hot reloaded; listener, database, and
+other startup-only settings require a restart.
 
 ## Main settings
 
@@ -22,17 +32,28 @@ The generated `server.yml` includes documented defaults. Common sections include
 | `server` | Listener, paths, API version, branding, and operator contacts |
 | `server.database` | SQLite or remote libsql connection |
 | `server.cache` | In-memory cache or configured Valkey/Redis backend |
-| `server.rate_limit` | Read, write, health, and global burst limits |
+| `server.rate_limit` | Always-on read, write, health, strict-action, failed-authentication, and global burst limits; only the thresholds are configurable |
 | `server.geoip` | GeoIP database location and enabled datasets |
 | `server.metrics` | Metrics enablement, route, and access token |
 | `server.backup` | Backup location, encryption, and retention |
 | `server.scheduler` | Built-in scheduled tasks and timezone |
 | `server.ssl` | TLS certificates and Let's Encrypt settings |
-| `server.tor` | Optional Tor hidden service settings |
+| `server.tor` | Tor hidden service and outbound-network settings |
 | `server.contact.dpo` | Optional public DPO name and email |
 | `web.security` | Repository vulnerability-report URL, optional policy override, and security.txt expiry |
 | `web.footer` | Shared footer customization |
 | `web.announcements` | Optional scheduled site banners |
+
+Rate limiting is always on. `read`, `write`, and `health` define their own
+request counts and window lengths; `strict` applies to sensitive owner-token
+actions; `auth_failures` sets the invalid-credential lockout; `global_burst`
+caps total requests per client IP. Rolling-window events are stored in
+`server.db` by default, or the configured Redis/Valkey cache when one is
+selected. If the active store is unavailable, the server logs one warning and
+uses in-process counters until restart. There is no enable/disable switch.
+When Prometheus metrics are enabled, `ratelimit_requests_total` and
+`ratelimit_blocked_total` report decisions using bounded limit-class labels;
+client IPs, owner IDs, and token values are never metric labels.
 
 Configuration is file based. There is no admin settings panel or runtime configuration API. To configure a public privacy contact, set `server.contact.dpo.name` and `server.contact.dpo.email`; the DPO page falls back to `server.contact.general.email` and never exposes the admin address.
 
@@ -44,7 +65,11 @@ SQLite is the default local database. Remote libsql/Turso is also supported. Pos
 
 ## Secrets and backups
 
-Keep `secrets.yml` readable only by the service operator. Never commit configuration containing secrets. Backup encryption uses the configured backup password and the encryption supported by the server; follow the prompts for encrypted restore operations.
+Keep `secrets.yml` and `server.yml` readable only by the service operator.
+Never commit configuration containing secrets. Manual backups prompt for an
+optional password; restore prompts when the selected archive is encrypted.
+`CASWHOIS_BACKUP_PASSWORD` can provide the backup or restore password for
+non-interactive operation.
 
 ## Paths
 

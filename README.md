@@ -17,10 +17,10 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - **Intelligent Caching**: Reduces upstream load with configurable TTLs
 - **Persistent Dataset**: Every successful lookup is stored permanently in SQLite
 - **Multiple Output Formats**: Structured JSON, plain text, and server-rendered HTML
-- **File-Only Configuration**: Settings live in `server.yml`; credentials live in `secrets.yml` (no admin web UI)
+- **File-Only Configuration**: Settings live in `server.yml`; the operator token lives in `secrets.yml` (no admin web UI)
 - **Rate Limiting**: Protect against abuse while maintaining usability
 - **GeoIP Integration**: Geographic information for IP addresses
-- **Tor Hidden Service**: Optional; enabled when configured and Tor is available
+- **Tor Hidden Service**: The server attempts to start a hidden service when a local Tor binary is available; failure does not prevent the web server from starting
 - **Monitoring**: Prometheus metrics built-in
 
 **Target Users:**
@@ -45,10 +45,10 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - ✅ **IP WHOIS**: Network ownership, allocation details, geographic data
 - ✅ **ASN WHOIS**: Autonomous System information, routing details
 - ✅ **Auto-Detection**: Automatically detects query type
-- ✅ **Smart Caching**: 24-hour domain cache, 7-day IP/ASN cache
+- ✅ **Smart Caching**: Expiring cache reduces repeated upstream requests
 - ✅ **Persistent Records**: Every successful lookup stored permanently in SQLite
 - ✅ **Owner Search**: Registrant/owner reverse search over the local dataset
-- ✅ **Rate Limiting**: Configurable per-IP read/write limits
+- ✅ **Rate Limiting**: Always-on per-IP read, write, health, sensitive-action, authentication-failure, and global burst limits
 - ✅ **Multiple Formats**: JSON, text, and HTML output
 - ✅ **Bulk Queries**: Batch lookups for server-token holders
 - ✅ **File-Only Config**: Settings in `server.yml`, credentials in `secrets.yml` (no admin web UI)
@@ -147,7 +147,7 @@ caswhois --status
 
 ## Client
 
-The client binary (`caswhois-cli`) provides CLI/TUI/GUI interfaces:
+The companion `caswhois-cli` provides command-line WHOIS lookups and validation:
 
 **Installation:**
 ```bash
@@ -170,22 +170,20 @@ caswhois-cli lookup example.com
 caswhois-cli lookup 8.8.8.8
 caswhois-cli lookup AS15169
 
-# TUI mode (interactive terminal)
-caswhois-cli --tui
-
-# GUI mode (graphical, auto-detected)
-caswhois-cli --gui
+# Validate without making an upstream lookup
+caswhois-cli validate example.com
 ```
 
 ---
 
 ## Configuration
 
-Configuration file: `/etc/apimgr/caswhois/server.yml`
+Configuration file: `/etc/apimgr/caswhois/server.yml` on Linux when running as root.
 
-Operational settings live in `server.yml` and credentials in `secrets.yml`. There is no
+Operational settings live in `server.yml`; the operator bearer token is stored in
+`secrets.yml`. The current installation secret is stored in `server.yml`. There is no
 admin web UI; the operator edits the files and the server hot-reloads supported changes.
-The generated files document their defaults and restart requirements.
+The generated configuration documents defaults and restart requirements.
 
 **Key Settings:**
 ```yaml
@@ -193,20 +191,28 @@ server:
   address: "0.0.0.0"
   mode: production
   rate_limit:
-    read: 120
-    write: 10
-    health: 60
-    burst: 10
+    read:
+      requests: 120
+      window: 60
+    write:
+      requests: 10
+      window: 60
+    health:
+      requests: 120
+      window: 60
+    strict:
+      requests: 10
+      window: 900
+    auth_failures:
+      requests: 5
+      window: 900
+    global_burst: 240
   database:
     driver: sqlite
     dir: /var/lib/apimgr/caswhois/db
   cache:
     type: memory
-    ttl:
-      domain: 86400
-      ip: 604800
-      asn: 604800
-      failure: 300
+    ttl: 1h
 ```
 
 Caching backends: `memory` (default), `redis`, or `valkey`. Database drivers: `sqlite`
@@ -218,42 +224,46 @@ Caching backends: `memory` (default), `redis`, or `valkey`. Database drivers: `s
 
 ### REST API
 
-The API returns JSON by default. Endpoints that support plain text can be requested with `Accept: text/plain`; HTML routes render server-side pages.
+The versioned API returns JSON to browsers and API clients. Non-interactive
+HTTP tools such as curl receive plain text unless they send an explicit
+`Accept` header; `Accept: application/json` always requests JSON. Add `.txt` to
+a versioned API path or send `Accept: text/plain` for plain text. Web pages are
+rendered on the server.
 
 **Health Check:**
 ```bash
-curl -q -LSsf http://localhost:64580/server/healthz
-curl -q -LSsf http://localhost:64580/api/v1/server/healthz
+curl -q -LSsf -H "Accept: text/html" http://localhost:64580/server/healthz
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/server/healthz
 ```
 
 **WHOIS Lookup (Auto-detect):**
 ```bash
 # Domain lookup
-curl -q -LSsf http://localhost:64580/api/v1/whois/example.com
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/example.com
 
 # IP lookup
-curl -q -LSsf http://localhost:64580/api/v1/whois/8.8.8.8
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/8.8.8.8
 
 # ASN lookup
-curl -q -LSsf http://localhost:64580/api/v1/whois/AS15169
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/AS15169
 ```
 
 **Specific Type Lookup:**
 ```bash
 # Force domain lookup
-curl -q -LSsf http://localhost:64580/api/v1/whois/domain/example.com
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/domain/example.com
 
 # Force IP lookup
-curl -q -LSsf http://localhost:64580/api/v1/whois/ip/8.8.8.8
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/ip/8.8.8.8
 
 # Force ASN lookup
-curl -q -LSsf http://localhost:64580/api/v1/whois/asn/15169
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/asn/15169
 ```
 
 **Output Formats:**
 ```bash
 # JSON (default)
-curl -q -LSsf http://localhost:64580/api/v1/whois/example.com
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois/example.com
 
 # Plain text
 curl -q -LSsf -H "Accept: text/plain" http://localhost:64580/api/v1/whois/example.com
@@ -271,12 +281,12 @@ curl -q -LSsf -X POST http://localhost:64580/api/v1/whois/bulk \
 
 **Statistics:**
 ```bash
-curl -q -LSsf http://localhost:64580/api/v1/server/stats
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/server/stats
 ```
 
 **WHOIS Servers:**
 ```bash
-curl -q -LSsf http://localhost:64580/api/v1/whois-servers
+curl -q -LSsf -H "Accept: application/json" http://localhost:64580/api/v1/whois-servers
 ```
 
 ### Prometheus Metrics
@@ -292,10 +302,10 @@ curl -q -LSsf http://localhost:64580/metrics
 
 **Backup:**
 ```bash
-# Create encrypted backup
-caswhois --maintenance backup /path/to/backup.tar.gz.enc
+# Create a backup in the configured backup directory
+caswhois --maintenance backup
 
-# You'll be prompted for a password
+# Enter an optional password when prompted to encrypt the archive
 ```
 
 **Restore:**

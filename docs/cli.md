@@ -14,6 +14,7 @@ The main server binary. All flags are optional; defaults are loaded from `server
 | `--mode` | string | `production` | Run mode: `production` or `development` |
 | `--config DIR` | string | OS default | Config directory |
 | `--data DIR` | string | OS default | Data directory |
+| `--log DIR` | string | OS default | Log directory |
 | `--address ADDR` | string | `[::]` | Listen address |
 | `--port PORT` | int | auto | Listen port (64000–64999 range) |
 | `--daemon` | — | — | Detach from terminal (not applicable in containers) |
@@ -24,7 +25,7 @@ The main server binary. All flags are optional; defaults are loaded from `server
 | `--cache DIR` | string | OS default | Cache directory |
 | `--backup DIR` | string | OS default | Backup directory |
 | `--pid FILE` | string | OS default | PID file path |
-| `--baseurl URL` | string | — | Base URL override |
+| `--baseurl PATH` | string | — | URL path prefix served by the application |
 | `--service CMD` | string | — | Service action: install, uninstall, disable, start, stop, restart, reload, status |
 | `--maintenance CMD` | string | — | Maintenance action (see below) |
 | `--update CMD` | string | — | Update action: `check`, `yes`, or `branch stable|beta|daily` |
@@ -65,7 +66,7 @@ caswhois --maintenance <cmd>
 | `mode production\|development` | Change the configured server mode |
 | `setup` | Reset server configuration to defaults (root only) |
 | `pgp generate\|rotate\|publish\|export\|import\|delete` | Manage the PGP keypair |
-| `token list\|revoke PREFIX` | List or revoke legacy resource tokens |
+| `token list\|revoke PREFIX` | List or revoke the current resource-bound token records |
 | `data export [IP]\|delete IP` | Export or anonymize stored requester data |
 | `compliance report` | Print the compliance summary |
 | `update [CMD]` | Alias for the update operation |
@@ -122,6 +123,7 @@ Site:   https://github.com/apimgr/whois
 | `DATABASE_URL` | Remote libsql/Turso connection string |
 | `DATABASE_DRIVER` | Override driver (`sqlite`) |
 | `DATABASE_DIR` | Override SQLite directory |
+| `CASWHOIS_BACKUP_PASSWORD` | Provide a backup or restore password non-interactively |
 | `SMTP_HOST` | SMTP server host |
 | `SMTP_PORT` | SMTP server port |
 | `SMTP_USERNAME` | SMTP auth username |

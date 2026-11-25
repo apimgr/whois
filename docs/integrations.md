@@ -10,11 +10,19 @@ curl https://whois.example.net/api/autodiscover
 
 ## Health checks
 
-The health handler is available at `/server/healthz` and `/api/v1/server/healthz`. `/api/healthz` is an unversioned alias; `/healthz` is available when enabled in configuration. JSON is the default response. Send `Accept: text/plain` for a text response.
+The health handler is available at `/server/healthz` and
+`/api/v1/server/healthz`. `/api/healthz` is an unversioned alias; `/healthz`
+is available when enabled in configuration. Browser requests to the web route
+render HTML; send `Accept: application/json` or `Accept: text/plain` for
+machine-readable JSON or text. Non-interactive HTTP clients receive text by
+default.
 
 ## Metrics
 
-Metrics are served at the configured `server.metrics.endpoint` when metrics are enabled. When a metrics token is configured, send it as a bearer token. Keep this endpoint on a trusted network and do not expose operator credentials in scrape configuration.
+Metrics are served at the configured `server.metrics.endpoint` when metrics
+are enabled (default `/metrics`). When a metrics token is configured, send it
+as a bearer token. Keep this endpoint on a trusted network and do not expose
+operator credentials in scrape configuration.
 
 ## Well-known and crawler endpoints
 
@@ -32,13 +40,20 @@ Metrics are served at the configured `server.metrics.endpoint` when metrics are 
 - GraphiQL: `/server/docs/graphql`
 - GraphQL POST: `/api/v1/server/graphql` and `/api/graphql`
 
+## Progressive web app
+
+The web interface can be installed from `/manifest.json`. Its service worker is served from `/sw.js` and uses a versioned cache for static assets. Navigation is network-first; a public, form-free page may be available offline after it has been visited online. Pages with forms, cookies, or visitor-specific content are not stored. When no cached public page is available, the worker renders a localized offline message. WHOIS lookups and other API requests remain online-only.
+
 ## WHOIS data sources
 
 Lookup uses IANA RDAP bootstrap data when available, preferring public RDAP endpoints and falling back to WHOIS. The server does not accept a caller-supplied upstream host. Upstream services can rate-limit or fail; cached data may be returned where available.
 
 ## Tor
 
-Tor support is optional. When configured and available, the service can publish an onion address. It shares the WHOIS API and web interface; see `server.tor` in the generated configuration and the service's help page for current status.
+The server attempts to start a Tor hidden service when the local `tor` binary
+is available; missing Tor or a startup failure does not stop the HTTP server.
+Outbound WHOIS-over-Tor behavior is controlled by `server.tor.use_network`.
+I2P and MCP integrations are not currently implemented.
 
 ## Bulk lookup
 

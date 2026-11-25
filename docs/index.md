@@ -14,6 +14,15 @@
 - ✅ Optional Tor v3 hidden service
 - ✅ First-run configuration and generated operator credentials
 
+## Browser interface
+
+The home page (`/`) and lookup form (`/whois`) are server rendered. Public
+information pages include `/about`, `/docs`, `/server/privacy`,
+`/server/contact`, `/server/help`, `/server/terms`, `/server/dpo`, and
+`/server/security`. The application also serves `/server/docs/swagger` and
+`/server/docs/graphql`. The current interface has no account login, admin
+settings panel, owner-token management page, or language-preferences page.
+
 ## Quick Start
 
 ```bash
