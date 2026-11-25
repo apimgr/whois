@@ -1,8 +1,9 @@
 # API Reference
 
-caswhois exposes a versioned REST API, an OpenAPI document, and a GraphQL
-endpoint. Public WHOIS lookups do not require a token. The bulk lookup and
-server-operation routes require the operator bearer token from `secrets.yml`.
+caswhois exposes a versioned REST API, an OpenAPI document, a GraphQL
+endpoint, and an MCP endpoint. Public WHOIS lookups do not require a token.
+Bulk lookup and server-operation routes require the operator bearer token from
+`secrets.yml`; MCP accepts an owner token or the operator token.
 
 ## Base URL and authentication
 
@@ -46,6 +47,7 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | POST | `/api/v1/server/schedulers/run` | Operator | Trigger a scheduler task |
 | GET | `/api/v1/server/backups` | Operator | Backup status |
 | POST | `/api/v1/server/backups/run` | Operator | Trigger a backup |
+| POST | `/api/v1/server/mcp` | Owner or operator | MCP Streamable HTTP endpoint; aliases: `/api/mcp`, `/mcp` |
 | GET | `/api/v1/server/about` | Public | About-page content |
 | GET | `/api/v1/server/privacy` | Public | Privacy policy data |
 | GET, POST | `/api/v1/server/contact` | Public | Contact form description and submission |
@@ -61,6 +63,26 @@ the table. `/api/healthz` is a direct health alias. `/api/swagger` is an alias
 for the OpenAPI document. GraphQL is available at `/api/v1/server/graphql`
 and the `/api/graphql` alias. The API response does not honor cookies as
 credentials.
+
+## Model Context Protocol
+
+MCP uses the same owner and operator bearer tokens as the REST API. Create a
+linked owner token for each client at `/server/preferences/tokens`; token
+management itself is never exposed as a tool. Each request is JSON-RPC 2.0
+with `MCP-Protocol-Version: 2026-07-28` and a matching `Mcp-Method` header.
+`tools/list` exposes the caller's available OpenAPI operations, and
+`tools/call` dispatches through the matching API handler. The endpoint accepts
+POST only, keeps no sessions, and validates browser `Origin` headers.
+
+```bash
+curl -q -LSsf -X POST https://whois.example.net/api/v1/server/mcp \
+  -H "Authorization: Bearer $MCP_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+```
 
 The metrics endpoint is configured by `server.metrics.endpoint` and is
 available when `server.metrics.enabled` is true. If `server.metrics.token` is
