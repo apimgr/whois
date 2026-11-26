@@ -381,8 +381,12 @@ make test
 # Run the basic Docker suite directly
 ./tests/docker.sh
 
-# Full init-system integration tests (run explicitly)
+# Full init-system integration tests (run explicitly; default runs both modes)
 ./tests/incus.sh
+
+# Select one init-system mode
+./tests/incus.sh systemd   # Debian with systemd
+./tests/incus.sh openrc    # Alpine with OpenRC
 
 # Required package and Tor health check for a published image
 ./tests/docker.sh --image-check IMAGE

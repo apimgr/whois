@@ -39,7 +39,9 @@ The binary-validation suite is separate from `make test` and requires Docker:
 ```bash
 ./tests/run_tests.sh   # basic Docker tier
 ./tests/docker.sh      # same tier directly
-./tests/incus.sh       # full init-system integration, run explicitly
+./tests/incus.sh       # full init-system integration, both modes by default
+./tests/incus.sh systemd  # Debian with systemd only
+./tests/incus.sh openrc   # Alpine with OpenRC only
 ```
 
 After publishing an image, check its required runtime packages and Tor health
