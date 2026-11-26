@@ -66,6 +66,7 @@ caswhois --maintenance <cmd>
 | `mode production\|development` | Change the configured server mode |
 | `setup` | Reset server configuration to defaults (root only) |
 | `pgp generate\|rotate\|publish\|export\|import\|delete` | Manage the PGP keypair |
+| `secret rotate installation_secret\|encryption_key` | Rotate a generated signing or at-rest encryption secret |
 | `token list\|revoke PREFIX` | List or revoke the current resource-bound token records |
 | `data export [IP]\|delete IP` | Export or anonymize stored requester data |
 | `compliance report` | Print the compliance summary |

@@ -11,10 +11,28 @@ Authorization: Bearer <operator-token>
 ```
 
 The server compares a SHA-256 digest of the presented value in constant time.
-Never place the token in a URL, source control, issue, or log. Rotate it by
-updating the secret file and restarting the service. Anonymous owner identities
+Never place the token in a URL, source control, issue, or log. Rotate the
+operator token in `secrets.yml` and restart the service. Anonymous owner identities
 use a separate primary token and optional linked tokens, managed from
 `/server/preferences/tokens`; those tokens do not replace the operator token.
+
+## Secret rotation
+
+The operator token authorizes sensitive maintenance operations; root may run
+them without prompting. Rotate generated application secrets with:
+
+```bash
+caswhois --maintenance 'secret rotate installation_secret'
+caswhois --maintenance 'secret rotate encryption_key'
+```
+
+Installation-secret rotation re-encrypts the stored PGP private key and accepts
+previously issued contact and security-report signatures for seven days.
+Encryption-key rotation re-encrypts stored owner tokens and security reports in
+batches. The previous encryption key is wrapped by the new key and kept for 30
+days; startup resumes an interrupted re-encryption before serving requests.
+Rotations are audited without recording secret values. A second rotation is
+refused while the prior key remains in its grace period.
 
 ## Access levels
 

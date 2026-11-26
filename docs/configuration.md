@@ -87,6 +87,11 @@ optional password; restore prompts when the selected archive is encrypted.
 `CASWHOIS_BACKUP_PASSWORD` can provide the backup or restore password for
 non-interactive operation.
 
+Generated installation and encryption secrets are rotated with the
+`--maintenance 'secret rotate …'` commands. Previous signing material remains
+valid for seven days; previous encryption material is retained for 30 days
+while database values are re-encrypted.
+
 ## Paths
 
 Default paths depend on operating system and whether the process runs as root or as a user. The `--config`, `--data`, `--cache`, `--log`, and `--backup` options can override the corresponding locations. Docker uses `/config` and `/data` inside the container.
