@@ -96,8 +96,11 @@ submission. Every submission needs a valid CAPTCHA at the first step.
 
 Security submissions require a currently valid `security_id` supplied by
 `/server/security` or `/.well-known/security.txt`. Their response includes a
-tracking ID. The emailed status link is the only status-page surface; it has
-no API mirror and its token is accepted once per UTC day.
+tracking ID. When email is configured, the researcher receives a status link
+at `/server/security/report/{tracking_id}?token={one-time-status-token}`. The
+browser route exposes only the report's triage status, maintainer comment, and
+expected disclosure date; it has no API mirror. Its query token is accepted
+once per UTC day and expires 30 days after the report is closed.
 
 ## Model Context Protocol
 

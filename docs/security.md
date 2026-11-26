@@ -86,10 +86,13 @@ Security reports are encrypted before database storage. When the project PGP
 key is configured, the report body and maintainer notification use PGP;
 otherwise the body uses AES-256-GCM and the maintainer notice clearly identifies
 the encrypted fallback. Researcher acknowledgments are encrypted to a validated
-researcher key when one is supplied. The public status link
-shows only triage status, a maintainer comment, and the expected disclosure
-date. Its token is accepted once per UTC day and expires 30 days after a report
-is closed. Disclosed reports may appear on `/server/security/thanks` when the
+researcher key when one is supplied. The emailed public status link has the
+form `/server/security/report/{tracking_id}?token={one-time-status-token}`.
+The tracking ID selects the report and the query token authorizes the status
+view. It shows only triage status, a maintainer comment, and the expected
+disclosure date; this private status view has no API mirror. Its token is
+accepted once per UTC day and expires 30 days after a report is closed.
+Disclosed reports may appear on `/server/security/thanks` when the
 researcher opted in; the same list is returned by
 `GET /api/v1/server/security/thanks`.
 

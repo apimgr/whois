@@ -32,14 +32,72 @@ built-in defaults when there is no prior version). Unknown keys in modeled
 sections are warned about and skipped. Safe settings can be hot reloaded;
 listener, database, TLS, daemon, PID-file, and Tor settings require a restart.
 
-`server.yml` is intended for this node's listener, identity, database, cache,
-TLS, and trusted-proxy settings. The server automatically backs up and moves
-legacy area settings into their matching `yaml.d/` file, and moves credentials
-to `secrets.yml`. Existing area-file values win when migrating duplicates.
+`server.yml` contains this node's listener, identity, database, cache, TLS,
+and trusted-proxy settings. Other non-secret settings live in named files in
+`yaml.d/`; credentials live in `secrets.yml`. The server automatically backs
+up and moves legacy area settings into their matching file. Existing area-file
+values win when migrating duplicates.
 
 ## Main settings
 
-The generated `server.yml` includes documented defaults. Common sections include:
+The first-run `server.yml` is intentionally small; it does not contain the
+whole configuration. The configuration loader merges it with `yaml.d/*.yml`
+and `secrets.yml`. This is the complete supported settings index, including
+nested fields; fields described as secret are accepted only in `secrets.yml`.
+Defaults are supplied by the program and may be runtime-resolved from the
+operating system, container mode, or available services.
+
+### Node settings (`server.yml`)
+
+| YAML path | Settings and purpose |
+|---------|---------------------|
+| `server` | `port`, `address`, `mode`, `fqdn`, `daemonize`, `pidfile`, `api_version`, `user`, `group`, `baseurl`, `config_dir`, `data_dir`, `log_dir`, `cache_dir`, and `debug`. `port` may contain both HTTP and HTTPS ports; a zero/empty first-run port is selected and persisted. User/group apply to supported bare-host service installs. |
+| `server.database` | `driver` (`sqlite`, `libsql`, or `turso`), `url`, `token` (credential), and `dir`. A URL selects the remote libsql/Turso connection; otherwise SQLite is used. |
+| `server.cache` | `type` (`none`, `memory`, `valkey`, or `redis`), `url`, `host`, `port`, `username`, `password` (credential), `db`, `tls`, `tls_skip_verify`, `pool_size`, `min_idle`, `timeout`, `prefix`, `ttl`. URL takes precedence over individual connection fields. |
+| `server.ssl` | `enabled`, `domain`, `email`, `challenge` (`http-01`, `tls-alpn-01`, or `dns-01`), `min_version`, `staging`, `dns_provider`, `dns_credentials` (credential map). |
+| `server.trusted_proxies` | `additional`: trusted IP addresses, CIDRs, or DNS names allowed to supply forwarded client/protocol headers. |
+
+### Application settings (`yaml.d/`)
+
+| YAML path | Settings and purpose |
+|---------|---------------------|
+| `server.security` (`security.yml`) | `reports.retention_days`; `encryption_key` and `encryption_key_version` are credentials/state stored in `secrets.yml`, not in an area file. |
+| `server.branding` (`branding.yml`) | `title`, `tagline`, `description`, `theme`, `accent_color`, `logo`, `favicon`; `content.header`; `content.about`, `.privacy`, `.terms`, `.footer` each accept `format` and `body`. `web.ui.theme` and `web.ui.accent` are the shared UI overrides. |
+| `server.seo` (`branding.yml`) | `keywords`, `author`, `og_image`, `twitter_handle`, `title_separator`, `meta_tags`, `canonical`, `noindex`. |
+| `server.pages` (`pages.yml`) | `about.content`, `privacy.content`, `terms.content`; `help.content` and `help.mcp`; `contact.enabled`, `contact.captcha`, `contact.antispam.*`, `contact.captcha_site_key`, `contact.success_message`. `captcha_secret_key` is a credential stored in `secrets.yml`. Antispam fields are `honeypot`, `min_fill_seconds`, `max_age_seconds`, `per_ip`, `per_email`, `global`, `window`, `max_links`, `reject_markup`, `blocked_words`, and `blocked_email_domains`. |
+| `server.contact` (`contact.yml`) | `admin`, `security`, `abuse`, and `general` each have `email` and `webhooks`; webhook destinations are `telegram`, `discord`, `slack`, `mattermost`, `pushover`, `gotify`, and `generic`. `dpo.name` and `dpo.email` supply the public DPO page. Contact destinations and webhook URLs are private configuration. |
+| `server.privacy` (`privacy.yml`) | `data.sold`, `data.stored_on_server`, `data.sharing[]` (`condition`, `when`, `data`); `retention.period`, `retention.export_available`, `retention.deletion_available`; `consent.show_until_acknowledged`, `default_enabled`, `message`, `message_if_sold`, `policy.text`, `policy.url`, `buttons.decline`, `buttons.accept`, `position`, `show_preferences`, `preferences_text`; `cookies.essential`, `.preferences`, `.analytics` each have `enabled` and `description`, and analytics also has `description_suffix_not_sold` and `description_suffix_sold`; `third_party.services[]` has `name`, `purpose`, `data_sent`, and `policy_url`; `content.data_collection`, `data_usage`, `data_usage_if_sold`, and `data_security` provide page Markdown. `server.compliance.enabled` is stored in the privacy area and requires encrypted backups. |
+| `server.tracking` (`privacy.yml`) | `type` (`umami`, `simple`, `cloudflare`, or empty), `id`, and `url` configure optional site analytics. |
+| `server.csrf` (`web.yml`) | `enabled`, `token_length`, `cookie_name`, `header_name`, `secure` (`auto`, `true`, or `false`), and `exempt_paths`. CSRF is enabled by default for browser forms. |
+| `server.cors` (`web.yml`) | `allowed_origins`, `allow_credentials`, and `max_age`. Credentials are never combined with wildcard origins. |
+| `server.compression` (`web.yml`) | `enabled`, `level` (1–9), and MIME `types` control HTTP response compression. |
+| `server.healthz` (`web.yml`) | `root.enabled` controls the optional `/healthz` alias; `/server/healthz` remains available. |
+| `server.i18n` (`web.yml`) | `default_language` and `supported`; supported languages must include the required locale set and the default must be enabled. |
+| `web.security` (`web.yml`) | `report_url`, `expires`, and Markdown `policy` control the public vulnerability reporting links and policy. |
+| `web.footer` (`web.yml`) | `custom_html`: empty uses the standard footer, whitespace disables the optional branding row, and non-empty content is sanitized before rendering. |
+| `web.announcements` (`web.yml`) | `enabled` and `messages[]`; each message has `id`, `type`, `title`, `message`, `start`, `end`, and `dismissible`. Times are ISO 8601; an empty bound is unbounded. |
+| `server.rate_limit` (`security.yml`) | `read`, `write`, `health`, `strict`, and `auth_failures` each have `requests` and `window` (seconds); `global_burst` sets the per-client aggregate ceiling. Limits are always active. |
+| `server.tokens` (`security.yml`) | `max_linked`, `cookie_max_age`, and `idle_purge_days` set owner-token limits and lifecycle. |
+| `server.geoip` (`security.yml`) | `enabled`, `dir`, `deny_countries`, `allow_countries`, and `databases.asn`, `.country`, `.city`, `.whois` configure GeoIP controls and datasets. |
+| `server.limits` (`security.yml`) | `max_body_size`, `read_timeout`, `write_timeout`, and `idle_timeout` set request and connection limits. |
+| `server.reverse_whois` (`security.yml`) | `provider` (`securitytrails`, `whoxy`, `viewdns`, or empty), `api_key` (credential), and `max_results`. Local records are searched before an optional provider. |
+| `server.metrics` (`metrics.yml`) | `enabled`, `endpoint`, `include_system`, `include_runtime`, `token`, `duration_buckets`, and `size_buckets` configure Prometheus scraping. The token is a credential; empty means network access must be restricted externally. |
+| `server.logs` (`logs.yml`) | `level`; `access`, `server`, `error`, `app`, `auth`, `audit`, `security`, and `debug` each have `enabled`, `filename`, `format`, `custom`, `rotate`, `keep`, and `compress`. `format` is log-type specific. |
+| `server.notifications` (`notifications.yml`) | `webui.position` and `webui.duration`; `email.smtp.host`, `.port`, `.username`, `.password`, `.tls`; `email.from.name`, `.email`; and `email.events.startup`, `shutdown`, `backup_complete`, `backup_failed`, `ssl_expiring`, `ssl_renewed`, `ssl_renewal_failed`, `security_alert`, `scheduler_error`, `update_available`, `update_installed`. SMTP credentials are private. |
+| `server.scheduler` (`maintenance.yml`) | `timezone`, `catch_up_window`, `max_retries`, `retry_delay`, `backoff`, and `tasks.<task-id>`. Task overrides have `schedule`, `enabled`, `retry_on_fail`, `retry_delay`, `verify`, `retention`, and `restart_on_fail`; persisted task state may take precedence after first run. |
+| `server.backup` (`maintenance.yml`) | `dir`, `encryption.enabled`, and `retention.max_backups`, `keep_weekly`, `keep_monthly`, `keep_yearly`, `max_total_size`. The size cap accepts a percentage or absolute size and overrides count limits. |
+| `server.maintenance` (`maintenance.yml`) | `self_healing.enabled`, `.retry_interval`, `.max_attempts`; `cleanup.disk_threshold`, `.log_retention_days`, `.backup_keep_count`; `notify.on_enter`, `.on_exit`. A zero attempt cap means retry indefinitely. |
+| `server.update` (`maintenance.yml`) | `branch` (`stable`, `beta`, or `daily`), `auto_install`, and `defer_days` (0–365). Automatic installation is off by default. |
+| `server.tor` (`tor.yml`) | `binary`, `use_network`, `allow_user_preference`, `max_circuits`, `startup_timeout`, `circuit_timeout`, `bootstrap_timeout`, `safe_logging`, `max_streams_per_circuit`, `close_circuit_on_stream_limit`, `bandwidth_rate`, `bandwidth_burst`, `max_monthly_bandwidth`, `num_intro_points`, `virtual_port`, and `contact_email`. The onion address is runtime state from Tor's `HiddenServiceDir` hostname file; it is not a setting to place in `server.yml`. |
+| `server.i2p` (`i2p.yml`) | `enabled`, `expose`, `binary`, `sam_address`, `virtual_port`, `inbound_length`, `outbound_length`, `inbound_quantity`, `outbound_quantity`, `signature_type`, and `bootstrap_timeout`. I2P is opt-in outside application containers. |
+
+### Credentials (`secrets.yml`)
+
+The operator token is `server.token`. Database/cache/SMTP credentials,
+reverse-WHOIS keys, DNS provider credentials, CAPTCHA secret, and the encryption
+key are stored here when configured. The file is mode `0600`; do not include
+its values in logs, screenshots, or source control. `server.yml` and the area
+files must not be used to store credentials.
 
 | Section | Purpose |
 |---------|---------|
