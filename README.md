@@ -127,6 +127,9 @@ caswhois --version
 # Install system service (requires root/sudo)
 sudo caswhois --service --install
 
+# Uninstall the service and delete its configured application directories
+sudo caswhois --service --uninstall
+
 # Start service
 sudo systemctl start caswhois
 

@@ -43,7 +43,7 @@ caswhois --service=--install
 | Command | Description |
 |---------|-------------|
 | `--install` | Install, enable, and start service |
-| `--uninstall` | Stop, disable, and remove the service unit (keeps the binary) |
+| `--uninstall` | Stop and remove the service, then delete configured application directories and any service account created by the installer; keeps the binary |
 | `disable` | Disable service startup |
 | `start` | Start the installed service |
 | `stop` | Stop the running service |
