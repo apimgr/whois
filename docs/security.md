@@ -26,13 +26,27 @@ caswhois --maintenance 'secret rotate installation_secret'
 caswhois --maintenance 'secret rotate encryption_key'
 ```
 
+Each rotation requires root or the operator token, a non-empty reason, and the
+typed confirmation `ROTATE installation_secret` or `ROTATE encryption_key`.
+Stop the server first; rotation refuses to proceed while a configured local
+listener is active, which prevents a running process from continuing to write
+with stale in-memory keys. The audit entry records the operator's local IP
+address and reason, never a secret value.
+
 Installation-secret rotation re-encrypts the stored PGP private key and accepts
 previously issued contact and security-report signatures for seven days.
-Encryption-key rotation re-encrypts stored owner tokens and security reports in
-batches. The previous encryption key is wrapped by the new key and kept for 30
-days; startup resumes an interrupted re-encryption before serving requests.
+Encryption-key rotation re-encrypts stored owner tokens and AES-encrypted
+security report bodies and contacts in batches. PGP-encrypted report bodies are
+left unchanged. The previous encryption key is wrapped by the new key and kept
+for 30 days; startup resumes an interrupted re-encryption before serving
+requests.
 Rotations are audited without recording secret values. A second rotation is
 refused while the prior key remains in its grace period.
+
+The server also rotates the cookie-signing key every 90 days and the HMAC key
+used to sign CSRF tokens every 180 days. CSRF signing keys rotate immediately
+when an owner API token is regenerated. Previous automatic keys remain valid
+for seven days so already-open browser forms can finish.
 
 ## Access levels
 
@@ -68,7 +82,11 @@ policy. `/server/contact` offers abuse, DMCA, and privacy forms. A valid
 and confirm step and server-side CAPTCHA; invalid IDs fall back to the
 non-security chooser.
 
-Security reports are encrypted before database storage. The public status link
+Security reports are encrypted before database storage. When the project PGP
+key is configured, the report body and maintainer notification use PGP;
+otherwise the body uses AES-256-GCM and the maintainer notice clearly identifies
+the encrypted fallback. Researcher acknowledgments are encrypted to a validated
+researcher key when one is supplied. The public status link
 shows only triage status, a maintainer comment, and the expected disclosure
 date. Its token is accepted once per UTC day and expires 30 days after a report
 is closed. Disclosed reports may appear on `/server/security/thanks` when the

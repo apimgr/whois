@@ -22,7 +22,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - **GeoIP Integration**: Geographic information for IP addresses
 - **Tor Hidden Service**: The server attempts to start a hidden service when a local Tor binary is available; failure does not prevent the web server from starting
 - **I2P Eepsite**: Optional SAMv3 eepsite with a dedicated loopback listener and persistent `.b32.i2p` destination
-- **Coordinated Disclosure**: Private security-report flow, encrypted report storage, one-time status links, and public researcher acknowledgments
+- **Coordinated Disclosure**: Private security-report flow, PGP-encrypted storage when configured (AES-256-GCM fallback), encrypted researcher acknowledgments, one-time status links, and public disclosure credits
 - **Monitoring**: Prometheus metrics built-in
 
 **Target Users:**
