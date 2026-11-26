@@ -55,8 +55,11 @@ is available; missing Tor or a startup failure does not stop the HTTP server.
 Outbound WHOIS-over-Tor behavior is controlled by `server.tor.use_network`.
 The MCP endpoint is available at `/api/v1/server/mcp` (with `/api/mcp` and
 `/mcp` aliases). See [API Reference](api.md#model-context-protocol) and
-`/server/help/mcp` for setup and tool details. I2P eepsite support is not
-available as an optional SAMv3 eepsite. Enable `server.i2p.enabled`
+`/server/help/mcp` for setup and tool details.
+
+## I2P eepsite
+
+I2P eepsite support is available through SAMv3. Enable `server.i2p.enabled`
 to serve the same HTTP pages over I2P; set `server.i2p.expose` to publish its
 `.b32.i2p` address in autodiscovery. The router must expose its SAM endpoint at
 `server.i2p.sam_address` (default `127.0.0.1:7656`). The eepsite uses a

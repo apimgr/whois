@@ -12,6 +12,7 @@
 - ✅ Self-updating via GitHub releases
 - ✅ Service management (systemd, launchd, OpenRC, runit, s6, Windows SCM)
 - ✅ Optional Tor v3 hidden service
+- ✅ Optional I2P eepsite via i2pd or an external SAM bridge
 - ✅ First-run configuration and generated operator credentials
 
 ## Browser interface

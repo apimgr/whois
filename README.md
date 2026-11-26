@@ -21,6 +21,7 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - **Rate Limiting**: Protect against abuse while maintaining usability
 - **GeoIP Integration**: Geographic information for IP addresses
 - **Tor Hidden Service**: The server attempts to start a hidden service when a local Tor binary is available; failure does not prevent the web server from starting
+- **I2P Eepsite**: Optional SAMv3 eepsite with a dedicated loopback listener and persistent `.b32.i2p` destination
 - **Monitoring**: Prometheus metrics built-in
 
 **Target Users:**

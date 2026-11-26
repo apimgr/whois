@@ -60,6 +60,8 @@ client IPs, owner IDs, and token values are never metric labels.
 
 Configuration is file based. There is no admin settings panel or runtime configuration API. To configure a public privacy contact, set `server.contact.dpo.name` and `server.contact.dpo.email`; the DPO page falls back to `server.contact.general.email` and never exposes the admin address.
 
+I2P is enabled with `server.i2p.enabled`, `I2P_ENABLED`, or `--i2p` (use `--i2p=false` to opt out). It defaults off on hosts and on in application containers. The server prefers its own dedicated `i2pd` process, then falls back to the SAM bridge at `127.0.0.1:7656`. The persistent destination key is stored under `{data_dir}/i2p/site/`; the generated `.b32.i2p` hostname remains stable across restarts. Set `server.i2p.expose: true` to include that address in autodiscovery and the public help/footer.
+
 Use `server.contact.security.email` for the optional security-reporting email address. `web.security.report_url` defaults to the repository's private vulnerability reporting page; `web.security.policy` is an optional Markdown override. The generated `/.well-known/security.txt` also publishes the security policy URL and expiry date.
 
 ## Database
