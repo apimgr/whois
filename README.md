@@ -17,11 +17,12 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 - **Intelligent Caching**: Reduces upstream load with configurable TTLs
 - **Persistent Dataset**: Every successful lookup is stored permanently in SQLite
 - **Multiple Output Formats**: Structured JSON, plain text, and server-rendered HTML
-- **File-Only Configuration**: Settings live in `server.yml`; the operator token lives in `secrets.yml` (no admin web UI)
+- **File-Only Configuration**: Settings live in `server.yml` and ordered `yaml.d/` area files; credentials live in `secrets.yml` (no admin web UI)
 - **Rate Limiting**: Protect against abuse while maintaining usability
 - **GeoIP Integration**: Geographic information for IP addresses
 - **Tor Hidden Service**: The server attempts to start a hidden service when a local Tor binary is available; failure does not prevent the web server from starting
 - **I2P Eepsite**: Optional SAMv3 eepsite with a dedicated loopback listener and persistent `.b32.i2p` destination
+- **Coordinated Disclosure**: Private security-report flow, encrypted report storage, one-time status links, and public researcher acknowledgments
 - **Monitoring**: Prometheus metrics built-in
 
 **Target Users:**
@@ -70,8 +71,10 @@ caswhois is a production-ready WHOIS service shipped as a single static binary:
 
 **Quick Start:**
 ```bash
-# Create temp directory for docker-compose
-mkdir -p "${TMPDIR:-/tmp}/apimgr/caswhois-deploy" && cd "${TMPDIR:-/tmp}/apimgr/caswhois-deploy"
+# Create a project-scoped deployment directory
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+DEPLOY_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/caswhois-XXXXXX")
+cd "$DEPLOY_DIR"
 
 # Download docker-compose.yml
 curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/whois/main/docker/docker-compose.yml
@@ -182,10 +185,13 @@ caswhois-cli validate example.com
 
 Configuration file: `/etc/apimgr/caswhois/server.yml` on Linux when running as root.
 
-Operational settings live in `server.yml`; the operator bearer token is stored in
-`secrets.yml`; generated installation secrets are stored in the database. There is no
-admin web UI; the operator edits the files and the server hot-reloads supported changes.
-The generated configuration documents defaults and restart requirements.
+Operational settings live in `server.yml` and ordered `yaml.d/` area files;
+credentials and the operator bearer token are stored in `secrets.yml`, while
+generated application secrets are stored in the database. There is no admin web
+UI; the operator edits the files and the server hot-reloads supported changes.
+The generated configuration documents defaults and restart requirements. See
+[Configuration](https://apimgr-caswhois.readthedocs.io/en/latest/configuration/)
+for precedence, drop-ins, and reload behavior.
 
 **Key Settings:**
 ```yaml

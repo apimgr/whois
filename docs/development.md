@@ -19,7 +19,7 @@ caswhois is a Go project. Builds and tests run inside Docker through the reposit
 
 ```bash
 make dev       # quick binaries in a project-scoped temporary directory
-make local     # current-platform binaries in binaries/
+make local     # current-platform binaries in binaries/ (clean removes build dirs)
 make build     # release binaries for the configured platform matrix
 make docker    # build the production container image
 ```

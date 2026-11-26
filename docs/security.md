@@ -18,7 +18,7 @@ use a separate primary token and optional linked tokens, managed from
 
 ## Access levels
 
-Public access includes WHOIS lookups, service information, and health checks. The operator token is required for bulk lookups, scheduler controls, and backup controls. Metrics access follows the configured metrics token policy. There is no admin web UI or configuration mutation API.
+Public access includes WHOIS lookups, service information, and health checks. The operator token is required for bulk lookups, scheduler controls, backup controls, and security-report maintenance. Metrics access follows the configured metrics token policy. There is no admin web UI or configuration mutation API.
 
 ## Request handling
 
@@ -34,6 +34,38 @@ Use HTTPS whenever requests cross an untrusted network. caswhois supports manual
 
 ## Security reporting
 
-The server publishes `/.well-known/security.txt` with the repository's private vulnerability reporting URL, the policy URL, and an expiry date. If `server.contact.security.email` is configured, that address is listed as an additional contact. The same information is available on `/server/security` and through `GET /api/v1/server/security`. Do not include an operator token or other secret in a report.
+The primary vulnerability channel is GitHub private vulnerability reporting. The
+server also publishes `/.well-known/security.txt` with that URL, a short-lived
+`/server/contact?security_id=...` report link, the optional security email
+address, a policy URL, and an expiry date. The same public contact information
+is rendered at `/server/security` and is available from
+`GET /api/v1/server/security`. The contact form is noindex and is not linked
+from general site navigation.
 
-The repository reporting URL is controlled by `web.security.report_url` and defaults to GitHub private vulnerability reporting. `web.security.policy` customizes the policy shown at `/server/security/policy`; an empty value uses the built-in policy. The general `/server/contact` form is separately controlled by `server.pages.contact.enabled` and is not presented as a security-report channel.
+The repository URL is controlled by `web.security.report_url` and defaults to
+GitHub private vulnerability reporting. `web.security.policy` customizes the
+policy shown at `/server/security/policy`; an empty value uses the built-in
+policy. `/server/contact` offers abuse, DMCA, and privacy forms. A valid
+`security_id` selects the security report form. Every submission has a review
+and confirm step and server-side CAPTCHA; invalid IDs fall back to the
+non-security chooser.
+
+Security reports are encrypted before database storage. The public status link
+shows only triage status, a maintainer comment, and the expected disclosure
+date. Its token is accepted once per UTC day and expires 30 days after a report
+is closed. Disclosed reports may appear on `/server/security/thanks` when the
+researcher opted in; the same list is returned by
+`GET /api/v1/server/security/thanks`.
+
+Operators manage report metadata from the CLI:
+
+```bash
+caswhois --maintenance 'security list'
+caswhois --maintenance 'security show sec_<tracking-id>'
+caswhois --maintenance 'security update sec_<tracking-id> --status triaged'
+caswhois --maintenance 'security export sec_<tracking-id> --output report.asc'
+```
+
+`show` displays metadata and the researcher's status comment, not the report
+body. `export` writes the encrypted report only; it never prints decrypted
+content. Run maintenance as root or provide the operator token when prompted.

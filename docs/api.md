@@ -52,12 +52,13 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | POST | `https://caswhois.apimgr.dev/api/v1/server/mcp` | Owner or operator | MCP Streamable HTTP endpoint; aliases: `/api/mcp`, `/mcp` |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/about` | Public | About-page content |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/privacy` | Public | Privacy policy data |
-| GET, POST | `https://caswhois.apimgr.dev/api/v1/server/contact` | Public | Contact form description and submission |
+| GET, POST | `https://caswhois.apimgr.dev/api/v1/server/contact` | Public | Contact form descriptors and two-step submission |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/help` | Public | Help content |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/terms` | Public | Terms of service |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/dpo` | Public | Data protection contact |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security` | Public | Security policy/contact data |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security/policy` | Public | Security policy content |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/security/thanks` | Public | Disclosed-researcher acknowledgments |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | List tokens belonging to the bearer token's owner |
 | POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary` | Public or owner | Create a primary owner token |
 | POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary/reveal` | Owner | Reveal the primary token once |
@@ -75,6 +76,20 @@ the table. `/api/healthz` is a direct health alias. `/api/swagger` is an alias
 for the OpenAPI document. GraphQL is available at `/api/v1/server/graphql`
 and the `/api/graphql` alias. The API response does not honor cookies as
 credentials.
+
+### Contact and security reports
+
+`GET /api/v1/server/contact` returns the public form description, available
+report types, a CAPTCHA descriptor, and a signed `form_token`. Submit a report
+with `step=submit` first; that response contains a review summary and a
+single-use `review_token`, and does not deliver the report. Repeat the report
+fields with `step=confirm`, the token, and `confirmed=true` to complete the
+submission. Every submission needs a valid CAPTCHA at the first step.
+
+Security submissions require a currently valid `security_id` supplied by
+`/server/security` or `/.well-known/security.txt`. Their response includes a
+tracking ID. The emailed status link is the only status-page surface; it has
+no API mirror and its token is accepted once per UTC day.
 
 ## Model Context Protocol
 

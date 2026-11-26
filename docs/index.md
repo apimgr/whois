@@ -20,11 +20,13 @@
 The home page (`/`) and lookup form (`/whois`) are server rendered. Public
 information pages include `/about`, `/docs`, `/server/privacy`,
 `/server/contact`, `/server/help`, `/server/terms`, `/server/dpo`, and
-`/server/security`. The application also serves `/server/docs/swagger` and
+`/server/security`. The noindex `/server/contact` form is reached from the
+security page and supports abuse, DMCA, privacy, and security reports. The
+application also serves `/server/docs/swagger` and
 `/server/docs/graphql`, and provides owner-token management and language,
 theme, consent, and privacy preferences under `/server/preferences`. It has no
-account login or admin settings panel; operator configuration remains in
-`server.yml`.
+account login or admin settings panel; operator settings remain in `server.yml`
+and `yaml.d/`, with credentials in `secrets.yml`.
 
 ## Quick Start
 
