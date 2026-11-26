@@ -71,8 +71,35 @@ caswhois --maintenance <cmd>
 | `token list\|revoke PREFIX` | List or revoke the current resource-bound token records |
 | `data export [IP]\|delete IP` | Export or anonymize stored requester data |
 | `compliance report` | Print the compliance summary |
+| `tor status` | Show Tor process, onion address, bootstrap, circuit, and vanity-search status |
+| `tor validate` | Validate the Tor configuration without changing server state |
+| `tor restart` | Restart the running embedded Tor process |
+| `tor regenerate` | Replace the onion service keys and address after confirmation |
+| `tor vanity start --prefix PREFIX [--workers N]` | Search for an onion address beginning with a 1–6 character base32 prefix |
+| `tor vanity stop` | Cancel a running vanity search; found candidates are retained |
+| `tor vanity apply [ADDRESS]` | Activate a saved vanity candidate after confirmation |
+| `tor import-keys PATH` | Import an existing Tor hidden-service key directory after confirmation |
 | `update [CMD]` | Alias for the update operation |
 | `help` | Show maintenance command help |
+
+Tor maintenance commands control the embedded Tor process through the server's
+loopback-only control channel. Status and validation can read local state when
+the server is stopped; actions that change Tor state require the server to be
+running. Regenerating or applying an address stops the previous onion address
+from working. Vanity searches run in the server process and do not survive a
+server restart, though saved candidates remain available.
+
+Tor maintenance requires root or the operator token. `regenerate`,
+`vanity apply`, and `import-keys` also prompt for the exact confirmation; pass
+`--yes` to skip that confirmation in a controlled script. Key imports require
+an absolute directory path. For example:
+
+```sh
+caswhois --maintenance tor status
+caswhois --maintenance tor vanity start --prefix abc --workers 2
+caswhois --maintenance tor vanity apply
+caswhois --maintenance tor import-keys /path/to/hidden-service-keys
+```
 
 ## Updates
 

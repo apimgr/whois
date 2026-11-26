@@ -13,11 +13,13 @@ Command-line flags override environment variables, which override merged file
 values and built-in defaults for settings that support those sources. The
 merged file precedence is built-in defaults, `server.yml`, `yaml.d/` files in
 lexical filename order, then recognized credentials from `secrets.yml`.
-Supported environment variables include `MODE`, `DEBUG`, `PORT`, `LISTEN`,
+Supported configuration overrides include `MODE`, `DEBUG`, `PORT`, `LISTEN`,
 `CONFIG_DIR`, `DATA_DIR`, `LOG_DIR`, `BACKUP_DIR`, `DATABASE_DIR`,
 `DATABASE_URL`, `DATABASE_DRIVER`, `I2P_ENABLED`, `APPLICATION_NAME`,
-`APPLICATION_TAGLINE`, `NO_COLOR`, `TERM`, and the documented `SMTP_*`
-settings. There is no general
+`APPLICATION_TAGLINE`, and SMTP variables `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`, `SMTP_FROM_NAME`, and
+`SMTP_FROM_EMAIL`. `NO_COLOR` and `TERM=dumb` control console color; service
+manager variables are used only for runtime detection. There is no general
 `CASWHOIS_` prefix for every setting. Boolean values include `true`/`false`,
 `yes`/`no`, `1`/`0`, and `on`/`off` where boolean parsing is used.
 
@@ -51,7 +53,8 @@ operating system, container mode, or available services.
 
 | YAML path | Settings and purpose |
 |---------|---------------------|
-| `server` | `port`, `address`, `mode`, `fqdn`, `daemonize`, `pidfile`, `api_version`, `user`, `group`, `baseurl`, `config_dir`, `data_dir`, `log_dir`, `cache_dir`, and `debug`. `port` may contain both HTTP and HTTPS ports; a zero/empty first-run port is selected and persisted. User/group apply to supported bare-host service installs. |
+| `server` (`server.yml`) | `port`, `address`, `mode`, `fqdn`, `daemonize`, `pidfile`, `api_version`, `baseurl`, and `debug`. `port` may contain both HTTP and HTTPS ports; a zero/empty first-run port is selected and persisted. |
+| `server.user`, `server.group`, `server.config_dir`, `server.data_dir`, `server.log_dir`, `server.cache_dir` (`app.yml`) | Optional service identity and directory overrides. Empty paths use the platform-specific locations; user/group apply to supported bare-host service installs. CLI and environment directory overrides take precedence. |
 | `server.database` | `driver` (`sqlite`, `libsql`, or `turso`), `url`, `token` (credential), and `dir`. A URL selects the remote libsql/Turso connection; otherwise SQLite is used. |
 | `server.cache` | `type` (`none`, `memory`, `valkey`, or `redis`), `url`, `host`, `port`, `username`, `password` (credential), `db`, `tls`, `tls_skip_verify`, `pool_size`, `min_idle`, `timeout`, `prefix`, `ttl`. URL takes precedence over individual connection fields. |
 | `server.ssl` | `enabled`, `domain`, `email`, `challenge` (`http-01`, `tls-alpn-01`, or `dns-01`), `min_version`, `staging`, `dns_provider`, `dns_credentials` (credential map). |
@@ -80,7 +83,7 @@ operating system, container mode, or available services.
 | `server.tokens` (`security.yml`) | `max_linked`, `cookie_max_age`, and `idle_purge_days` set owner-token limits and lifecycle. |
 | `server.geoip` (`security.yml`) | `enabled`, `dir`, `deny_countries`, `allow_countries`, and `databases.asn`, `.country`, `.city`, `.whois` configure GeoIP controls and datasets. |
 | `server.limits` (`security.yml`) | `max_body_size`, `read_timeout`, `write_timeout`, and `idle_timeout` set request and connection limits. |
-| `server.reverse_whois` (`security.yml`) | `provider` (`securitytrails`, `whoxy`, `viewdns`, or empty), `api_key` (credential), and `max_results`. Local records are searched before an optional provider. |
+| `server.reverse_whois` (`app.yml`) | `provider` (`securitytrails`, `whoxy`, `viewdns`, or empty), `api_key` (credential), and `max_results`. Local records are searched before an optional provider. |
 | `server.metrics` (`metrics.yml`) | `enabled`, `endpoint`, `include_system`, `include_runtime`, `token`, `duration_buckets`, and `size_buckets` configure Prometheus scraping. The token is a credential; empty means network access must be restricted externally. |
 | `server.logs` (`logs.yml`) | `level`; `access`, `server`, `error`, `app`, `auth`, `audit`, `security`, and `debug` each have `enabled`, `filename`, `format`, `custom`, `rotate`, `keep`, and `compress`. `format` is log-type specific. |
 | `server.notifications` (`notifications.yml`) | `webui.position` and `webui.duration`; `email.smtp.host`, `.port`, `.username`, `.password`, `.tls`; `email.from.name`, `.email`; and `email.events.startup`, `shutdown`, `backup_complete`, `backup_failed`, `ssl_expiring`, `ssl_renewed`, `ssl_renewal_failed`, `security_alert`, `scheduler_error`, `update_available`, `update_installed`. SMTP credentials are private. |
