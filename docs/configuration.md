@@ -41,6 +41,7 @@ The generated `server.yml` includes documented defaults. Common sections include
 | `server.scheduler` | Built-in scheduled tasks and timezone |
 | `server.ssl` | TLS certificates and Let's Encrypt settings |
 | `server.tor` | Tor hidden service and outbound-network settings |
+| `server.i2p` | Optional SAMv3 eepsite, listener, and address publication settings |
 | `server.contact.dpo` | Optional public DPO name and email |
 | `web.security` | Repository vulnerability-report URL, optional policy override, and security.txt expiry |
 | `web.footer` | Shared footer customization |
