@@ -8,7 +8,7 @@ Bulk lookup and server-operation routes require the operator bearer token from
 ## Base URL and authentication
 
 The public service API base is `https://caswhois.apimgr.dev/api/v1`. For a
-self-hosted service, replace that origin with your server's URL. The configured
+service you operate, replace that origin with your server's URL. The configured
 API version is exposed by the server.
 
 ```http
@@ -69,6 +69,14 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}/rotate` | Owner | Rotate a linked token |
 | PATCH | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}` | Owner | Rename a linked token or change its expiry |
 | DELETE | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/{id}` | Owner | Revoke a linked token |
+| GET, POST | `https://caswhois.apimgr.dev/api/v1/server/preferences` | Public | Read or update this browser's appearance, language, consent, and privacy preferences |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/sync` | Public | Export the current appearance, language, and privacy preferences as a URL and code |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/sync/import` | Public | Apply preferences supplied as query values or a sync code |
+
+Preference updates accept JSON or form data. Only supported values are applied;
+unknown or invalid values are returned in the `ignored` list. Updating a
+preference requires the visitor to have granted preferences consent. Sync links contain the selected preferences and should be shared only with
+the intended recipient.
 
 The browser pages use unversioned paths such as `/server/healthz` and
 `/server/contact`; their API counterparts use the versioned prefix shown in

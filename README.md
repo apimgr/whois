@@ -340,6 +340,8 @@ caswhois --update branch beta
 
 ## Development
 
+Project guides are available in the [ReadTheDocs documentation](https://apimgr-caswhois.readthedocs.io/). To contribute interface translations, follow the [translation guide](https://apimgr-caswhois.readthedocs.io/en/latest/translating/).
+
 ### Build from Source
 
 **Prerequisites:**
@@ -381,6 +383,9 @@ make test
 
 # Full init-system integration tests (run explicitly)
 ./tests/incus.sh
+
+# Required package and Tor health check for a published image
+./tests/docker.sh --image-check IMAGE
 ```
 
 ### Project Structure

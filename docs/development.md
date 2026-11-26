@@ -1,6 +1,6 @@
 # Development
 
-caswhois is a Go project. Builds and tests run inside Docker through the repository Makefile; do not run Go build or test commands directly on the host.
+caswhois is a Go project. Builds and tests run inside Docker through the repository Makefile; do not run Go build or test commands directly on the local machine.
 
 ## Prerequisites
 
@@ -41,6 +41,12 @@ The binary-validation suite is separate from `make test` and requires Docker:
 ./tests/docker.sh      # same tier directly
 ./tests/incus.sh       # full init-system integration, run explicitly
 ```
+
+After publishing an image, check its required runtime packages and Tor health
+with `./tests/docker.sh --image-check IMAGE`. `make docker` and the image CI
+jobs run this check automatically for the standard and development images. The
+check waits up to `TOR_BOOTSTRAP_TIMEOUT` seconds (default `180`); set
+`REQUIRE_OVERLAY=1` when Tor must become healthy even without outbound network.
 
 The Go test suite is colocated with packages under `src/`. Browser E2E checks
 are available through `./tests/e2e.sh`; they require Docker and Chromium. Keep

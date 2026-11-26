@@ -54,7 +54,7 @@ Public access includes WHOIS lookups, service information, and health checks. Th
 
 ## Request handling
 
-HTTP input is treated as untrusted. Lookup strings and batch entries are validated before dispatch. Upstream WHOIS/RDAP dispatch uses the service's known registry servers; callers cannot provide arbitrary WHOIS server hosts. RDAP is preferred, with WHOIS fallback. Registry results are relayed and are not cryptographically authenticated by those protocols.
+HTTP input is treated as untrusted. Lookup strings and batch entries are validated before dispatch. Upstream WHOIS/RDAP dispatch uses the service's known registry servers; callers cannot provide arbitrary WHOIS server names. RDAP is preferred, with WHOIS fallback. Registry results are relayed and are not cryptographically authenticated by those protocols.
 
 ## Data and logging
 

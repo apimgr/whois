@@ -17,6 +17,13 @@ render HTML; send `Accept: application/json` or `Accept: text/plain` for
 machine-readable JSON or text. Non-interactive HTTP clients receive text by
 default.
 
+The JSON response reports Tor and I2P lifecycle information under
+`features.tor` and `features.i2p`, including whether each service is enabled,
+running, its current state/status, and its published hostname when available.
+When enabled, `checks.tor` and `checks.i2p` report `ok` or `degraded`; a
+missing local Tor executable or unavailable I2P provider degrades that check
+without stopping the HTTP server. Disabled features omit their component check.
+
 ## Metrics
 
 Metrics are served at the configured `server.metrics.endpoint` when metrics
@@ -46,12 +53,14 @@ The web interface can be installed from `/manifest.json`. Its service worker is 
 
 ## WHOIS data sources
 
-Lookup uses IANA RDAP bootstrap data when available, preferring public RDAP endpoints and falling back to WHOIS. The server does not accept a caller-supplied upstream host. Upstream services can rate-limit or fail; cached data may be returned where available.
+Lookup uses IANA RDAP bootstrap data when available, preferring public RDAP endpoints and falling back to WHOIS. The server does not accept a caller-supplied upstream server name. Upstream services can rate-limit or fail; cached data may be returned where available.
 
 ## Tor
 
 The server attempts to start a Tor hidden service when the local `tor` binary
 is available; missing Tor or a startup failure does not stop the HTTP server.
+Health output reports `features.tor.status` as `starting`, `healthy`, or
+`unavailable` while enabled, and reports `checks.tor` as `ok` or `degraded`.
 Outbound WHOIS-over-Tor behavior is controlled by `server.tor.use_network`.
 The MCP endpoint is available at `/api/v1/server/mcp` (with `/api/mcp` and
 `/mcp` aliases). See [API Reference](api.md#model-context-protocol) and

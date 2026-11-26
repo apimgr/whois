@@ -15,7 +15,9 @@ merged file precedence is built-in defaults, `server.yml`, `yaml.d/` files in
 lexical filename order, then recognized credentials from `secrets.yml`.
 Supported environment variables include `MODE`, `DEBUG`, `PORT`, `LISTEN`,
 `CONFIG_DIR`, `DATA_DIR`, `LOG_DIR`, `BACKUP_DIR`, `DATABASE_DIR`,
-`DATABASE_URL`, `DATABASE_DRIVER`, and `SMTP_*`. There is no general
+`DATABASE_URL`, `DATABASE_DRIVER`, `I2P_ENABLED`, `APPLICATION_NAME`,
+`APPLICATION_TAGLINE`, `NO_COLOR`, `TERM`, and the documented `SMTP_*`
+settings. There is no general
 `CASWHOIS_` prefix for every setting. Boolean values include `true`/`false`,
 `yes`/`no`, `1`/`0`, and `on`/`off` where boolean parsing is used.
 
@@ -71,7 +73,7 @@ client IPs, owner IDs, and token values are never metric labels.
 
 Configuration is file based. There is no admin settings panel or runtime configuration API. To configure a public privacy contact, set `server.contact.dpo.name` and `server.contact.dpo.email`; the DPO page falls back to `server.contact.general.email` and never exposes the admin address.
 
-I2P is enabled with `server.i2p.enabled`, `I2P_ENABLED`, or `--i2p` (use `--i2p=false` to opt out). It defaults off on hosts and on in application containers. The server prefers its own dedicated `i2pd` process, then falls back to the SAM bridge at `127.0.0.1:7656`. I2P settings hot-reload by closing and restarting the eepsite with the new settings. The persistent destination key is stored under `{data_dir}/i2p/site/`; the generated `.b32.i2p` hostname remains stable across restarts. Set `server.i2p.expose: true` to include that address in autodiscovery and the public help/footer.
+I2P is enabled with `server.i2p.enabled`, `I2P_ENABLED`, or `--i2p` (use `--i2p=false` to opt out). It defaults off on local machines and on in application containers. The server prefers its own dedicated `i2pd` process, then falls back to the SAM bridge at `127.0.0.1:7656`. I2P settings hot-reload by closing and restarting the eepsite with the new settings. The persistent destination key is stored under `{data_dir}/i2p/site/`; the generated `.b32.i2p` hostname remains stable across restarts. Set `server.i2p.expose: true` to include that address in autodiscovery and the public help/footer.
 
 Use `server.contact.security.email` for the optional security-reporting email address. `web.security.report_url` defaults to the repository's private vulnerability reporting page; `web.security.policy` is an optional Markdown override. The generated `/.well-known/security.txt` also publishes the security policy URL and expiry date.
 

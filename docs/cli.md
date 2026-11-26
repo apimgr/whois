@@ -16,7 +16,8 @@ The main server binary. All flags are optional; defaults are loaded from `server
 | `--data DIR` | string | OS default | Data directory |
 | `--log DIR` | string | OS default | Log directory |
 | `--address ADDR` | string | `[::]` | Listen address |
-| `--port PORT` | int | auto | Listen port (64000–64999 range) |
+| `--port PORT` | string | auto | Listen port or `HTTP,HTTPS` port pair (default: random 64000–64999) |
+| `--i2p[=BOOL]` | bool | config-dependent | Enable the I2P eepsite; accepts `--i2p=false` to disable it |
 | `--daemon` | — | — | Detach from terminal (not applicable in containers) |
 | `--debug` | — | — | Enable debug logging |
 | `--color` | string | auto | Colour output: `auto`, `yes`, or `no` (`--no-color` is an alias for `no`) |
@@ -121,11 +122,23 @@ Site:   https://github.com/apimgr/whois
 | Variable | Overrides |
 |----------|-----------|
 | `NO_COLOR` | Disable all colour output (any non-empty value) |
+| `TERM` | Disable colour output when set to `dumb` |
+| `PORT` | Override the HTTP listener port |
+| `LISTEN` | Override the listener address |
+| `I2P_ENABLED` | Override whether the I2P eepsite is enabled |
+| `MODE` | Override run mode |
+| `DEBUG` | Enable debug mode when set to `1`, `true`, or `yes` |
+| `CONFIG_DIR` | Override config directory |
+| `DATA_DIR` | Override data directory |
+| `LOG_DIR` | Override log directory |
+| `BACKUP_DIR` | Override backup directory |
+| `APPLICATION_NAME` | Override the displayed application name |
+| `APPLICATION_TAGLINE` | Override the displayed application tagline |
 | `DATABASE_URL` | Remote libsql/Turso connection string |
 | `DATABASE_DRIVER` | Override driver (`sqlite`) |
 | `DATABASE_DIR` | Override SQLite directory |
 | `CASWHOIS_BACKUP_PASSWORD` | Provide a backup or restore password non-interactively |
-| `SMTP_HOST` | SMTP server host |
+| `SMTP_HOST` | SMTP server name |
 | `SMTP_PORT` | SMTP server port |
 | `SMTP_USERNAME` | SMTP auth username |
 | `SMTP_PASSWORD` | SMTP auth password |

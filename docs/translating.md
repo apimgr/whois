@@ -1,10 +1,10 @@
 # Translating
 
-caswhois keeps interface strings in JSON locale files under `src/common/i18n/locales/`. Supported locale files currently include Arabic, German, English, Spanish, French, Japanese, and Chinese.
+caswhois keeps interface strings in JSON locale files under `src/common/i18n/locales/`. The eight supported locales are Arabic, German, English, Spanish, French, Italian, Japanese, and Chinese.
 
 ## Editing a translation
 
-Use the English locale as the key and wording reference. Preserve JSON keys and nesting, translate only user-visible strings, and keep placeholders such as `{{.Name}}` or format markers unchanged. Do not add translations by editing embedded templates directly; templates should reference translation keys.
+Use the English locale as the key and wording reference. Preserve JSON keys and nesting, translate only user-visible strings, and keep named placeholders such as `{name}` unchanged. Preserve plural categories under their existing `zero`, `one`, `two`, `few`, `many`, or `other` keys. Do not add translations by editing embedded templates directly; templates should reference translation keys.
 
 When adding a string, add its key to each supported locale. Keep accessibility labels, errors, and instructions clear and equivalent to the English source. Arabic uses right-to-left direction; avoid embedding left-to-right punctuation assumptions in translated text.
 
