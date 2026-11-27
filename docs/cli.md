@@ -37,7 +37,7 @@ The same server operations are available as positional commands: `serve`, `versi
 
 ```bash
 caswhois --service=start
-caswhois --service=--install
+caswhois --service --install
 ```
 
 | Command | Description |

@@ -7,7 +7,7 @@ Read [AI.md](../AI.md) and [IDEA.md](../IDEA.md) before changing behavior. Build
 ```sh
 make dev
 make test
-make lint
+docker run --rm -v "$PWD:/app" -v "$HOME/go/pkg/mod:/usr/local/share/go/pkg/mod" -v "$HOME/.cache/go-build/caswhois:/usr/local/share/go/cache" -w /app -e CGO_ENABLED=0 -e 'GOFLAGS=-buildvcs=false -mod=mod' casjaysdev/go:latest sh -c 'go vet ./... && staticcheck ./...'
 ```
 
 Build the documentation with `mkdocs build --strict` after installing `docs/requirements.txt`. Keep tests, translations, Swagger, GraphQL, README, and `docs/` in sync with code changes. Do not commit runtime data or configuration secrets.

@@ -5,6 +5,7 @@ AI.md remains authoritative; this file tracks implementation work only.
 ## P1 — Test and delivery requirements
 
 - [ ] Verify all provider workflows, Docker files, and Renovate configuration against AI.md PART 26–27.
-- [ ] Retry failed database migrations from the self-healing reconnect path and implement the health registry and aggregation rules.
-- [ ] Resolve the PART 21 API-project restore conflict recorded in `~/Projects/github/apimgr/TODO.API.md`, then implement the applicable restore contract.
-- [ ] Verify API token scopes, backup secret sanitization/restore, toast timing, local Docker behavior, compose mounts, Windows SQLite paths, and schema/route conformance against the exact AI.md requirements.
+- [ ] Keep the listener available when database startup or migrations fail; retry connection and schema migrations through the configured self-healing loop.
+- [ ] Implement cached dataset/dependency health checks and the PART 13 status aggregation and output ordering.
+- [ ] Verify API token scopes, backup secret sanitization/restore, toast timing, asset versioning, local Docker behavior, compose mounts, Windows SQLite paths, and schema/route conformance against the exact AI.md requirements.
+- [ ] Complete page/template and documentation alignment, then run the full Docker-backed build, test, lint, and provider CI checks.
