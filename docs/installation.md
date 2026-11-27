@@ -3,7 +3,7 @@
 caswhois is distributed as a static binary and as a Docker image. On first
 start it creates its configuration and data directories, writes the operator
 bearer token and encryption key to `secrets.yml`, and creates application
-secrets in the SQLite database.
+secrets in the configured server database (SQLite or remote libSQL/Turso).
 
 ## Binary
 

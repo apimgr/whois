@@ -54,9 +54,10 @@ and run the same check. The check waits up to `TOR_BOOTSTRAP_TIMEOUT` seconds (d
 The Go test suite is colocated with packages under `src/`. Browser E2E checks
 are available through `./tests/e2e.sh`; they require Docker and Chromium. The
 suite checks SSR, no-JavaScript behavior, and full browser behavior, including
-registered server pages, responsive layout, and accessibility through the
-vendored axe-core script. Keep test and build output in the project-scoped
-temporary locations selected by the Makefile.
+registered server pages, WHOIS validation, language switching, API documentation
+route parity, CSRF rejection, internal-link crawling, responsive layout, and
+accessibility through the vendored axe-core script. Keep test and build output in
+the project-scoped temporary locations selected by the Makefile.
 
 ## Running locally
 
