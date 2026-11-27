@@ -14,8 +14,8 @@ The health handler is available at `/server/healthz` and
 `/api/v1/server/healthz`. `/api/healthz` is an unversioned alias; `/healthz`
 is available when enabled in configuration. Browser requests to the web route
 render HTML; send `Accept: application/json` or `Accept: text/plain` for
-machine-readable JSON or text. Non-interactive HTTP clients receive text by
-default.
+machine-readable JSON or text. Frontend text responses use the human-readable
+health layout; API text responses use dotted keys. API JSON is the default.
 
 The JSON response reports Tor and I2P lifecycle information under
 `features.tor` and `features.i2p`, including whether each service is enabled,
@@ -23,6 +23,12 @@ running, its current state/status, and its published hostname when available.
 When enabled, `checks.tor` and `checks.i2p` report `ok` or `degraded`; a
 missing local Tor executable or unavailable I2P provider degrades that check
 without stopping the HTTP server. Disabled features omit their component check.
+Enabled GeoIP databases are listed as `geoip_asn`, `geoip_country`,
+`geoip_city_ipv4`, and `geoip_city_ipv6` checks when configured. Dataset results
+are cached and refreshed in the background at most once per minute and after a
+successful data update. Missing or invalid data reports `error`; stale data
+reports `degraded`. `unhealthy`, `maintenance`, and `shutting_down` responses
+use HTTP 503, while healthy and degraded responses use HTTP 200.
 
 ## Metrics
 
