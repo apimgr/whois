@@ -62,7 +62,7 @@ caswhois --maintenance <cmd>
 
 | Command | Description |
 |---------|-------------|
-| `backup` | Create and verify a backup using the configured encryption password |
+| `backup [FILENAME]` | Create and verify a backup in the configured backup directory using the configured encryption password; an optional filename must be a basename with the matching archive suffix |
 | `backup test [FILE]` | Verify an existing backup; defaults to the newest full backup |
 | `restore [FILE]` | Restore the selected archive, or the newest full when omitted; asks for typed confirmation |
 | `mode production\|development` | Change the configured server mode |

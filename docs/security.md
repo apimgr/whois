@@ -74,6 +74,11 @@ is rendered at `/server/security` and is available from
 `GET /api/v1/server/security`. The contact form is noindex and is not linked
 from general site navigation.
 
+When a security PGP keypair exists, `/.well-known/pgp-key.asc` serves the
+ASCII-armored public key and the security API includes its URL and fingerprint
+in the `pgp` object. Without a keypair, that endpoint returns 404 and the API
+reports `available: false` with null URL and fingerprint.
+
 The repository URL is controlled by `web.security.report_url` and defaults to
 GitHub private vulnerability reporting. `web.security.policy` customizes the
 policy shown at `/server/security/policy`; an empty value uses the built-in

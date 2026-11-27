@@ -52,6 +52,9 @@ operator credentials in scrape configuration.
 - OpenAPI JSON: `/api/v1/server/swagger` and `/api/swagger`
 - GraphiQL: `/server/docs/graphql`
 - GraphQL POST: `/api/v1/server/graphql` and `/api/graphql`
+- GraphQL query GET: those same paths with `query`, optional JSON `variables`, and `operationName` parameters; GET is query-only
+- Token validation: `GET /api/v1/server/auth/check` with a bearer token; the response reports only its kind
+- Optional PGP key: `GET /.well-known/pgp-key.asc` (404 when no keypair exists)
 
 ## Progressive web app
 

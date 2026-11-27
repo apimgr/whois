@@ -67,6 +67,7 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security` | Public | Security policy/contact data |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security/policy` | Public | Security policy content |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security/thanks` | Public | Disclosed-researcher acknowledgments |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/auth/check` | Bearer token | Validate a token and return its kind without returning or recording token use |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens` | Owner | List tokens belonging to the bearer token's owner |
 | POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary` | Public or owner | Create a primary owner token |
 | POST | `https://caswhois.apimgr.dev/api/v1/server/preferences/tokens/primary/reveal` | Owner | Reveal the primary token once |
@@ -150,8 +151,9 @@ JSON responses use an `ok` boolean and a `data` or `error` member. Use the
 HTTP status code as the primary success or failure signal. Requests are rate
 limited by endpoint class; bulk operations also require operator
 authentication. Add `.txt` to a versioned endpoint path or send
-`Accept: text/plain` to request a plain-text success response. API routes
-return JSON errors so clients retain the standard error envelope. Curl and
+`Accept: text/plain` to request a plain-text response. JSON requests receive
+the standard JSON error envelope; text requests receive localized plain-text
+errors. Curl and
 other non-interactive HTTP tools receive text by default; send
 `Accept: application/json` to force JSON.
 
@@ -161,6 +163,8 @@ other non-interactive HTTP tools receive text by default; send
 - OpenAPI JSON: `/api/v1/server/swagger` (also `/api/swagger`)
 - GraphQL UI: `/server/docs/graphql`
 - GraphQL POST: `/api/v1/server/graphql` (also `/api/graphql`)
+- GraphQL query GET: the same endpoints with `query`, optional JSON `variables`, and `operationName` parameters; GET accepts queries only
+- Optional security public key: `GET /.well-known/pgp-key.asc` (404 without a configured keypair)
 
 ## Command line client
 
