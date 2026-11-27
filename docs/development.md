@@ -29,10 +29,10 @@ Build outputs are generated artifacts and should not be committed. Run build com
 ## Validation
 
 ```bash
-make test      # Stylelint, Go static checks, vulnerability scan, tests, and locale validation
+make test      # CSS contract, Go static checks, vulnerability scan, tests, and locale validation
 ```
 
-`make test` runs Stylelint, `go fmt`, `go vet`, `govulncheck`, the Go tests, the coverage threshold, and locale parity validation inside the Go container. CSS dependencies and all test output stay in the project-scoped temporary directory. CI also runs the configured static analysis jobs.
+`make test` parses every embedded stylesheet with the pure-Go CSS contract test, then runs `go fmt`, `go vet`, `govulncheck`, the Go tests, the coverage threshold, and locale parity validation inside the Go container. Test output stays in the project-scoped temporary directory. CI also runs the configured static analysis jobs.
 
 The binary-validation suite is separate from `make test` and requires Docker:
 
