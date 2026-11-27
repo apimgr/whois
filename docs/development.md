@@ -29,10 +29,10 @@ Build outputs are generated artifacts and should not be committed. Run build com
 ## Validation
 
 ```bash
-make test      # Go tests, coverage threshold, and locale parity validation
+make test      # Stylelint, Go static checks, vulnerability scan, tests, and locale validation
 ```
 
-`make test` runs `go vet`, `govulncheck`, the Go tests, the coverage threshold, and locale parity validation inside the Go container. CI also runs the configured static analysis jobs.
+`make test` runs Stylelint, `go fmt`, `go vet`, `govulncheck`, the Go tests, the coverage threshold, and locale parity validation inside the Go container. CSS dependencies and all test output stay in the project-scoped temporary directory. CI also runs the configured static analysis jobs.
 
 The binary-validation suite is separate from `make test` and requires Docker:
 
@@ -52,9 +52,10 @@ and run the same check. The check waits up to `TOR_BOOTSTRAP_TIMEOUT` seconds (d
 `REQUIRE_OVERLAY=1` when Tor must become healthy even without outbound network.
 
 The Go test suite is colocated with packages under `src/`. Browser E2E checks
-are available through `./tests/e2e.sh`; they require Docker and Chromium. Keep
-test and build output in the project-scoped temporary locations selected by
-the Makefile.
+are available through `./tests/e2e.sh`; they require Docker and Chromium. The
+suite checks SSR, no-JavaScript behavior, and full browser behavior, including
+registered server pages and responsive layout. Keep test and build output in
+the project-scoped temporary locations selected by the Makefile.
 
 ## Running locally
 
