@@ -62,8 +62,9 @@ caswhois --maintenance <cmd>
 
 | Command | Description |
 |---------|-------------|
-| `backup` | Trigger a full backup immediately |
-| `restore FILE` | Restore from the specified backup archive |
+| `backup` | Create and verify a backup using the configured encryption password |
+| `backup test [FILE]` | Verify an existing backup; defaults to the newest full backup |
+| `restore [FILE]` | Restore the selected archive, or the newest full when omitted; asks for typed confirmation |
 | `mode production\|development` | Change the configured server mode |
 | `setup` | Reset server configuration to defaults (root only) |
 | `pgp generate\|rotate\|publish\|export\|import\|delete` | Manage the PGP keypair |
@@ -166,7 +167,6 @@ Site:   https://github.com/apimgr/whois
 | `DATABASE_URL` | Remote libsql/Turso connection string |
 | `DATABASE_DRIVER` | Override driver (`sqlite`) |
 | `DATABASE_DIR` | Override SQLite directory |
-| `CASWHOIS_BACKUP_PASSWORD` | Provide a backup or restore password non-interactively |
 | `SMTP_HOST` | SMTP server name |
 | `SMTP_PORT` | SMTP server port |
 | `SMTP_USERNAME` | SMTP auth username |

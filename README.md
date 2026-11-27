@@ -316,7 +316,10 @@ curl -q -LSsf https://caswhois.apimgr.dev/metrics
 # Create a backup in the configured backup directory
 caswhois --maintenance backup
 
-# Enter an optional password when prompted to encrypt the archive
+# Encrypt backups by setting server.backup.encryption_password in secrets.yml
+# Verify the newest full backup
+caswhois --maintenance backup test
+# Or verify a named archive: caswhois --maintenance backup test /path/to/archive.tar.gz
 ```
 
 **Restore:**
@@ -324,7 +327,9 @@ caswhois --maintenance backup
 # Restore from encrypted backup
 caswhois --maintenance restore /path/to/backup.tar.gz.enc
 
-# You'll be prompted for the password
+# The archive password is prompted for, then type RESTORE to confirm
+# Omitting the archive restores the newest full backup
+caswhois --maintenance restore
 ```
 
 **Update:**

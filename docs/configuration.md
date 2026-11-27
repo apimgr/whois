@@ -145,10 +145,23 @@ SQLite is the default local database. Remote libsql/Turso is also supported. Pos
 ## Secrets and backups
 
 Keep `secrets.yml` and `server.yml` readable only by the service operator.
-Never commit configuration containing secrets. Manual backups prompt for an
-optional password; restore prompts when the selected archive is encrypted.
-`CASWHOIS_BACKUP_PASSWORD` can provide the backup or restore password for
-non-interactive operation.
+Never commit configuration containing secrets. Set
+`server.backup.encryption_password` in `secrets.yml` to encrypt scheduled and
+manual backups. The value is encrypted at rest with the installation
+encryption key. When it is unset, backups are unencrypted and the CLI warns;
+compliance mode refuses to create them. Restore prompts for the archive
+password in an interactive terminal and requires typing `RESTORE` to confirm.
+With no archive argument, restore selects the newest full backup by its UTC
+filename date.
+
+Operator restore limits are configured in `server.restore`:
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `max_archive_size` | `20GB` | Maximum compressed archive size |
+| `max_expanded_size` | `50GB` | Maximum combined expanded size |
+| `max_files` | `1000000` | Maximum archive entries |
+| `max_path_length` | `4096` | Maximum entry path length in bytes |
 
 Generated installation and encryption secrets are rotated with the
 `--maintenance 'secret rotate …'` commands. Previous signing material remains
