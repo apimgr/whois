@@ -38,14 +38,14 @@ func (b *Banner) Fprint(w io.Writer) {
 
 // fprintPlain writes a plain text banner (no ANSI, no box drawing)
 func (b *Banner) fprintPlain(w io.Writer) {
-	fmt.Fprintf(w, "=== %s ===\n", b.Title)
+	_, _ = fmt.Fprintf(w, "=== %s ===\n", b.Title)
 	if b.Subtitle != "" {
-		fmt.Fprintf(w, "%s\n", b.Subtitle)
+		_, _ = fmt.Fprintf(w, "%s\n", b.Subtitle)
 	}
 	if b.Version != "" {
-		fmt.Fprintf(w, "Version: %s\n", b.Version)
+		_, _ = fmt.Fprintf(w, "Version: %s\n", b.Version)
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 // fprintStyled writes a styled banner with box drawing
@@ -67,26 +67,26 @@ func (b *Banner) fprintStyled(w io.Writer) {
 	}
 
 	// Top border
-	fmt.Fprintf(w, "╔%s╗\n", strings.Repeat("═", contentWidth+2))
+	_, _ = fmt.Fprintf(w, "╔%s╗\n", strings.Repeat("═", contentWidth+2))
 
 	// Title (centered)
 	title := centerText(b.Title, contentWidth)
-	fmt.Fprintf(w, "║ %s ║\n", title)
+	_, _ = fmt.Fprintf(w, "║ %s ║\n", title)
 
 	// Subtitle if present
 	if b.Subtitle != "" {
 		subtitle := centerText(b.Subtitle, contentWidth)
-		fmt.Fprintf(w, "║ %s ║\n", subtitle)
+		_, _ = fmt.Fprintf(w, "║ %s ║\n", subtitle)
 	}
 
 	// Version if present
 	if b.Version != "" {
 		version := centerText("Version: "+b.Version, contentWidth)
-		fmt.Fprintf(w, "║ %s ║\n", version)
+		_, _ = fmt.Fprintf(w, "║ %s ║\n", version)
 	}
 
 	// Bottom border
-	fmt.Fprintf(w, "╚%s╝\n", strings.Repeat("═", contentWidth+2))
+	_, _ = fmt.Fprintf(w, "╚%s╝\n", strings.Repeat("═", contentWidth+2))
 }
 
 // centerText centers text within the given width

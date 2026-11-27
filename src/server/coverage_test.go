@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/apimgr/whois/src/config"
@@ -518,6 +517,7 @@ func TestLanguageMiddlewareQueryParam(t *testing.T) {
 	})
 	h := LanguageMiddleware(next)
 	req := httptest.NewRequest(http.MethodGet, "/?lang=es", nil)
+	req.AddCookie(&http.Cookie{Name: consentCookieName, Value: `%7B%22essential%22:true%2C%22preferences%22:true%7D`})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if gotLang != "es" {
@@ -674,15 +674,6 @@ func TestTokenPrefix(t *testing.T) {
 	}
 }
 
-// resetTokenOnce resets the package-level sync.Once so requireToken tests
-// can inject a fresh server token. Tests that need a specific token must
-// call this helper and then set s.config.ServerToken before calling requireToken.
-func resetTokenOnce(token string) {
-	serverTokenHashOnce = sync.Once{}
-	serverTokenHashVal = nil
-	_ = token
-}
-
 // TestRequireTokenMissing verifies 401 when Authorization header is absent.
 // Missing header is independent of the cached token hash — no reset needed.
 func TestRequireTokenMissing(t *testing.T) {
@@ -708,7 +699,6 @@ func TestRequireTokenMissing(t *testing.T) {
 // TestRequireTokenInvalid verifies 401 when a non-matching token is sent.
 // Resets the singleton so we can set a known server token.
 func TestRequireTokenInvalid(t *testing.T) {
-	resetTokenOnce("knowntoken")
 	s := newTestServer(t)
 	s.config.ServerToken = "knowntoken"
 
@@ -731,7 +721,6 @@ func TestRequireTokenInvalid(t *testing.T) {
 // Resets the singleton so we can set a known server token.
 func TestRequireTokenValid(t *testing.T) {
 	const tok = "my-valid-test-token"
-	resetTokenOnce(tok)
 	s := newTestServer(t)
 	s.config.ServerToken = tok
 
@@ -747,6 +736,32 @@ func TestRequireTokenValid(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200 with correct token", rr.Code)
+	}
+}
+
+func TestRequireTokenOwnerGetsInsufficientScope(t *testing.T) {
+	s := newTestServer(t)
+	key, err := config.GenerateEncryptionKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.config.Security.EncryptionKey = key
+	_, ownerToken, err := s.issuePrimaryToken(context.Background(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("issue primary token: %v", err)
+	}
+	protected := s.requireToken(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Authorization", "Bearer "+ownerToken)
+	response := httptest.NewRecorder()
+	protected(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("valid owner token status = %d, want 403", response.Code)
+	}
+	if got := response.Header().Get("WWW-Authenticate"); got != `Bearer error="insufficient_scope"` {
+		t.Fatalf("WWW-Authenticate = %q", got)
 	}
 }
 
@@ -824,27 +839,24 @@ func TestHandleServiceWorker(t *testing.T) {
 	}
 }
 
-// TestHandleOfflinePage verifies /offline.html returns valid HTML.
-func TestHandleOfflinePage(t *testing.T) {
+// TestHandleOfflineStrings verifies localized fallback copy is JSON for the service worker.
+func TestHandleOfflineStrings(t *testing.T) {
 	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/offline.html", nil)
+	req := httptest.NewRequest(http.MethodGet, "/offline-strings.json", nil)
 	rr := httptest.NewRecorder()
 
-	s.handleOfflinePage(rr, req)
+	s.handleOfflineStrings(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rr.Code)
 	}
 	ct := rr.Header().Get("Content-Type")
-	if !strings.Contains(ct, "text/html") {
-		t.Errorf("Content-Type = %q, want text/html", ct)
+	if !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "<!DOCTYPE html>") {
-		t.Error("offline page missing DOCTYPE")
-	}
-	if !strings.Contains(body, "offline") {
-		t.Error("offline page missing offline text")
+	if !strings.Contains(body, `"heading"`) || !strings.Contains(body, `"message"`) {
+		t.Error("offline strings response is missing required fields")
 	}
 }
 
@@ -853,6 +865,7 @@ func TestHandleOfflinePage(t *testing.T) {
 // TestHandleAutodiscoverGet verifies GET /api/autodiscover returns the expected structure.
 func TestHandleAutodiscoverGet(t *testing.T) {
 	s := newTestServer(t)
+	s.config.APIVersion = "v9"
 	req := httptest.NewRequest(http.MethodGet, "/api/autodiscover", nil)
 	req.Host = "localhost:8080"
 	rr := httptest.NewRecorder()
@@ -869,8 +882,12 @@ func TestHandleAutodiscoverGet(t *testing.T) {
 	}
 
 	data := decodeDataMap(t, resp)
-	if data["api_version"] != "v1" {
-		t.Errorf("api_version = %v, want v1", data["api_version"])
+	if data["api_version"] != "v9" {
+		t.Errorf("api_version = %v, want v9", data["api_version"])
+	}
+	versions, ok := data["api_versions"].([]any)
+	if !ok || len(versions) != 1 || versions[0] != "v9" {
+		t.Errorf("api_versions = %v, want [v9]", data["api_versions"])
 	}
 	if data["base_url"] == nil || data["base_url"] == "" {
 		t.Error("base_url missing from autodiscover response")
@@ -1581,6 +1598,8 @@ func TestHandleDebugConfigReturnsJSON(t *testing.T) {
 // TestHandleDebugRoutesReturnsRouteList verifies /debug/routes includes count and routes.
 func TestHandleDebugRoutesReturnsRouteList(t *testing.T) {
 	s := newTestServer(t)
+	s.config.Debug = true
+	s.setupRoutes()
 	req := httptest.NewRequest(http.MethodGet, "/debug/routes", nil)
 	rr := httptest.NewRecorder()
 
@@ -1750,7 +1769,7 @@ func TestResponseWriterDefaultsStatus(t *testing.T) {
 	inner := httptest.NewRecorder()
 	rw := &responseWriter{ResponseWriter: inner}
 
-	rw.Write([]byte("data"))
+	_, _ = rw.Write([]byte("data"))
 
 	if rw.statusCode != http.StatusOK {
 		t.Errorf("statusCode = %d, want 200 (default)", rw.statusCode)

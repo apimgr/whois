@@ -1,0 +1,14 @@
+{{define "public_navigation"}}
+<nav id="navigation" class="nav-links" aria-label="{{t .Lang "nav.main_navigation"}}">
+  <a href="{{path "/"}}" class="nav-link{{if eq .CurrentPath "/"}} active{{end}}"{{if eq .CurrentPath "/"}} aria-current="page"{{end}}>{{t .Lang "nav.home"}}</a>
+  <a href="{{path "/whois"}}" class="nav-link{{if eq .CurrentPath "/whois"}} active{{end}}"{{if eq .CurrentPath "/whois"}} aria-current="page"{{end}}>{{t .Lang "nav.lookup"}}</a>
+</nav>
+{{end}}
+{{define "mobile_navigation"}}
+<div class="nav-panel" id="nav-panel">
+  <label for="nav-toggle" class="nav-close" aria-label="{{t .Lang "nav.close_navigation"}}">✕</label>
+  <a href="{{path "/"}}" class="nav-link{{if eq .CurrentPath "/"}} active{{end}}"{{if eq .CurrentPath "/"}} aria-current="page"{{end}}>{{t .Lang "nav.home"}}</a>
+  <a href="{{path "/whois"}}" class="nav-link{{if eq .CurrentPath "/whois"}} active{{end}}"{{if eq .CurrentPath "/whois"}} aria-current="page"{{end}}>{{t .Lang "nav.lookup"}}</a>
+</div>
+<label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
+{{end}}

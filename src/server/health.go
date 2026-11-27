@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
+	humanformat "github.com/apimgr/whois/src/common/format"
+	"github.com/apimgr/whois/src/i2p"
 )
 
 // HealthResponse represents the /healthz response (per AI.md PART 13).
@@ -65,7 +67,16 @@ type TorInfo struct {
 	Enabled  bool   `json:"enabled"`
 	Running  bool   `json:"running"`
 	Status   string `json:"status"`
-	Hostname string `json:"hostname,omitempty"`
+	Hostname string `json:"hostname"`
+}
+
+type I2PInfo struct {
+	Enabled  bool   `json:"enabled"`
+	Running  bool   `json:"running"`
+	State    string `json:"state"`
+	Status   string `json:"status"`
+	Hostname string `json:"hostname"`
+	Provider string `json:"provider"`
 }
 
 // FeaturesInfo - public features status (AI.md PART 13).
@@ -73,6 +84,7 @@ type TorInfo struct {
 type FeaturesInfo struct {
 	// PART 31: Tor hidden service
 	Tor TorInfo `json:"tor"`
+	I2P I2PInfo `json:"i2p"`
 	// PART 19: GeoIP database
 	GeoIP bool `json:"geoip"`
 	// caswhois app-specific features
@@ -88,6 +100,7 @@ type ChecksInfo struct {
 	Disk      string `json:"disk"`
 	Scheduler string `json:"scheduler"`
 	Tor       string `json:"tor,omitempty"`
+	I2P       string `json:"i2p,omitempty"`
 }
 
 // StatsInfo - caswhois statistics
@@ -103,9 +116,31 @@ type StatsInfo struct {
 	ASNQueries    int64 `json:"asn_queries"`
 }
 
+type healthPageData struct {
+	translatablePageData
+	AppName       string
+	UptimeDisplay string
+	HealthResponse
+}
+
+var healthPageTmpl = mustParseTemplate("health", "page/health.tmpl")
+
 // handleHealth handles /healthz and /api/{version}/healthz requests
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response := s.buildHealthResponse()
+	if !strings.HasPrefix(r.URL.Path, "/api/") && DetectClientType(r) == ClientTypeHTML {
+		data := healthPageData{
+			translatablePageData: s.newPageData(w, r),
+			AppName:              s.brandName(),
+			UptimeDisplay:        humanformat.Duration(time.Since(s.startTime), LangFromContext(r.Context())),
+			HealthResponse:       response,
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.renderTemplate(healthPageTmpl, w, r, data); err != nil {
+			writeRequestError(w, r, http.StatusInternalServerError)
+		}
+		return
+	}
 
 	// Content negotiation per AI.md PART 14:
 	// Only serve text/plain when the client explicitly requests it.
@@ -148,10 +183,19 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	}
 	// checks.tor is reported only when the Tor hidden service is enabled (AI.md PART 13).
 	if tor := s.buildTorInfo(); tor.Enabled {
-		if tor.Running {
+		switch tor.Status {
+		case "unavailable":
+			checks.Tor = "degraded"
+		default:
 			checks.Tor = "ok"
+		}
+	}
+	i2pInfo := s.buildI2PInfo()
+	if i2pInfo.Enabled {
+		if i2pInfo.Status == "unavailable" {
+			checks.I2P = "degraded"
 		} else {
-			checks.Tor = "error"
+			checks.I2P = "ok"
 		}
 	}
 
@@ -173,6 +217,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Timestamp: time.Now().UTC(),
 		Features: FeaturesInfo{
 			Tor:          s.buildTorInfo(),
+			I2P:          s.buildI2PInfo(),
 			GeoIP:        s.geoip != nil && s.geoip.Enabled(),
 			RateLimiting: true,
 			Caching:      true,
@@ -193,6 +238,46 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	}
 }
 
+func (s *Server) buildI2PInfo() I2PInfo {
+	if !s.config.I2P.Enabled {
+		return I2PInfo{State: "disabled", Status: "disabled", Provider: "none"}
+	}
+	s.i2pMu.RLock()
+	svc, state, provider := s.i2pService, s.i2pStatus, s.i2pProvider
+	s.i2pMu.RUnlock()
+	if state == "" {
+		state = "starting"
+	}
+	if svc != nil {
+		provider = svc.Provider()
+	}
+	providerName := string(provider)
+	if providerName == "" {
+		providerName = "none"
+	}
+	if state == "no_provider" || provider == "" {
+		return I2PInfo{State: "no_provider", Status: "disabled", Provider: "none"}
+	}
+	status := "starting"
+	switch state {
+	case "running":
+		status = "healthy"
+	case "error":
+		status = "unavailable"
+	}
+	address := ""
+	if svc != nil {
+		address = svc.Address()
+	}
+	return I2PInfo{Enabled: true, Running: state == "running", State: state, Status: status, Hostname: address, Provider: providerName}
+}
+
+func (s *Server) currentI2P() *i2p.Service {
+	s.i2pMu.RLock()
+	defer s.i2pMu.RUnlock()
+	return s.i2pService
+}
+
 // renderHealthJSON renders health response as JSON
 func (s *Server) renderHealthJSON(w http.ResponseWriter, response HealthResponse) {
 	writeJSON(w, http.StatusOK, response)
@@ -204,62 +289,70 @@ func (s *Server) renderHealthText(w http.ResponseWriter, response HealthResponse
 	w.WriteHeader(http.StatusOK)
 
 	// Per AI.md PART 13: Fields in canonical order, flattened with dot notation
-	fmt.Fprintf(w, "# 1. Project\n")
-	fmt.Fprintf(w, "project.name: %s\n", response.Project.Name)
-	fmt.Fprintf(w, "project.tagline: %s\n", response.Project.Tagline)
-	fmt.Fprintf(w, "project.description: %s\n", response.Project.Description)
-	fmt.Fprintf(w, "\n")
+	_, _ = fmt.Fprintf(w, "# 1. Project\n")
+	_, _ = fmt.Fprintf(w, "project.name: %s\n", response.Project.Name)
+	_, _ = fmt.Fprintf(w, "project.tagline: %s\n", response.Project.Tagline)
+	_, _ = fmt.Fprintf(w, "project.description: %s\n", response.Project.Description)
+	_, _ = fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 2. Status\n")
-	fmt.Fprintf(w, "status: %s\n", response.Status)
-	fmt.Fprintf(w, "\n")
+	_, _ = fmt.Fprintf(w, "# 2. Status\n")
+	_, _ = fmt.Fprintf(w, "status: %s\n", response.Status)
+	_, _ = fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 3. Version & Build\n")
-	fmt.Fprintf(w, "version: %s\n", response.Version)
-	fmt.Fprintf(w, "go_version: %s\n", response.GoVersion)
-	fmt.Fprintf(w, "build.commit: %s\n", response.Build.Commit)
-	fmt.Fprintf(w, "build.date: %s\n", response.Build.Date)
-	fmt.Fprintf(w, "\n")
+	_, _ = fmt.Fprintf(w, "# 3. Version & Build\n")
+	_, _ = fmt.Fprintf(w, "version: %s\n", response.Version)
+	_, _ = fmt.Fprintf(w, "go_version: %s\n", response.GoVersion)
+	_, _ = fmt.Fprintf(w, "build.commit: %s\n", response.Build.Commit)
+	_, _ = fmt.Fprintf(w, "build.date: %s\n", response.Build.Date)
+	_, _ = fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 4. Runtime\n")
-	fmt.Fprintf(w, "uptime: %s\n", response.Uptime)
-	fmt.Fprintf(w, "mode: %s\n", response.Mode)
-	fmt.Fprintf(w, "timestamp: %s\n", response.Timestamp.Format(time.RFC3339))
-	fmt.Fprintf(w, "\n")
+	_, _ = fmt.Fprintf(w, "# 4. Runtime\n")
+	_, _ = fmt.Fprintf(w, "uptime: %s\n", response.Uptime)
+	_, _ = fmt.Fprintf(w, "mode: %s\n", response.Mode)
+	_, _ = fmt.Fprintf(w, "timestamp: %s\n", response.Timestamp.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 5. Features\n")
-	fmt.Fprintf(w, "features.rate_limiting: %v\n", response.Features.RateLimiting)
-	fmt.Fprintf(w, "features.caching: %v\n", response.Features.Caching)
-	fmt.Fprintf(w, "features.geoip: %v\n", response.Features.GeoIP)
-	fmt.Fprintf(w, "features.email: %v\n", response.Features.Email)
-	fmt.Fprintf(w, "features.tor.enabled: %v\n", response.Features.Tor.Enabled)
-	fmt.Fprintf(w, "features.tor.running: %v\n", response.Features.Tor.Running)
-	fmt.Fprintf(w, "features.tor.status: %s\n", response.Features.Tor.Status)
+	_, _ = fmt.Fprintf(w, "# 5. Features\n")
+	_, _ = fmt.Fprintf(w, "features.rate_limiting: %v\n", response.Features.RateLimiting)
+	_, _ = fmt.Fprintf(w, "features.caching: %v\n", response.Features.Caching)
+	_, _ = fmt.Fprintf(w, "features.geoip: %v\n", response.Features.GeoIP)
+	_, _ = fmt.Fprintf(w, "features.email: %v\n", response.Features.Email)
+	_, _ = fmt.Fprintf(w, "features.tor.enabled: %v\n", response.Features.Tor.Enabled)
+	_, _ = fmt.Fprintf(w, "features.tor.running: %v\n", response.Features.Tor.Running)
+	_, _ = fmt.Fprintf(w, "features.tor.status: %s\n", response.Features.Tor.Status)
 	if response.Features.Tor.Hostname != "" {
-		fmt.Fprintf(w, "features.tor.hostname: %s\n", response.Features.Tor.Hostname)
+		_, _ = fmt.Fprintf(w, "features.tor.hostname: %s\n", response.Features.Tor.Hostname)
 	}
-	fmt.Fprintf(w, "\n")
+	_, _ = fmt.Fprintf(w, "features.i2p: %s", response.Features.I2P.Status)
+	if response.Features.I2P.Hostname != "" {
+		_, _ = fmt.Fprintf(w, " %s", response.Features.I2P.Hostname)
+	}
+	_, _ = fmt.Fprintf(w, "\n")
+	_, _ = fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 6. Checks\n")
-	fmt.Fprintf(w, "checks.database: %s\n", response.Checks.Database)
-	fmt.Fprintf(w, "checks.cache: %s\n", response.Checks.Cache)
-	fmt.Fprintf(w, "checks.disk: %s\n", response.Checks.Disk)
-	fmt.Fprintf(w, "checks.scheduler: %s\n", response.Checks.Scheduler)
+	_, _ = fmt.Fprintf(w, "# 6. Checks\n")
+	_, _ = fmt.Fprintf(w, "checks.database: %s\n", response.Checks.Database)
+	_, _ = fmt.Fprintf(w, "checks.cache: %s\n", response.Checks.Cache)
+	_, _ = fmt.Fprintf(w, "checks.disk: %s\n", response.Checks.Disk)
+	_, _ = fmt.Fprintf(w, "checks.scheduler: %s\n", response.Checks.Scheduler)
 	if response.Checks.Tor != "" {
-		fmt.Fprintf(w, "checks.tor: %s\n", response.Checks.Tor)
+		_, _ = fmt.Fprintf(w, "checks.tor: %s\n", response.Checks.Tor)
 	}
-	fmt.Fprintf(w, "\n")
+	if response.Checks.I2P != "" {
+		_, _ = fmt.Fprintf(w, "checks.i2p: %s\n", response.Checks.I2P)
+	}
+	_, _ = fmt.Fprintf(w, "\n")
 
-	fmt.Fprintf(w, "# 7. Stats\n")
-	fmt.Fprintf(w, "stats.requests_total: %d\n", response.Stats.RequestsTotal)
-	fmt.Fprintf(w, "stats.requests_24h: %d\n", response.Stats.Requests24h)
-	fmt.Fprintf(w, "stats.active_connections: %d\n", response.Stats.ActiveConns)
-	fmt.Fprintf(w, "stats.cache_hits: %d\n", response.Stats.CacheHits)
-	fmt.Fprintf(w, "stats.cache_misses: %d\n", response.Stats.CacheMisses)
-	fmt.Fprintf(w, "stats.whois_queries: %d\n", response.Stats.WhoisQueries)
-	fmt.Fprintf(w, "stats.domain_queries: %d\n", response.Stats.DomainQueries)
-	fmt.Fprintf(w, "stats.ip_queries: %d\n", response.Stats.IPQueries)
-	fmt.Fprintf(w, "stats.asn_queries: %d\n", response.Stats.ASNQueries)
+	_, _ = fmt.Fprintf(w, "# 7. Stats\n")
+	_, _ = fmt.Fprintf(w, "stats.requests_total: %d\n", response.Stats.RequestsTotal)
+	_, _ = fmt.Fprintf(w, "stats.requests_24h: %d\n", response.Stats.Requests24h)
+	_, _ = fmt.Fprintf(w, "stats.active_connections: %d\n", response.Stats.ActiveConns)
+	_, _ = fmt.Fprintf(w, "stats.cache_hits: %d\n", response.Stats.CacheHits)
+	_, _ = fmt.Fprintf(w, "stats.cache_misses: %d\n", response.Stats.CacheMisses)
+	_, _ = fmt.Fprintf(w, "stats.whois_queries: %d\n", response.Stats.WhoisQueries)
+	_, _ = fmt.Fprintf(w, "stats.domain_queries: %d\n", response.Stats.DomainQueries)
+	_, _ = fmt.Fprintf(w, "stats.ip_queries: %d\n", response.Stats.IPQueries)
+	_, _ = fmt.Fprintf(w, "stats.asn_queries: %d\n", response.Stats.ASNQueries)
 }
 
 // getOverallStatus derives the overall service status from per-component check results.
@@ -270,12 +363,15 @@ func getOverallStatus(checks ChecksInfo) string {
 	if checks.Tor != "" {
 		values = append(values, checks.Tor)
 	}
+	if checks.I2P != "" {
+		values = append(values, checks.I2P)
+	}
 	degraded := false
 	for _, v := range values {
 		if v == "error" {
 			return "unhealthy"
 		}
-		if v == "warn" {
+		if v == "warn" || v == "degraded" {
 			degraded = true
 		}
 	}
@@ -290,7 +386,7 @@ func (s *Server) checkDatabase() string {
 	if s.database == nil {
 		return "error"
 	}
-	if err := s.database.Server.PingContext(context.Background()); err != nil {
+	if err := s.database.Read().PingContext(context.Background()); err != nil {
 		return "error"
 	}
 	return "ok"
@@ -306,16 +402,25 @@ func (s *Server) checkScheduler() string {
 
 // buildTorInfo returns current Tor hidden service status
 func (s *Server) buildTorInfo() TorInfo {
-	if s.torService == nil {
+	s.torMu.RLock()
+	service, status := s.torService, s.torStatus
+	s.torMu.RUnlock()
+	if service == nil {
+		if status == "starting" || status == "unavailable" {
+			return TorInfo{Enabled: true, Status: status}
+		}
 		return TorInfo{
 			Enabled: false,
 			Running: false,
 			Status:  "disabled",
 		}
 	}
-	addr := s.torService.OnionAddress()
-	running := addr != "" && addr != ".onion"
-	status := "starting"
+	addr := service.OnionAddress()
+	if addr == ".onion" {
+		addr = ""
+	}
+	running := addr != ""
+	status = "starting"
 	if running {
 		status = "healthy"
 	}

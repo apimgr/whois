@@ -13,6 +13,8 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
+func (sm *ServiceManager) removeCreatedServiceAccount() error { return nil }
+
 // installSystemService installs the binary as an automatic Windows SCM service
 // and registers an eventlog source for it.
 func (sm *ServiceManager) installSystemService() error {

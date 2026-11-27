@@ -2,10 +2,15 @@ package server
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/apimgr/whois/src/common/constants"
@@ -14,6 +19,20 @@ import (
 
 // HTTPClientType represents the type of client making the request
 type HTTPClientType string
+
+type serverContextKey struct{}
+
+func withServerContext(server *Server, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(context.WithValue(r.Context(), serverContextKey{}, server))
+		next.ServeHTTP(w, r)
+	})
+}
+
+func serverFromContext(ctx context.Context) *Server {
+	server, _ := ctx.Value(serverContextKey{}).(*Server)
+	return server
+}
 
 const (
 	ClientTypeHTML HTTPClientType = "html"
@@ -168,6 +187,170 @@ func RespondWithFormat(w http.ResponseWriter, r *http.Request, data interface{})
 	}
 }
 
+// apiContentNegotiation applies the API response format rules and dispatches
+// .txt aliases to the same route handler.
+func apiContentNegotiation(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/api/mcp") || strings.Contains(r.URL.Path, "/server/mcp") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		request := r.Clone(r.Context())
+		request.Header = r.Header.Clone()
+		textResponse := strings.HasSuffix(request.URL.Path, ".txt")
+		if textResponse {
+			urlCopy := *request.URL
+			urlCopy.Path = strings.TrimSuffix(urlCopy.Path, ".txt")
+			request.URL = &urlCopy
+		} else {
+			accept := request.Header.Get("Accept")
+			if strings.Contains(accept, "text/plain") {
+				textResponse = true
+			} else if strings.TrimSpace(accept) == "" {
+				textResponse = isNonInteractiveClient(request)
+			}
+		}
+		if !textResponse {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		captured := httptest.NewRecorder()
+		next.ServeHTTP(captured, request)
+		result := captured.Result()
+		defer func() { _ = result.Body.Close() }()
+		for name, values := range result.Header {
+			for _, value := range values {
+				w.Header().Add(name, value)
+			}
+		}
+		w.Header().Del("Content-Length")
+		body, err := io.ReadAll(result.Body)
+		if err != nil {
+			writeRequestError(w, r, http.StatusInternalServerError)
+			return
+		}
+		// API errors keep their JSON envelope even for non-interactive clients;
+		// callers need stable machine-readable error codes and messages.
+		if result.StatusCode >= http.StatusBadRequest {
+			w.Header().Set("Content-Type", result.Header.Get("Content-Type"))
+			w.WriteHeader(result.StatusCode)
+			_, _ = w.Write(body)
+			return
+		}
+		contentType := result.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "application/json") {
+			w.Header().Set("Content-Type", contentType)
+			w.WriteHeader(result.StatusCode)
+			_, _ = w.Write(ensureTrailingNewline(body))
+			return
+		}
+		plain, ok := serializeAPIText(body, request.Method)
+		if !ok {
+			w.Header().Set("Content-Type", contentType)
+			w.WriteHeader(result.StatusCode)
+			_, _ = w.Write(body)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(result.StatusCode)
+		_, _ = io.WriteString(w, ensureTextNewline(plain))
+	})
+}
+
+func serializeAPIText(body []byte, method string) (string, bool) {
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", false
+	}
+	if object, ok := payload.(map[string]any); ok {
+		if _, hasEnvelope := object["ok"]; !hasEnvelope {
+			return "OK: Retrieved successfully\n" + strings.Join(flattenAPIText(payload, ""), "\n"), true
+		}
+	}
+	var response APIResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", false
+	}
+	if !response.OK {
+		return fmt.Sprintf("ERROR: %s: %s", response.Error, response.Message), true
+	}
+	if response.Data == nil {
+		return "OK: " + defaultTextMessage(method), true
+	}
+	if items, ok := response.Data.([]any); ok {
+		if len(items) == 0 {
+			return "OK: 0 items found", true
+		}
+		var lines []string
+		for _, item := range items {
+			if _, object := item.(map[string]any); object {
+				if len(lines) > 0 {
+					lines = append(lines, "")
+				}
+				lines = append(lines, flattenAPIText(item, "")...)
+			} else {
+				lines = append(lines, fmt.Sprint(item))
+			}
+		}
+		return fmt.Sprintf("OK: %d items found\n%s", len(items), strings.Join(lines, "\n")), true
+	}
+	return "OK: Retrieved successfully\n" + strings.Join(flattenAPIText(response.Data, ""), "\n"), true
+}
+
+func flattenAPIText(value any, prefix string) []string {
+	switch typed := value.(type) {
+	case map[string]any:
+		var lines []string
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			name := key
+			if prefix != "" {
+				name = prefix + "." + key
+			}
+			lines = append(lines, flattenAPIText(typed[key], name)...)
+		}
+		return lines
+	case []any:
+		values := make([]string, len(typed))
+		for i, item := range typed {
+			values[i] = fmt.Sprint(item)
+		}
+		return []string{prefix + ": " + strings.Join(values, ", ")}
+	default:
+		if prefix == "" {
+			return []string{fmt.Sprint(value)}
+		}
+		return []string{prefix + ": " + fmt.Sprint(value)}
+	}
+}
+
+func defaultTextMessage(method string) string {
+	switch method {
+	case http.MethodPost:
+		return "Created successfully"
+	case http.MethodPut, http.MethodPatch:
+		return "Updated successfully"
+	case http.MethodDelete:
+		return "Deleted successfully"
+	default:
+		return "Retrieved successfully"
+	}
+}
+
+func ensureTextNewline(value string) string {
+	return strings.TrimRight(value, "\r\n") + "\n"
+}
+
+func ensureTrailingNewline(value []byte) []byte {
+	return []byte(ensureTextNewline(string(value)))
+}
+
 // respondJSON sends a JSON response with 2-space indentation and a single
 // trailing newline (AI.md PART 14).
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -196,13 +379,13 @@ func respondText(w http.ResponseWriter, status int, data interface{}) {
 		Content: rendered,
 	}
 	text := rendered
-	if err := htmlResponseTmpl.Execute(&buf, pd); err == nil {
+	if err := htmlResponseTmpl.ExecuteTemplate(&buf, "page_content", pd); err == nil {
 		text = HTML2TextConverter(buf.String())
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
-	fmt.Fprintf(w, "%s\n", text)
+	_, _ = fmt.Fprintf(w, "%s\n", text)
 }
 
 // htmlBlockTagPattern matches closing block-level tags that should become
@@ -245,7 +428,7 @@ func HTML2TextConverter(htmlContent string) string {
 }
 
 // htmlResponseTmpl is the generic response template (AI.md PART 7 — loaded from src/server/template/).
-var htmlResponseTmpl = mustParseTemplate("response", "response.html")
+var htmlResponseTmpl = mustParseTemplate("response", "page/response.tmpl")
 
 // responsePageData is the data model for the generic response.html template.
 type responsePageData struct {
@@ -257,46 +440,70 @@ type responsePageData struct {
 
 // respondHTML sends an HTML response using the generic response template.
 // The content value is HTML-escaped by html/template before rendering.
-// This is a package-level helper (no *Server receiver available at call
-// sites), so it builds a minimal translatablePageData directly rather than
-// via Server.newPageData — response.html renders no footer/CSRF form, so
-// those fields are intentionally left at their zero values.
+// The server instance is carried in the request context by setupMiddleware,
+// which lets this shared response path use the same page chrome and CSRF data.
 func respondHTML(w http.ResponseWriter, r *http.Request, status int, data interface{}) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
 	lang := LangFromContext(r.Context())
 	pd := responsePageData{
 		translatablePageData: translatablePageData{
-			Lang:  lang,
-			Dir:   i18n.Dir(lang),
-			Theme: themeFromRequest(r),
+			AppName:     constants.InternalName,
+			CurrentPath: r.URL.Path,
+			Lang:        lang,
+			Dir:         i18n.Dir(lang),
+			Theme:       themeFromRequest(r),
 		},
 		Name:    constants.InternalName,
 		Content: fmt.Sprintf("%v", data),
 	}
-	if err := htmlResponseTmpl.Execute(w, pd); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+	if server := serverFromContext(r.Context()); server != nil {
+		pageData := server.newPageData(w, r)
+		pageData.AppName = server.brandName()
+		pageData.CurrentPath = r.URL.Path
+		pd.translatablePageData = pageData
+		pd.Name = server.brandName()
+	} else {
+		csrfToken := ""
+		if cookie, err := r.Cookie("csrf_token"); err == nil && cookie.Value != "" {
+			csrfToken = cookie.Value
+		} else {
+			csrfToken = generateCSRFToken(32)
+			http.SetCookie(w, &http.Cookie{Name: "csrf_token", Value: csrfToken, Path: "/", Secure: r.TLS != nil,
+				SameSite: http.SameSiteStrictMode})
+		}
+		pd.CSRFToken = csrfToken
+		pd.Footer = FooterData{Lang: lang, LanguageName: localeNativeLanguageName(lang), ProjectVersion: Version,
+			RepoURL: constants.RepoURL}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	if err := htmlResponseTmpl.ExecuteTemplate(w, "public.tmpl", pd); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }
 
 // RespondError responds with an error in the appropriate format.
 // The JSON branch emits the canonical envelope (AI.md PART 14):
 // {"ok":false,"error":"CODE","message":"..."}.
-func RespondError(w http.ResponseWriter, r *http.Request, status int, message string) {
+func RespondError(w http.ResponseWriter, r *http.Request, status int, _ string) {
 	clientType := DetectClientType(r)
+	lang := requestErrorLanguage(r)
+	_, messageKey := statusErrorKeys(status)
 
 	switch clientType {
 	case ClientTypeJSON:
-		respondJSON(w, status, APIResponse{
-			OK:      false,
-			Error:   statusToErrorCode(status),
-			Message: message,
-		})
+		writeRequestAPIError(w, r, status)
 	case ClientTypeText:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Language", lang)
+		addVaryHeader(w.Header(), "Accept-Language")
 		w.WriteHeader(status)
-		fmt.Fprintf(w, "Error: %s\n", message)
+		_, _ = fmt.Fprintf(w, "%s\n", translateKey(lang, messageKey))
 	case ClientTypeHTML:
-		respondHTML(w, r, status, fmt.Sprintf("%s — %s", http.StatusText(status), message))
+		if server := serverFromContext(r.Context()); server != nil {
+			server.renderStatusError(w, r, status)
+		} else {
+			titleKey, _ := statusErrorKeys(status)
+			respondHTML(w, r, status, fmt.Sprintf("%s — %s", translateKey(lang, titleKey), translateKey(lang, messageKey)))
+		}
 	}
 }

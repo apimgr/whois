@@ -3,10 +3,12 @@ package records
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/apimgr/whois/src/whois"
 	"github.com/apimgr/whois/src/whois/parser"
 	_ "modernc.org/sqlite"
 )
@@ -21,17 +23,27 @@ func openTestDB(t *testing.T) *sql.DB {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS whois_records (
 		query              TEXT PRIMARY KEY,
 		query_type         TEXT NOT NULL,
+		source             TEXT NOT NULL DEFAULT 'whois',
 		registrant_name    TEXT,
 		registrant_org     TEXT,
 		registrant_email   TEXT,
 		registrant_country TEXT,
 		registrar          TEXT,
 		created_date       TEXT,
+		updated_date       TEXT,
 		expiry_date        TEXT,
 		nameservers        TEXT,
 		status             TEXT,
 		whois_server       TEXT,
+		rdap_server        TEXT,
 		raw_whois          TEXT,
+		raw_rdap           TEXT,
+		network_name       TEXT,
+		network_range      TEXT,
+		network_type       TEXT,
+		asn_number         INTEGER,
+		asn_name           TEXT,
+		rir                TEXT,
 		first_seen         INTEGER NOT NULL,
 		last_seen          INTEGER NOT NULL,
 		last_updated       INTEGER NOT NULL
@@ -177,7 +189,7 @@ func TestDecodeJSON_EmptyArray(t *testing.T) {
 
 func TestUpsertRecord_NilResult(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	err := UpsertRecord(context.Background(), db, "example.com", "domain", nil)
 	if err != nil {
 		t.Errorf("UpsertRecord with nil result: unexpected error %v", err)
@@ -186,7 +198,7 @@ func TestUpsertRecord_NilResult(t *testing.T) {
 
 func TestUpsertRecord_BasicInsert(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	result := &parser.DomainResult{
 		Registrant:   "Jane Doe",
@@ -217,9 +229,48 @@ func TestUpsertRecord_BasicInsert(t *testing.T) {
 	}
 }
 
+func TestUpsertUnifiedRecordPersistsRDAPAndNetworkFields(t *testing.T) {
+	db := openTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	result := &whois.UnifiedResult{
+		Query:         "8.8.8.8",
+		QueryType:     whois.QueryTypeIPv4,
+		Source:        whois.SourceRDAP,
+		RDAPServer:    "https://rdap.example.test/",
+		RegistrantOrg: "Example Networks",
+		CreatedDate:   time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC),
+		UpdatedDate:   time.Date(2024, 2, 3, 4, 5, 6, 0, time.UTC),
+		RawRDAP:       json.RawMessage(`{"name":"Example Networks"}`),
+		NetworkName:   "EXAMPLE-NET",
+		NetworkRange:  "8.8.8.0 - 8.8.8.255",
+		NetworkType:   "DIRECT ALLOCATION",
+		ASNNumber:     15169,
+		ASNName:       "GOOGLE",
+		RIR:           "ARIN",
+	}
+	if err := UpsertUnifiedRecord(context.Background(), db, result); err != nil {
+		t.Fatalf("UpsertUnifiedRecord: %v", err)
+	}
+	var source, rdapServer, updatedDate, rawRDAP, networkName, networkRange, networkType, asnName, rir string
+	var asnNumber int64
+	err := db.QueryRow(`SELECT source, rdap_server, updated_date, raw_rdap, network_name, network_range,
+		network_type, asn_number, asn_name, rir FROM whois_records WHERE query = ?`, "8.8.8.8").Scan(
+		&source, &rdapServer, &updatedDate, &rawRDAP, &networkName, &networkRange, &networkType, &asnNumber, &asnName, &rir)
+	if err != nil {
+		t.Fatalf("scan RDAP row: %v", err)
+	}
+	if source != "rdap" || rdapServer != result.RDAPServer || !strings.HasPrefix(updatedDate, "2024-02-03") || rawRDAP != string(result.RawRDAP) {
+		t.Fatalf("RDAP metadata = %q, %q, %q, %q", source, rdapServer, updatedDate, rawRDAP)
+	}
+	if networkName != result.NetworkName || networkRange != result.NetworkRange || networkType != result.NetworkType || asnNumber != int64(result.ASNNumber) || asnName != result.ASNName || rir != result.RIR {
+		t.Fatalf("network metadata = %q, %q, %q, %d, %q, %q", networkName, networkRange, networkType, asnNumber, asnName, rir)
+	}
+}
+
 func TestUpsertRecord_NormalizesQuery(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	result := &parser.DomainResult{Registrant: "Tester"}
 	err := UpsertRecord(context.Background(), db, "  EXAMPLE.COM  ", "domain", result)
@@ -238,7 +289,7 @@ func TestUpsertRecord_NormalizesQuery(t *testing.T) {
 
 func TestUpsertRecord_ConflictUpdates(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	first := &parser.DomainResult{Registrant: "First Owner"}
 	if err := UpsertRecord(context.Background(), db, "example.com", "domain", first); err != nil {
@@ -272,7 +323,7 @@ func TestUpsertRecord_ConflictUpdates(t *testing.T) {
 
 func TestUpsertRecord_WithDates(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	createdAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	expiresAt := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -302,7 +353,7 @@ func TestUpsertRecord_WithDates(t *testing.T) {
 
 func TestUpsertRecord_EmptyFields(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	result := &parser.DomainResult{}
 	err := UpsertRecord(context.Background(), db, "minimal.com", "domain", result)
@@ -321,7 +372,7 @@ func TestUpsertRecord_EmptyFields(t *testing.T) {
 
 func TestUpsertRecord_BadDB(t *testing.T) {
 	db := openTestDB(t)
-	db.Close()
+	_ = db.Close()
 	result := &parser.DomainResult{Registrant: "Owner"}
 	err := UpsertRecord(context.Background(), db, "fail.com", "domain", result)
 	if err == nil {
@@ -333,7 +384,7 @@ func TestUpsertRecord_BadDB(t *testing.T) {
 
 func TestSearchByOwner_EmptyOwner(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	_, err := SearchByOwner(context.Background(), db, "", 10, 0)
 	if err == nil {
 		t.Error("SearchByOwner with empty owner should return error")
@@ -342,7 +393,7 @@ func TestSearchByOwner_EmptyOwner(t *testing.T) {
 
 func TestSearchByOwner_WhitespaceOnlyOwner(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	_, err := SearchByOwner(context.Background(), db, "   ", 10, 0)
 	if err == nil {
 		t.Error("SearchByOwner with whitespace-only owner should return error")
@@ -351,7 +402,7 @@ func TestSearchByOwner_WhitespaceOnlyOwner(t *testing.T) {
 
 func TestSearchByOwner_EmptyDB(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	recs, err := SearchByOwner(context.Background(), db, "acme", 10, 0)
 	if err != nil {
 		t.Fatalf("SearchByOwner empty db: %v", err)
@@ -363,7 +414,7 @@ func TestSearchByOwner_EmptyDB(t *testing.T) {
 
 func TestSearchByOwner_FindsByName(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{Registrant: "Acme Corp", Organization: "Acme Inc", Email: "admin@acme.com"}
 	if err := UpsertRecord(context.Background(), db, "acme.com", "domain", r); err != nil {
@@ -384,7 +435,7 @@ func TestSearchByOwner_FindsByName(t *testing.T) {
 
 func TestSearchByOwner_FindsByEmail(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{Email: "user@domain.com"}
 	if err := UpsertRecord(context.Background(), db, "domain.com", "domain", r); err != nil {
@@ -402,7 +453,7 @@ func TestSearchByOwner_FindsByEmail(t *testing.T) {
 
 func TestSearchByOwner_CaseInsensitive(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{Registrant: "UPPERCASE ORG"}
 	if err := UpsertRecord(context.Background(), db, "upper.com", "domain", r); err != nil {
@@ -420,7 +471,7 @@ func TestSearchByOwner_CaseInsensitive(t *testing.T) {
 
 func TestSearchByOwner_NoMatch(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{Registrant: "SomeCompany"}
 	if err := UpsertRecord(context.Background(), db, "some.com", "domain", r); err != nil {
@@ -438,7 +489,7 @@ func TestSearchByOwner_NoMatch(t *testing.T) {
 
 func TestSearchByOwner_LimitClamping(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	for i := 0; i < 3; i++ {
 		r := &parser.DomainResult{Registrant: "BigOrg"}
@@ -459,7 +510,7 @@ func TestSearchByOwner_LimitClamping(t *testing.T) {
 
 func TestSearchByOwner_LimitTooLarge(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{Registrant: "BigOrg"}
 	if err := UpsertRecord(context.Background(), db, "big.com", "domain", r); err != nil {
@@ -477,7 +528,7 @@ func TestSearchByOwner_LimitTooLarge(t *testing.T) {
 
 func TestSearchByOwner_NegativeOffset(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{Registrant: "Owner"}
 	if err := UpsertRecord(context.Background(), db, "off.com", "domain", r); err != nil {
@@ -495,7 +546,7 @@ func TestSearchByOwner_NegativeOffset(t *testing.T) {
 
 func TestSearchByOwner_DecodesNameservers(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	r := &parser.DomainResult{
 		Registrant:  "NsOwner",
@@ -519,7 +570,7 @@ func TestSearchByOwner_DecodesNameservers(t *testing.T) {
 
 func TestSearchByOwner_ClosedDB(t *testing.T) {
 	db := openTestDB(t)
-	db.Close()
+	_ = db.Close()
 	_, err := SearchByOwner(context.Background(), db, "owner", 10, 0)
 	if err == nil {
 		t.Error("SearchByOwner on closed db should return error")
@@ -530,7 +581,7 @@ func TestSearchByOwner_ClosedDB(t *testing.T) {
 
 func TestRefreshStale_EmptyDB(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	queries, err := RefreshStale(context.Background(), db, 30)
 	if err != nil {
 		t.Fatalf("RefreshStale empty db: %v", err)
@@ -542,7 +593,7 @@ func TestRefreshStale_EmptyDB(t *testing.T) {
 
 func TestRefreshStale_NegativeMaxAge(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	queries, err := RefreshStale(context.Background(), db, -1)
 	if err != nil {
 		t.Fatalf("RefreshStale negative maxAge: %v", err)
@@ -554,7 +605,7 @@ func TestRefreshStale_NegativeMaxAge(t *testing.T) {
 
 func TestRefreshStale_FindsStaleRecords(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	staleTime := time.Now().Add(-60 * 24 * time.Hour).Unix()
 	_, err := db.Exec(`INSERT INTO whois_records
@@ -588,7 +639,7 @@ func TestRefreshStale_FindsStaleRecords(t *testing.T) {
 
 func TestRefreshStale_ZeroMaxAge(t *testing.T) {
 	db := openTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	staleTime := time.Now().Add(-60 * 24 * time.Hour).Unix()
 	_, err := db.Exec(`INSERT INTO whois_records
@@ -610,7 +661,7 @@ func TestRefreshStale_ZeroMaxAge(t *testing.T) {
 
 func TestRefreshStale_ClosedDB(t *testing.T) {
 	db := openTestDB(t)
-	db.Close()
+	_ = db.Close()
 	_, err := RefreshStale(context.Background(), db, 30)
 	if err == nil {
 		t.Error("RefreshStale on closed db should return error")

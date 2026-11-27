@@ -48,7 +48,7 @@ func openTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("create scheduler_history: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -340,7 +340,7 @@ func TestStart_WithEnabledDisabledTasks(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	defer s.Stop()
+	defer func() { _ = s.Stop() }()
 }
 
 // TestRunTaskNow_Success verifies RunTaskNow triggers execution for a valid task ID.
@@ -401,7 +401,7 @@ func TestEnableTask_Success(t *testing.T) {
 	}
 
 	var enabled int
-	db.QueryRow("SELECT enabled FROM scheduler_tasks WHERE id = ?", "toggle_task").Scan(&enabled)
+	_ = db.QueryRow("SELECT enabled FROM scheduler_tasks WHERE id = ?", "toggle_task").Scan(&enabled)
 	if enabled != 1 {
 		t.Errorf("DB enabled = %d, want 1", enabled)
 	}
@@ -438,7 +438,7 @@ func TestDisableTask_Success(t *testing.T) {
 	}
 
 	var enabled int
-	db.QueryRow("SELECT enabled FROM scheduler_tasks WHERE id = ?", "disable_task").Scan(&enabled)
+	_ = db.QueryRow("SELECT enabled FROM scheduler_tasks WHERE id = ?", "disable_task").Scan(&enabled)
 	if enabled != 0 {
 		t.Errorf("DB enabled = %d, want 0", enabled)
 	}

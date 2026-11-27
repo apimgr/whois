@@ -1,7 +1,9 @@
 package config
 
 import (
+	"context"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,14 +15,14 @@ import (
 
 // restartRequiredSettings lists the dot-path prefixes that cannot change
 // without a full process restart (AI.md PART 8 "Requires Restart" table).
-// A trailing dot covers the whole section (ssl., database., tor.).
+// A trailing dot covers the whole section (ssl. and database.). Tor settings
+// are hot-applied to the Tor child through TorConfigHook.
 var restartRequiredSettings = []string{
 	"address",
 	"port",
 	"daemonize",
 	"ssl.",
 	"database.",
-	"tor.",
 }
 
 // ConfigManager polls server.yml for external edits and hot-reloads the
@@ -31,9 +33,12 @@ type ConfigManager struct {
 	configDir       string
 	configPath      string
 	lastFileModTime time.Time
+	lastState       uint64
 	current         *ServerConfig
 	pendingRestart  bool
 	restartSettings []string
+	I2PConfigHook   func(I2PConfig)
+	TorConfigHook   func(TorConfig)
 	mu              sync.RWMutex
 }
 
@@ -49,29 +54,44 @@ func NewConfigManager(configDir string, current *ServerConfig) *ConfigManager {
 		configDir:       configDir,
 		configPath:      configPath,
 		lastFileModTime: modTime,
+		lastState:       configTreeState(configDir),
 		current:         current,
 	}
 }
 
 // Start begins polling server.yml every 5 seconds for external edits
 // (AI.md PART 8 — polling by design, not fsnotify).
-func (m *ConfigManager) Start() {
+func (m *ConfigManager) Start(ctx context.Context) <-chan struct{} {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			m.checkFileChanges()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				m.checkFileChanges()
+			}
 		}
 	}()
+	return done
 }
 
 // checkFileChanges watches server.yml for external edits and hot-reloads.
 func (m *ConfigManager) checkFileChanges() {
-	info, err := os.Stat(m.configPath)
-	if err != nil || info.ModTime().Equal(m.lastFileModTime) {
+	state := configTreeState(m.configDir)
+	if state == m.lastState {
 		return
 	}
-	m.lastFileModTime = info.ModTime()
+	m.lastState = state
+	if info, err := os.Stat(m.configPath); err == nil {
+		m.lastFileModTime = info.ModTime()
+	}
 
 	newConfig, err := LoadServerConfig(m.configDir)
 	if err != nil {
@@ -80,6 +100,19 @@ func (m *ConfigManager) checkFileChanges() {
 	}
 
 	m.applyConfigChanges(newConfig)
+}
+
+func configTreeState(configDir string) uint64 {
+	h := fnv.New64a()
+	for _, root := range []string{filepath.Join(configDir, "server.yml"), filepath.Join(configDir, "secrets.yml"), filepath.Join(configDir, "yaml.d"), filepath.Join(configDir, "assets")} {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err == nil && info != nil {
+				_, _ = fmt.Fprintf(h, "%s:%d:%d:%d", path, info.Size(), info.ModTime().UnixNano(), info.Mode())
+			}
+			return nil
+		})
+	}
+	return h.Sum64()
 }
 
 // ApplyExternalConfig runs a config obtained outside the polling loop (e.g.
@@ -106,6 +139,12 @@ func (m *ConfigManager) applyConfigChanges(newConfig *ServerConfig) {
 	if len(hotReloadable) > 0 {
 		m.applyHotReloadSettings(newConfig)
 		log.Printf("config hot-reloaded from file: %v", hotReloadable)
+		if hasI2PChange(hotReloadable) && m.I2PConfigHook != nil {
+			m.I2PConfigHook(newConfig.I2P)
+		}
+		if hasTorChange(hotReloadable) && m.TorConfigHook != nil {
+			m.TorConfigHook(newConfig.Tor)
+		}
 	}
 
 	if len(needsRestart) > 0 {
@@ -115,6 +154,24 @@ func (m *ConfigManager) applyConfigChanges(newConfig *ServerConfig) {
 		m.mu.Unlock()
 		log.Printf("config change requires restart, settings=%v", needsRestart)
 	}
+}
+
+func hasTorChange(settings []string) bool {
+	for _, setting := range settings {
+		if strings.HasPrefix(setting, "tor.") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasI2PChange(settings []string) bool {
+	for _, setting := range settings {
+		if strings.HasPrefix(setting, "i2p.") {
+			return true
+		}
+	}
+	return false
 }
 
 // applyHotReloadSettings copies newConfig onto the live config in place,
@@ -129,10 +186,11 @@ func (m *ConfigManager) applyHotReloadSettings(newConfig *ServerConfig) {
 	old := m.current
 	newConfig.Address = old.Address
 	newConfig.Port = old.Port
+	newConfig.HTTPPort = old.HTTPPort
+	newConfig.HTTPSPort = old.HTTPSPort
 	newConfig.Daemonize = old.Daemonize
 	newConfig.TLS = old.TLS
 	newConfig.Database = old.Database
-	newConfig.Tor = old.Tor
 
 	*m.current = *newConfig
 }

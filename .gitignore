@@ -146,8 +146,14 @@ volumes/rootfs/
 .vscode/
 *.iml
 
-# AI config directories (regenerated from AI.md rules, not committed)
-.claude/
+# AI rules and project memory are committed; ignore other Claude state.
+.claude/*
+!.claude/rules/
+!.claude/memory/
+.claude/rules/*
+!.claude/rules/*.md
+.claude/memory/*
+!.claude/memory/MEMORY.md
 .cursor/
 .aider/
 .ai/

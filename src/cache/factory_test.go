@@ -15,7 +15,7 @@ func TestNew_DefaultsToMemory(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New(Type=%q): unexpected error: %v", typ, err)
 		}
-		defer c.Close()
+		defer func() { _ = c.Close() }()
 		if _, ok := c.(*MemoryCache); !ok {
 			t.Errorf("New(Type=%q): got %T, want *MemoryCache", typ, c)
 		}
@@ -29,7 +29,7 @@ func TestNew_None(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New(Type=none): unexpected error: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if _, ok := c.(*NoopCache); !ok {
 		t.Errorf("New(Type=none): got %T, want *NoopCache", c)
 	}

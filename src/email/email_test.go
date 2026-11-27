@@ -1,10 +1,51 @@
 package email
 
 import (
+	"encoding/base64"
+	"io"
+	"mime"
+	"mime/multipart"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestBuildMIMEBodyWithEncryptedAttachment(t *testing.T) {
+	contentType, body, err := buildMIMEBody("Encrypted report attached.", &EmailAttachment{Filename: "sec_test.enc", ContentType: "application/octet-stream", Content: []byte("ciphertext")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "multipart/mixed" {
+		t.Fatalf("content type = %q, err %v", contentType, err)
+	}
+	reader := multipart.NewReader(strings.NewReader(string(body)), params["boundary"])
+	textPart, err := reader.NextPart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if textPart.Header.Get("Content-Type") != "text/plain; charset=UTF-8" {
+		t.Fatalf("message content type = %q", textPart.Header.Get("Content-Type"))
+	}
+	attachment, err := reader.NextPart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attachment.FileName() != "sec_test.enc" || attachment.Header.Get("Content-Transfer-Encoding") != "base64" {
+		t.Fatalf("attachment headers = %v", attachment.Header)
+	}
+	encoded, err := io.ReadAll(attachment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
+	if err != nil || string(decoded) != "ciphertext" {
+		t.Fatalf("attachment content = %q, err %v", decoded, err)
+	}
+	if _, _, err := buildMIMEBody("body", &EmailAttachment{Filename: "bad\r\nname", ContentType: "application/octet-stream", Content: []byte("data")}); err == nil {
+		t.Fatal("attachment header injection was accepted")
+	}
+}
 
 // TestNewEmailManager verifies initial state after construction.
 func TestNewEmailManager(t *testing.T) {

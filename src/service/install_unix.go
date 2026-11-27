@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -96,17 +97,79 @@ func (sm *ServiceManager) ensureServiceUser() error {
 		if out, runErr := exec.Command(useradd, args...).CombinedOutput(); runErr != nil {
 			return fmt.Errorf("useradd %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
 		}
-		return nil
+		return sm.markCreatedServiceAccount()
 	}
 	if adduser, lookErr := exec.LookPath("adduser"); lookErr == nil {
 		args := []string{"-S", "-D", "-H", "-u", idStr, "-s", "/sbin/nologin", "-G", sm.Name, sm.Name}
 		if out, runErr := exec.Command(adduser, args...).CombinedOutput(); runErr != nil {
 			return fmt.Errorf("adduser %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
 		}
-		return nil
+		return sm.markCreatedServiceAccount()
 	}
 
 	return fmt.Errorf("no supported user creation tool found (useradd/adduser)")
+}
+
+func (sm *ServiceManager) serviceAccountMarker() string {
+	dataDir := sm.DataDir
+	if dataDir == "" {
+		dataDir = "/var/lib/" + constants.InternalOrg + "/" + constants.InternalName
+	}
+	return filepath.Join(filepath.Dir(dataDir), "."+sm.Name+"-service-account-created")
+}
+
+func (sm *ServiceManager) markCreatedServiceAccount() error {
+	if err := os.MkdirAll(filepath.Dir(sm.serviceAccountMarker()), 0755); err != nil {
+		return fmt.Errorf("create service account marker directory: %w", err)
+	}
+	if err := os.WriteFile(sm.serviceAccountMarker(), []byte(sm.Name+"\n"), 0600); err != nil {
+		return fmt.Errorf("write service account marker: %w", err)
+	}
+	return nil
+}
+
+func (sm *ServiceManager) removeCreatedServiceAccount() error {
+	marker := sm.serviceAccountMarker()
+	data, err := os.ReadFile(marker)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read service account marker: %w", err)
+	}
+	if strings.TrimSpace(string(data)) != sm.Name {
+		return fmt.Errorf("service account marker does not match %q", sm.Name)
+	}
+	if _, err := user.Lookup(sm.Name); err == nil {
+		if userdel, lookErr := exec.LookPath("userdel"); lookErr == nil {
+			if out, runErr := exec.Command(userdel, sm.Name).CombinedOutput(); runErr != nil {
+				return fmt.Errorf("remove service user %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+			}
+		} else if deluser, lookErr := exec.LookPath("deluser"); lookErr == nil {
+			if out, runErr := exec.Command(deluser, sm.Name).CombinedOutput(); runErr != nil {
+				return fmt.Errorf("remove service user %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+			}
+		} else {
+			return fmt.Errorf("no supported service user removal tool found")
+		}
+	}
+	if _, err := user.LookupGroup(sm.Name); err == nil {
+		if groupdel, lookErr := exec.LookPath("groupdel"); lookErr == nil {
+			if out, runErr := exec.Command(groupdel, sm.Name).CombinedOutput(); runErr != nil {
+				return fmt.Errorf("remove service group %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+			}
+		} else if delgroup, lookErr := exec.LookPath("delgroup"); lookErr == nil {
+			if out, runErr := exec.Command(delgroup, sm.Name).CombinedOutput(); runErr != nil {
+				return fmt.Errorf("remove service group %s: %w: %s", sm.Name, runErr, strings.TrimSpace(string(out)))
+			}
+		} else {
+			return fmt.Errorf("no supported service group removal tool found")
+		}
+	}
+	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove service account marker: %w", err)
+	}
+	return nil
 }
 
 // installSystemService installs service as system service (requires root)
@@ -121,6 +184,9 @@ func (sm *ServiceManager) installSystemService() error {
 	case "systemd", "openrc", "sysv", "runit", "rcd":
 		if err := sm.ensureServiceUser(); err != nil {
 			return fmt.Errorf("creating service account: %w", err)
+		}
+		if err := sm.ensureServiceDirectories(); err != nil {
+			return fmt.Errorf("preparing service directories: %w", err)
 		}
 	}
 
@@ -142,6 +208,53 @@ func (sm *ServiceManager) installSystemService() error {
 	default:
 		return fmt.Errorf("unsupported service manager: %s", manager)
 	}
+}
+
+func (sm *ServiceManager) ensureServiceDirectories() error {
+	if len(sm.ServiceDirs) == 0 {
+		return nil
+	}
+	account, err := user.Lookup(sm.Name)
+	if err != nil {
+		return fmt.Errorf("look up service account: %w", err)
+	}
+	uid, err := strconv.Atoi(account.Uid)
+	if err != nil {
+		return fmt.Errorf("parse service account UID: %w", err)
+	}
+	gid, err := strconv.Atoi(account.Gid)
+	if err != nil {
+		return fmt.Errorf("parse service account GID: %w", err)
+	}
+	for _, path := range sm.ServiceDirs {
+		if path == "" {
+			continue
+		}
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("resolve service directory %q: %w", path, err)
+		}
+		info, err := os.Lstat(absolute)
+		if err == nil {
+			if !info.IsDir() {
+				return fmt.Errorf("service directory path %q is not a directory", absolute)
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect service directory %q: %w", absolute, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(absolute), 0755); err != nil {
+			return fmt.Errorf("create service directory parent for %q: %w", absolute, err)
+		}
+		if err := os.Mkdir(absolute, 0755); err != nil {
+			return fmt.Errorf("create service directory %q: %w", absolute, err)
+		}
+		if err := os.Chown(absolute, uid, gid); err != nil {
+			return fmt.Errorf("set service directory owner %q: %w", absolute, err)
+		}
+	}
+	return nil
 }
 
 // installUserService installs service as user service (no root)
@@ -178,17 +291,22 @@ StandardOutput=journal
 StandardError=journal
 
 # Security hardening (binary drops privileges after port binding)
-ProtectSystem=strict
+ProtectSystem=true
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/`+constants.InternalOrg+`/%s
-ReadWritePaths=/var/lib/`+constants.InternalOrg+`/%s
-ReadWritePaths=/var/cache/`+constants.InternalOrg+`/%s
-ReadWritePaths=/var/log/`+constants.InternalOrg+`/%s
+# Create runtime paths before systemd applies its filesystem sandbox.
+ExecStartPre=+/usr/bin/install -d -m 0755 /etc/`+constants.InternalOrg+`/%s /var/lib/`+constants.InternalOrg+`/%s /var/cache/`+constants.InternalOrg+`/%s /var/log/`+constants.InternalOrg+`/%s /var/run/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/etc/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/var/lib/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/var/cache/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/var/log/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/var/run/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/mnt/Backups/`+constants.InternalOrg+`/%s
+ReadWritePaths=-/usr/local/bin
 
 [Install]
 WantedBy=multi-user.target
-`, sm.DisplayName, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name)
+`, sm.DisplayName, sm.Name, sm.BinaryPath, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name)
 
 	if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing service file: %w", err)
@@ -248,7 +366,9 @@ WantedBy=default.target
 	}
 
 	// Reload systemd user
-	exec.Command("systemctl", "--user", "daemon-reload").Run()
+	if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
+		return fmt.Errorf("reloading systemd user units: %w", err)
+	}
 
 	// Enable service
 	if err := exec.Command("systemctl", "--user", "enable", sm.Name).Run(); err != nil {
@@ -277,8 +397,7 @@ name="%s"
 description="%s"
 command="%s"
 command_args=""
-command_user="%s:%s"
-pidfile="/var/run/`+constants.InternalOrg+`/%s.pid"
+pidfile="/var/run/`+constants.InternalOrg+`-%s.pid"
 command_background=true
 output_log="/var/log/`+constants.InternalOrg+`/%s/server.log"
 error_log="/var/log/`+constants.InternalOrg+`/%s/error.log"
@@ -290,12 +409,13 @@ depend() {
 }
 
 start_pre() {
-    checkpath -d -m 0755 -o %s:%s /var/run/`+constants.InternalOrg+`
+    checkpath -d -m 0755 /var/run/`+constants.InternalOrg+`
+    checkpath -d -m 0755 /var/log/`+constants.InternalOrg+`
+    checkpath -d -m 0755 -o %s:%s /var/run/`+constants.InternalOrg+`/%s
     checkpath -d -m 0755 -o %s:%s /var/log/`+constants.InternalOrg+`/%s
 }
 `, sm.Name, sm.Name, sm.DisplayName, sm.BinaryPath,
-		sm.Name, sm.Name, sm.Name, sm.Name, sm.Name,
-		sm.Name, sm.Name, sm.Name, sm.Name, sm.Name)
+		sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name, sm.Name)
 
 	if err := os.WriteFile(initPath, []byte(content), 0755); err != nil {
 		return fmt.Errorf("writing OpenRC init script: %w", err)
@@ -337,16 +457,17 @@ func (sm *ServiceManager) installSysV() error {
 NAME=%s
 DAEMON=%s
 DAEMON_USER=%s
-PIDFILE=/var/run/`+constants.InternalOrg+`/%s.pid
+PIDFILE=/var/run/`+constants.InternalOrg+`-%s.pid
 LOGFILE=/var/log/`+constants.InternalOrg+`/%s/server.log
 
 case "$1" in
     start)
         echo "Starting $NAME..."
-        mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
-        chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
+        mkdir -p $(dirname $LOGFILE)
+        chown -R $DAEMON_USER:$DAEMON_USER $(dirname $LOGFILE)
+        # No --chuid: the binary drops privileges itself after binding its ports.
         start-stop-daemon --start --quiet --background --make-pidfile \
-            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
+            --pidfile $PIDFILE --exec $DAEMON \
             --no-close >> $LOGFILE 2>&1
         ;;
     stop)
@@ -576,7 +697,7 @@ run_rc_command "$1"
 		if err != nil {
 			return fmt.Errorf("opening rc.conf: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := f.WriteString(enableLine); err != nil {
 			return fmt.Errorf("writing rc.conf: %w", err)
 		}
@@ -597,7 +718,7 @@ func (sm *ServiceManager) uninstall() error {
 	manager := detectServiceManagerFn()
 
 	// Stop service first
-	sm.stop()
+	_ = sm.stop()
 
 	switch manager {
 	case "systemd":
@@ -622,17 +743,17 @@ func (sm *ServiceManager) uninstallSystemd() error {
 	// Try system service first
 	servicePath := "/etc/systemd/system/" + sm.Name + ".service"
 	if _, err := os.Stat(servicePath); err == nil {
-		exec.Command("systemctl", "disable", sm.Name).Run()
-		os.Remove(servicePath)
-		exec.Command("systemctl", "daemon-reload").Run()
+		_ = exec.Command("systemctl", "disable", sm.Name).Run()
+		_ = os.Remove(servicePath)
+		_ = exec.Command("systemctl", "daemon-reload").Run()
 	} else {
 		// Try user service
 		home, _ := os.UserHomeDir()
 		servicePath = home + "/.config/systemd/user/" + sm.Name + ".service"
 		if _, err := os.Stat(servicePath); err == nil {
-			exec.Command("systemctl", "--user", "disable", sm.Name).Run()
-			os.Remove(servicePath)
-			exec.Command("systemctl", "--user", "daemon-reload").Run()
+			_ = exec.Command("systemctl", "--user", "disable", sm.Name).Run()
+			_ = os.Remove(servicePath)
+			_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 		}
 	}
 
@@ -643,8 +764,8 @@ func (sm *ServiceManager) uninstallSystemd() error {
 
 // uninstallOpenRC removes an OpenRC init.d service.
 func (sm *ServiceManager) uninstallOpenRC() error {
-	exec.Command("rc-update", "del", sm.Name, "default").Run()
-	os.Remove("/etc/init.d/" + sm.Name)
+	_ = exec.Command("rc-update", "del", sm.Name, "default").Run()
+	_ = os.Remove("/etc/init.d/" + sm.Name)
 	fmt.Printf("Service uninstalled: %s\n", sm.Name)
 	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
 	return nil
@@ -653,11 +774,11 @@ func (sm *ServiceManager) uninstallOpenRC() error {
 // uninstallSysV removes a SysVinit init.d service.
 func (sm *ServiceManager) uninstallSysV() error {
 	if updateRcD, err := exec.LookPath("update-rc.d"); err == nil {
-		exec.Command(updateRcD, "-f", sm.Name, "remove").Run()
+		_ = exec.Command(updateRcD, "-f", sm.Name, "remove").Run()
 	} else if chkconfig, err := exec.LookPath("chkconfig"); err == nil {
-		exec.Command(chkconfig, "--del", sm.Name).Run()
+		_ = exec.Command(chkconfig, "--del", sm.Name).Run()
 	}
-	os.Remove("/etc/init.d/" + sm.Name)
+	_ = os.Remove("/etc/init.d/" + sm.Name)
 	fmt.Printf("Service uninstalled: %s\n", sm.Name)
 	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
 	return nil
@@ -668,15 +789,15 @@ func (sm *ServiceManager) uninstallLaunchd() error {
 	// Try system daemon first
 	plistPath := "/Library/LaunchDaemons/io.github." + constants.InternalOrg + "." + sm.Name + ".plist"
 	if _, err := os.Stat(plistPath); err == nil {
-		exec.Command("launchctl", "unload", plistPath).Run()
-		os.Remove(plistPath)
+		_ = exec.Command("launchctl", "unload", plistPath).Run()
+		_ = os.Remove(plistPath)
 	} else {
 		// Try user agent
 		home, _ := os.UserHomeDir()
 		plistPath = home + "/Library/LaunchAgents/io.github." + constants.InternalOrg + "." + sm.Name + ".plist"
 		if _, err := os.Stat(plistPath); err == nil {
-			exec.Command("launchctl", "unload", plistPath).Run()
-			os.Remove(plistPath)
+			_ = exec.Command("launchctl", "unload", plistPath).Run()
+			_ = os.Remove(plistPath)
 		}
 	}
 
@@ -691,10 +812,10 @@ func (sm *ServiceManager) uninstallRunit() error {
 	serviceDir := "/etc/sv/" + sm.Name
 
 	// Remove link
-	os.Remove(linkPath)
+	_ = os.Remove(linkPath)
 
 	// Remove service directory
-	os.RemoveAll(serviceDir)
+	_ = os.RemoveAll(serviceDir)
 
 	fmt.Printf("Service uninstalled: %s\n", sm.Name)
 	fmt.Printf("Delete binary manually: rm %s\n", sm.BinaryPath)
@@ -704,7 +825,7 @@ func (sm *ServiceManager) uninstallRunit() error {
 // uninstallRCD removes rc.d service
 func (sm *ServiceManager) uninstallRCD() error {
 	scriptPath := "/usr/local/etc/rc.d/" + sm.Name
-	os.Remove(scriptPath)
+	_ = os.Remove(scriptPath)
 
 	// Remove from rc.conf
 	rcConf := "/etc/rc.conf"
@@ -718,7 +839,7 @@ func (sm *ServiceManager) uninstallRCD() error {
 				newLines = append(newLines, line)
 			}
 		}
-		os.WriteFile(rcConf, []byte(strings.Join(newLines, "\n")), 0644)
+		_ = os.WriteFile(rcConf, []byte(strings.Join(newLines, "\n")), 0644)
 	}
 
 	fmt.Printf("Service uninstalled: %s\n", sm.Name)
@@ -731,7 +852,7 @@ func (sm *ServiceManager) disable() error {
 	manager := detectServiceManagerFn()
 
 	// Stop service first
-	sm.stop()
+	_ = sm.stop()
 
 	switch manager {
 	case "systemd":

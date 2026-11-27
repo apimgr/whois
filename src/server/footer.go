@@ -13,9 +13,11 @@ import (
 // Footer Customization).
 type FooterData struct {
 	Lang           string
+	LanguageName   string
 	TorEnabled     bool
 	TorRunning     bool
 	OnionAddress   string
+	I2PAddress     string
 	ProjectVersion string
 	BuildDatetime  string
 	// CustomHTML is the already-sanitized web.footer.custom_html value.
@@ -73,12 +75,15 @@ func renderFooter(fd FooterData) template.HTML {
 			template.HTMLEscapeString(fd.OnionAddress),
 			template.HTMLEscapeString(translateKey(fd.Lang, "footer.copy_onion")))
 	}
+	if fd.I2PAddress != "" {
+		fmt.Fprintf(&b, `<p class="footer-i2p"><a href="/server/help#i2p-access" aria-label="%s">I2P</a> <code>%s</code></p>`, template.HTMLEscapeString(translateKey(fd.Lang, "footer.i2p_support")), template.HTMLEscapeString(fd.I2PAddress))
+	}
 
-	fmt.Fprintf(&b, `<p><a href="/server/about">%s</a><span>&bull;</span><a href="/server/privacy">%s</a><span>&bull;</span><a href="/server/contact">%s</a><span>&bull;</span><a href="/server/help">%s</a></p>`,
+	fmt.Fprintf(&b, `<p><a href="/server/about">%s</a><span>&bull;</span><a href="/server/privacy">%s</a><span>&bull;</span><a href="/server/security">Security</a><span>&bull;</span><a href="/server/help">%s</a></p>`,
 		template.HTMLEscapeString(translateKey(fd.Lang, "nav.about")),
 		template.HTMLEscapeString(translateKey(fd.Lang, "nav.privacy")),
-		template.HTMLEscapeString(translateKey(fd.Lang, "nav.contact")),
 		template.HTMLEscapeString(translateKey(fd.Lang, "nav.help")))
+	fmt.Fprintf(&b, `<p><a href="/server/preferences#language">%s</a></p>`, template.HTMLEscapeString(fd.LanguageName))
 
 	repoURL := fd.RepoURL
 	if repoURL == "" {

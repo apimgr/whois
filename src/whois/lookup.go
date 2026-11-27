@@ -90,7 +90,7 @@ func (s *LookupService) Lookup(ctx context.Context, query string) (*UnifiedResul
 		// Cache failure
 		if s.cache != nil {
 			failureKey := cache.WHOISFailureKey(query)
-			s.cache.Set(ctx, failureKey, []byte("1"), cache.DefaultTTLs.Failure)
+			_ = s.cache.Set(ctx, failureKey, []byte("1"), cache.DefaultTTLs.Failure)
 		}
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (s *LookupService) cacheResult(ctx context.Context, query string, qtype WHO
 	}
 
 	if data, err := json.Marshal(result); err == nil {
-		s.cache.Set(ctx, cache.WHOISKey(query), data, ttl)
+		_ = s.cache.Set(ctx, cache.WHOISKey(query), data, ttl)
 	}
 }
 

@@ -1,10 +1,15 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/whois/src/common/i18n"
+	"gopkg.in/yaml.v3"
 )
 
 // ---------------------------------------------------------------------------
@@ -42,11 +47,6 @@ func TestDefault(t *testing.T) {
 	// Debug must default to false
 	if cfg.Debug {
 		t.Error("Default().Debug = true, want false")
-	}
-
-	// Rate limiting enabled by default
-	if !cfg.RateLimit.Enabled {
-		t.Error("Default().RateLimit.Enabled = false, want true")
 	}
 
 	// Branding title must default to "caswhois"
@@ -149,9 +149,249 @@ func TestDefault(t *testing.T) {
 	}
 }
 
+func TestDefaultI18nRegistry(t *testing.T) {
+	cfg := Default()
+	if !reflect.DeepEqual(cfg.I18n.Supported, i18n.SupportedLanguages()) {
+		t.Fatalf("Default().I18n.Supported = %v, want registry %v", cfg.I18n.Supported, i18n.SupportedLanguages())
+	}
+	if err := normalizeI18nConfig(&cfg.I18n); err != nil {
+		t.Fatalf("default i18n config is invalid: %v", err)
+	}
+}
+
+func TestNormalizeI18nConfig(t *testing.T) {
+	t.Run("legacy English default expands to registry", func(t *testing.T) {
+		cfg := I18nConfig{DefaultLanguage: "en", Supported: []string{"en"}}
+		if err := normalizeI18nConfig(&cfg); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(cfg.Supported, i18n.SupportedLanguages()) {
+			t.Fatalf("legacy supported list = %v, want registry %v", cfg.Supported, i18n.SupportedLanguages())
+		}
+	})
+
+	t.Run("required minimum permits operator narrowing", func(t *testing.T) {
+		cfg := I18nConfig{DefaultLanguage: "en", Supported: []string{"en", "es", "fr", "ar", "de", "it"}}
+		if err := normalizeI18nConfig(&cfg); err != nil {
+			t.Fatalf("valid narrowed language set rejected: %v", err)
+		}
+	})
+
+	t.Run("required language cannot be removed", func(t *testing.T) {
+		cfg := I18nConfig{DefaultLanguage: "en", Supported: []string{"en", "es", "fr", "ar", "de"}}
+		if err := normalizeI18nConfig(&cfg); err == nil {
+			t.Fatal("configuration missing Italian should be rejected")
+		}
+	})
+
+	t.Run("unknown language is rejected", func(t *testing.T) {
+		cfg := I18nConfig{DefaultLanguage: "en", Supported: []string{"en", "es", "fr", "ar", "de", "it", "pt"}}
+		if err := normalizeI18nConfig(&cfg); err == nil {
+			t.Fatal("configuration with unsupported language should be rejected")
+		}
+	})
+
+	t.Run("default must remain enabled", func(t *testing.T) {
+		cfg := I18nConfig{DefaultLanguage: "zh", Supported: []string{"en", "es", "fr", "ar", "de", "it"}}
+		if err := normalizeI18nConfig(&cfg); err == nil {
+			t.Fatal("disabled default language should be rejected")
+		}
+	})
+}
+
+func TestNormalizeServerPort(t *testing.T) {
+	tests := []struct {
+		name  string
+		yaml  string
+		port  int
+		http  int
+		https int
+	}{
+		{name: "dual", yaml: "server:\n  port: \"8080,8443\"\n", port: 8080, http: 8080, https: 8443},
+		{name: "single https", yaml: "server:\n  port: 443\n", port: 443, https: 443},
+		{name: "invalid pair defaults", yaml: "server:\n  port: \"80,70000\"\n", port: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, httpPort, httpsPort := normalizeServerPort([]byte(tt.yaml))
+			var cf ConfigFile
+			if err := yaml.Unmarshal(data, &cf); err != nil {
+				t.Fatalf("unmarshal normalized config: %v", err)
+			}
+			if cf.Server.Port != tt.port || httpPort != tt.http || httpsPort != tt.https {
+				t.Fatalf("got port=%d http=%d https=%d, want port=%d http=%d https=%d", cf.Server.Port, httpPort, httpsPort, tt.port, tt.http, tt.https)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Validate()
 // ---------------------------------------------------------------------------
+
+func TestI2PDefaultsAndExplicitSettingDetection(t *testing.T) {
+	cfg := Default()
+	if cfg.I2P.Enabled || cfg.I2P.Expose {
+		t.Fatal("I2P base default should be disabled and unpublished")
+	}
+	if cfg.I2P.SAMAddress != "127.0.0.1:7656" || cfg.I2P.VirtualPort != 80 || cfg.I2P.InboundLength != 3 || cfg.I2P.OutboundLength != 3 || cfg.I2P.InboundQuantity != 5 || cfg.I2P.OutboundQuantity != 5 || cfg.I2P.SignatureType != 7 || cfg.I2P.BootstrapTimeout != 300 {
+		t.Fatalf("unexpected I2P defaults: %+v", cfg.I2P)
+	}
+	if !yamlHasI2PEnabled([]byte("server:\n  i2p:\n    enabled: false\n")) {
+		t.Fatal("explicit false I2P setting was not detected")
+	}
+	if yamlHasI2PEnabled([]byte("server:\n  i2p:\n    sam_address: 127.0.0.1:7656\n")) {
+		t.Fatal("missing I2P enabled setting was treated as explicit")
+	}
+}
+
+func TestLoadServerConfigMergesOrderedDropIns(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "yaml.d"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte("server:\n  mode: development\n  branding:\n    title: base\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "yaml.d", "10-brand.yml"), []byte("server:\n  branding:\n    description: first\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "yaml.d", "20-brand.yaml"), []byte("server:\n  branding:\n    title: later\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Mode != "development" || cfg.Branding.Title != "later" || cfg.Branding.Description != "first" {
+		t.Fatalf("unexpected merged config: mode=%q branding=%+v", cfg.Mode, cfg.Branding)
+	}
+}
+
+func TestSaveSeparatesNodeAreaAndSecretFiles(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Default()
+	cfg.Port = 64123
+	cfg.Mode = "development"
+	cfg.Update.Branch = "beta"
+	cfg.ServerToken = "adm_savepartitiontoken123456789012345"
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	server, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(server), "This node only") || strings.Contains(string(server), "branch:") || strings.Contains(string(server), cfg.ServerToken) {
+		t.Fatalf("server.yml contains area or secret data: %s", server)
+	}
+	area, err := os.ReadFile(filepath.Join(dir, "yaml.d", "maintenance.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(area), "branch: beta") {
+		t.Fatalf("maintenance area file missing update branch: %s", area)
+	}
+	secrets, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(secrets), cfg.ServerToken) {
+		t.Fatal("operator token was not written to secrets.yml")
+	}
+}
+
+func TestMigrateConfigLayoutPreservesAreaWinnerAndMovesSecrets(t *testing.T) {
+	dir := t.TempDir()
+	drop := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(drop, 0700); err != nil {
+		t.Fatal(err)
+	}
+	legacy := "server:\n  port: 64123\n  branding:\n    title: legacy\n  token: adm_migrationtoken123456789012345678\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(drop, "branding.yml"), []byte("server:\n  branding:\n    title: area-wins\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateConfigLayout(dir); err != nil {
+		t.Fatal(err)
+	}
+	server, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(server), "branding:") || strings.Contains(string(server), "adm_migrationtoken") {
+		t.Fatalf("legacy settings remained in server.yml: %s", server)
+	}
+	backup, err := os.ReadFile(filepath.Join(dir, "server.yml.bak"))
+	if err != nil || string(backup) != legacy {
+		t.Fatalf("backup mismatch: err=%v data=%q", err, backup)
+	}
+	area, err := os.ReadFile(filepath.Join(drop, "branding.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(area), "area-wins") {
+		t.Fatalf("existing area value did not win: %s", area)
+	}
+	secrets, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil || !strings.Contains(string(secrets), "adm_migrationtoken") {
+		t.Fatalf("token migration failed: err=%v data=%s", err, secrets)
+	}
+}
+
+func TestMigrateLegacyConfigKeys(t *testing.T) {
+	doc := map[string]any{
+		"server": map[string]any{
+			"logging":  map[string]any{"access_format": "legacy-format", "level": "debug"},
+			"schedule": map[string]any{"geoip_update": map[string]any{"schedule": "weekly"}, "old_bare": "weekly"},
+			"security": map[string]any{"csrf": map[string]any{"enabled": true}},
+			"title":    "Legacy title", "seo": map[string]any{"default_title": "Fallback title"},
+			"branding": map[string]any{"footer_text": "<unsafe>"},
+			"pages":    map[string]any{"about": map[string]any{"content": "# About"}},
+			"port":     64100, "https_port": 64443,
+		},
+		"database": map[string]any{"type": "sqlite", "primary": map[string]any{"dir": "/data"}},
+		"web":      map[string]any{"csrf": map[string]any{"enabled": false}},
+	}
+	if !migrateLegacyKeys(doc) {
+		t.Fatal("legacy keys were not detected")
+	}
+	if got := pathValue(doc, []string{"server", "logs", "access", "format"}); got != "legacy-format" {
+		t.Fatalf("logging access format=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "scheduler", "geoip_update", "schedule"}); got != "weekly" {
+		t.Fatalf("scheduler migration=%v", got)
+	}
+	if pathExists(doc, []string{"server", "scheduler", "old_bare"}) {
+		t.Fatal("bare legacy schedule value was retained")
+	}
+	if got := pathValue(doc, []string{"server", "csrf", "enabled"}); got != true {
+		t.Fatalf("server csrf destination=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "database", "driver"}); got != "sqlite" {
+		t.Fatalf("database driver=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "database", "dir"}); got != "/data" {
+		t.Fatalf("database primary dir=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "branding", "title"}); got != "Legacy title" {
+		t.Fatalf("branding title=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "branding", "content", "footer", "body"}); got != "<p>&lt;unsafe&gt;</p>" {
+		t.Fatalf("escaped footer=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "branding", "content", "about", "format"}); got != "md" {
+		t.Fatalf("about format=%v", got)
+	}
+	if got := pathValue(doc, []string{"server", "port"}); got != "64100,64443" {
+		t.Fatalf("dual port migration=%v", got)
+	}
+	if migrateLegacyKeys(doc) {
+		t.Fatal("legacy-key migration was not idempotent")
+	}
+}
 
 // TestValidateAcceptsValidConfig confirms Validate() passes for a fully valid config.
 func TestValidateAcceptsValidConfig(t *testing.T) {
@@ -423,7 +663,7 @@ func TestLoadServerConfigWithValidYAML(t *testing.T) {
         port: 465
   update:
     branch: beta
-  token: tok_testtoken12345678901234567890123
+  token: adm_testtoken12345678901234567890123
 `
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -448,7 +688,7 @@ func TestLoadServerConfigWithValidYAML(t *testing.T) {
 	}
 }
 
-// TestLoadServerConfigInvalidYAML verifies that malformed YAML returns an error.
+// TestLoadServerConfigInvalidYAML verifies malformed YAML is ignored safely.
 func TestLoadServerConfigInvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 
@@ -457,9 +697,19 @@ func TestLoadServerConfigInvalidYAML(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	_, err := LoadServerConfig(dir)
-	if err == nil {
-		t.Error("LoadServerConfig(invalid YAML) expected error, got nil")
+	cfg, err := LoadServerConfig(dir)
+	if err != nil || cfg == nil {
+		t.Fatalf("LoadServerConfig with malformed YAML = (%v, %v), want defaults", cfg, err)
+	}
+}
+
+func TestLoadServerConfigIgnoresUnknownKeys(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte("server:\n  unknown_setting: true\n"), 0600); err != nil {
+		t.Fatalf("write server.yml: %v", err)
+	}
+	if _, err := LoadServerConfig(dir); err != nil {
+		t.Fatalf("LoadServerConfig with unknown key: %v", err)
 	}
 }
 
@@ -469,7 +719,7 @@ func TestLoadServerConfigPartialYAMLMergesWithDefaults(t *testing.T) {
 	dir := t.TempDir()
 
 	// Only set the mode; everything else should remain at Default() values.
-	yaml := "server:\n  mode: development\n  token: tok_partialmergetoken123456789012\n"
+	yaml := "server:\n  mode: development\n  token: adm_partialmergetoken123456789012\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -513,8 +763,8 @@ func TestLoadServerConfigAutoGeneratesToken(t *testing.T) {
 	}
 
 	// Token must have been generated
-	if !strings.HasPrefix(cfg.ServerToken, "tok_") {
-		t.Errorf("auto-generated token = %q, must start with tok_", cfg.ServerToken)
+	if !strings.HasPrefix(cfg.ServerToken, "adm_") {
+		t.Errorf("auto-generated token = %q, must start with adm_", cfg.ServerToken)
 	}
 	if len(cfg.ServerToken) != 36 {
 		t.Errorf("auto-generated token length = %d, want 36", len(cfg.ServerToken))
@@ -530,12 +780,88 @@ func TestLoadServerConfigAutoGeneratesToken(t *testing.T) {
 	}
 }
 
+func TestLoadServerConfigMigratesLegacyOperatorToken(t *testing.T) {
+	dir := t.TempDir()
+	legacyToken := "adm_legacyconfigtoken123456789012345"
+	legacyConfig := "server:\n  mode: production\n  port: 64100\n  token: " + legacyToken + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(legacyConfig), 0600); err != nil {
+		t.Fatalf("WriteFile server.yml: %v", err)
+	}
+
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+	if cfg.ServerToken != legacyToken {
+		t.Fatalf("ServerToken = %q, want legacy credential", cfg.ServerToken)
+	}
+
+	serverData, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile server.yml: %v", err)
+	}
+	if strings.Contains(string(serverData), legacyToken) {
+		t.Fatal("legacy operator token remains in server.yml")
+	}
+
+	secretData, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile secrets.yml: %v", err)
+	}
+	if !strings.Contains(string(secretData), legacyToken) {
+		t.Fatal("legacy operator token was not migrated to secrets.yml")
+	}
+	info, err := os.Stat(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatalf("Stat secrets.yml: %v", err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("secrets.yml permissions = %04o, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestLoadServerConfigMovesEncryptionKeyIntoSecretsFile(t *testing.T) {
+	dir := t.TempDir()
+	key, err := GenerateEncryptionKey()
+	if err != nil {
+		t.Fatalf("GenerateEncryptionKey: %v", err)
+	}
+	configText := "server:\n  mode: production\n  security:\n    encryption_key: " + key + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(configText), 0600); err != nil {
+		t.Fatalf("write server.yml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "secrets.yml"), []byte("server:\n  token: adm_existing1234567890123456789012\n"), 0600); err != nil {
+		t.Fatalf("write secrets.yml: %v", err)
+	}
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+	if cfg.Security.EncryptionKey != key {
+		t.Fatal("configuration migration did not preserve the existing encryption key")
+	}
+	serverData, err := os.ReadFile(filepath.Join(dir, "server.yml"))
+	if err != nil {
+		t.Fatalf("read server.yml: %v", err)
+	}
+	if strings.Contains(string(serverData), key) {
+		t.Fatal("encryption key remains in server.yml after migration")
+	}
+	secretData, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatalf("read secrets.yml: %v", err)
+	}
+	if !strings.Contains(string(secretData), key) || !strings.Contains(string(secretData), "encryption_key_version: 1") {
+		t.Fatal("secrets.yml does not contain the migrated encryption key and version")
+	}
+}
+
 // TestLoadServerConfigSetsConfigDirFromArg verifies that when server.yml has no
 // config_dir set the loaded struct uses the argument directory.
 func TestLoadServerConfigSetsConfigDirFromArg(t *testing.T) {
 	dir := t.TempDir()
 
-	yaml := "server:\n  mode: production\n  token: tok_configdirtest12345678901234567\n"
+	yaml := "server:\n  mode: production\n  token: adm_configdirtest12345678901234567\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -556,7 +882,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	customDir := "/custom/config"
 
-	yaml := "server:\n  mode: production\n  config_dir: " + customDir + "\n  token: tok_preserveconfigdir12345678901234\n"
+	yaml := "server:\n  mode: production\n  config_dir: " + customDir + "\n  token: adm_preserveconfigdir12345678901234\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -577,7 +903,7 @@ func TestLoadServerConfigPreservesConfigDirFromYAML(t *testing.T) {
 func TestLoadServerConfigInvalidPortInYAML(t *testing.T) {
 	dir := t.TempDir()
 
-	yaml := "server:\n  mode: production\n  port: 99999\n  token: tok_badport1234567890123456789012\n"
+	yaml := "server:\n  mode: production\n  port: 99999\n  token: adm_badport1234567890123456789012\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -606,7 +932,7 @@ func TestSaveAndReload(t *testing.T) {
 	original.Update.Branch = "beta"
 	original.Notifications.Email.SMTP.Port = 465
 	// Provide a token so LoadServerConfig does not try to generate+persist a new one.
-	original.ServerToken = "tok_savereloadtoken1234567890123456"
+	original.ServerToken = "adm_savereloadtoken1234567890123456"
 
 	if err := original.Save(dir); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -638,7 +964,7 @@ func TestSaveCreatesDirectory(t *testing.T) {
 	newDir := filepath.Join(parent, "nested", "config")
 
 	cfg := Default()
-	cfg.ServerToken = "tok_savecreatesdir12345678901234567"
+	cfg.ServerToken = "adm_savecreatesdir12345678901234567"
 	cfg.Mode = "production"
 
 	if err := cfg.Save(newDir); err != nil {
@@ -658,7 +984,7 @@ func TestSaveUsesConfigDirFieldWhenArgIsEmpty(t *testing.T) {
 
 	cfg := Default()
 	cfg.ConfigDir = dir
-	cfg.ServerToken = "tok_saveusesconfigdir1234567890123"
+	cfg.ServerToken = "adm_saveusesconfigdir1234567890123"
 	cfg.Mode = "production"
 
 	if err := cfg.Save(""); err != nil {
@@ -688,7 +1014,7 @@ func TestSaveIsIdempotent(t *testing.T) {
 
 	cfg := Default()
 	cfg.Mode = "production"
-	cfg.ServerToken = "tok_idempotentsave123456789012345"
+	cfg.ServerToken = "adm_idempotentsave123456789012345"
 
 	if err := cfg.Save(dir); err != nil {
 		t.Fatalf("first Save: %v", err)
@@ -720,7 +1046,7 @@ func TestGetDatabaseDir(t *testing.T) {
 		cfg := Default()
 		cfg.Database.Dir = "/explicit/db"
 
-		os.Unsetenv("DATABASE_DIR")
+		_ = os.Unsetenv("DATABASE_DIR")
 		got := cfg.GetDatabaseDir()
 		if got != "/explicit/db" {
 			t.Errorf("GetDatabaseDir() = %q, want /explicit/db", got)
@@ -745,7 +1071,7 @@ func TestGetDatabaseDir(t *testing.T) {
 		cfg.Database.Dir = ""
 		cfg.DataDir = "/my/data"
 
-		os.Unsetenv("DATABASE_DIR")
+		_ = os.Unsetenv("DATABASE_DIR")
 		got := cfg.GetDatabaseDir()
 		// On non-container hosts the result is either "./db" or "{DataDir}/db"
 		// depending on isContainer(). We only assert the DataDir path is used
@@ -765,7 +1091,7 @@ func TestGetDatabaseDir(t *testing.T) {
 		cfg.Database.Dir = ""
 		cfg.DataDir = ""
 
-		os.Unsetenv("DATABASE_DIR")
+		_ = os.Unsetenv("DATABASE_DIR")
 		got := cfg.GetDatabaseDir()
 		if got == "" {
 			t.Error("GetDatabaseDir() returned empty string — must always return a usable path")
@@ -828,7 +1154,7 @@ func TestGetDatabaseConfig(t *testing.T) {
 	// When DATABASE_URL is set the env var wins over config fields.
 	t.Run("DATABASE_URL env overrides config", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "libsql://mydb.turso.io?authToken=xxx")
-		os.Unsetenv("DATABASE_DRIVER")
+		_ = os.Unsetenv("DATABASE_DRIVER")
 
 		cfg := Default()
 		driver, url, path := cfg.GetDatabaseConfig()
@@ -859,8 +1185,8 @@ func TestGetDatabaseConfig(t *testing.T) {
 
 	// Config DatabaseURL field is used when env is absent.
 	t.Run("config DatabaseURL field", func(t *testing.T) {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("DATABASE_DRIVER")
+		_ = os.Unsetenv("DATABASE_URL")
+		_ = os.Unsetenv("DATABASE_DRIVER")
 
 		cfg := Default()
 		cfg.Database.URL = "libsql://cfg.example.com"
@@ -883,8 +1209,8 @@ func TestGetDatabaseConfig(t *testing.T) {
 	// a remote URL implies libsql/Turso, not embedded sqlite (sqlite requires
 	// a filesystem Path, which is empty in the URL branch).
 	t.Run("config DatabaseURL with no driver defaults to libsql", func(t *testing.T) {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("DATABASE_DRIVER")
+		_ = os.Unsetenv("DATABASE_URL")
+		_ = os.Unsetenv("DATABASE_DRIVER")
 
 		cfg := Default()
 		cfg.Database.URL = "libsql://nodriver.example.com"
@@ -898,9 +1224,9 @@ func TestGetDatabaseConfig(t *testing.T) {
 
 	// Default path: SQLite with a non-empty path and empty URL.
 	t.Run("default sqlite path", func(t *testing.T) {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("DATABASE_DRIVER")
-		os.Unsetenv("DATABASE_DIR")
+		_ = os.Unsetenv("DATABASE_URL")
+		_ = os.Unsetenv("DATABASE_DRIVER")
+		_ = os.Unsetenv("DATABASE_DIR")
 
 		cfg := Default()
 		cfg.Database.URL = ""
@@ -999,12 +1325,12 @@ func TestGenerateToken(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	// Token must start with "tok_" followed by exactly 32 base62 chars
+	// Token must start with "adm_" followed by exactly 32 base62 chars
 	if len(tok1) != 4+32 {
 		t.Errorf("token length = %d, want %d", len(tok1), 4+32)
 	}
-	if tok1[:4] != "tok_" {
-		t.Errorf("token prefix = %q, want %q", tok1[:4], "tok_")
+	if tok1[:4] != "adm_" {
+		t.Errorf("token prefix = %q, want %q", tok1[:4], "adm_")
 	}
 
 	// All characters after the prefix must be base62
@@ -1071,9 +1397,36 @@ func TestGenerateDefaultConfig(t *testing.T) {
 		t.Error("server.yml still contains {{TOKEN}} placeholder")
 	}
 
-	// Token must appear in correct format
-	if !strings.Contains(content, "tok_") {
-		t.Error("server.yml does not contain a tok_ token")
+	secrets, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile secrets.yml: %v", err)
+	}
+	if !strings.Contains(string(secrets), "adm_") {
+		t.Error("secrets.yml does not contain an adm_ token")
+	}
+	if strings.Contains(content, "adm_") {
+		t.Error("server.yml contains the operator token")
+	}
+	var secretFile struct {
+		Server struct {
+			Security struct {
+				EncryptionKey string `yaml:"encryption_key"`
+				Version       int    `yaml:"encryption_key_version"`
+			} `yaml:"security"`
+		} `yaml:"server"`
+	}
+	if err := yaml.Unmarshal(secrets, &secretFile); err != nil {
+		t.Fatalf("parse secrets.yml: %v", err)
+	}
+	key, err := base64.StdEncoding.DecodeString(secretFile.Server.Security.EncryptionKey)
+	if err != nil || len(key) != 32 {
+		t.Errorf("generated encryption key is not base64-encoded 32-byte key: %v", err)
+	}
+	if secretFile.Server.Security.Version != 1 {
+		t.Errorf("encryption_key_version = %d, want 1", secretFile.Server.Security.Version)
+	}
+	if strings.Contains(content, secretFile.Server.Security.EncryptionKey) {
+		t.Error("server.yml contains the encryption key")
 	}
 }
 
@@ -1137,8 +1490,12 @@ func TestGenerateDefaultConfigPortInRange(t *testing.T) {
 		t.Fatalf("LoadServerConfig: %v", err)
 	}
 
-	if cfg.Port < 64000 || cfg.Port > 64999 {
-		t.Errorf("generated port %d is outside required range 64000-64999", cfg.Port)
+	if isApplicationContainer() {
+		if cfg.Port != 80 {
+			t.Errorf("generated application-container port = %d, want 80", cfg.Port)
+		}
+	} else if cfg.Port < 64000 || cfg.Port > 64999 {
+		t.Errorf("generated host port %d is outside required range 64000-64999", cfg.Port)
 	}
 }
 
@@ -1495,7 +1852,7 @@ func TestGenerateDefaultConfigUnwritableDir(t *testing.T) {
 		t.Fatalf("Chmod: %v", err)
 	}
 	// Restore permissions on cleanup so t.TempDir() can remove it
-	t.Cleanup(func() { os.Chmod(parent, 0700) })
+	t.Cleanup(func() { _ = os.Chmod(parent, 0700) })
 
 	targetDir := filepath.Join(parent, "subdir")
 	err := GenerateDefaultConfig(targetDir)
@@ -1626,9 +1983,8 @@ func TestSanitized(t *testing.T) {
 	cfg.Notifications.Email.SMTP.TLS = "starttls"
 	cfg.Metrics.Enabled = true
 	cfg.Metrics.Endpoint = "/metrics"
-	cfg.RateLimit.Enabled = false
 	// Set a real token — Sanitized must redact it.
-	cfg.ServerToken = "tok_supersecrettoken123456789012"
+	cfg.ServerToken = "adm_supersecrettoken123456789012"
 
 	s := cfg.Sanitized()
 
@@ -1671,7 +2027,7 @@ func TestSanitizedDefaultConfig(t *testing.T) {
 		"data_dir", "log_dir", "backup_dir",
 		"smtp_host", "smtp_tls_mode",
 		"metrics_enabled", "metrics_endpoint",
-		"rate_limit_enabled", "server_token",
+		"server_token",
 	}
 	for _, k := range required {
 		if _, ok := s[k]; !ok {

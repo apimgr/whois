@@ -9,9 +9,9 @@ var (
 	// CommitID is the git commit hash (7 chars)
 	CommitID = "unknown"
 
-	// BuildDate is the ISO 8601 build timestamp
-	BuildDate = "unknown"
+	// BuildDate is derived from the embedded build epoch at process startup.
+	BuildDate = "N/A"
 
 	// OfficialSite is the project website URL
-	OfficialSite = "https://github.com/apimgr/whois"
+	OfficialSite = ""
 )

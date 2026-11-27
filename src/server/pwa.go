@@ -1,14 +1,17 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/i18n"
 )
 
-// handleManifest serves /manifest.json for PWA support (AI.md PART 16).
+// handleManifest serves the install metadata for the progressive web app.
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	name := s.config.Branding.Title
 	if name == "" {
@@ -22,141 +25,176 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	if themeColor == "" {
 		themeColor = "#007bff"
 	}
-
-	manifest := fmt.Sprintf(`{
-  "name": %q,
-  "short_name": %q,
-  "description": %q,
-  "start_url": "/?source=pwa",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#0d1117",
-  "theme_color": %q,
-  "categories": ["utilities"],
-  "icons": [
-    {"src": "/static/icons/icon-72.png",  "sizes": "72x72",   "type": "image/png"},
-    {"src": "/static/icons/icon-96.png",  "sizes": "96x96",   "type": "image/png"},
-    {"src": "/static/icons/icon-128.png", "sizes": "128x128", "type": "image/png"},
-    {"src": "/static/icons/icon-144.png", "sizes": "144x144", "type": "image/png"},
-    {"src": "/static/icons/icon-152.png", "sizes": "152x152", "type": "image/png"},
-    {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "/static/icons/icon-384.png", "sizes": "384x384", "type": "image/png"},
-    {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
-    {"src": "/static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
-    {"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
-  ]
-}`, name, name, desc, themeColor)
-
-	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, manifest)
+	base := s.GetBaseURL(r)
+	assetURL := func(assetPath string) string {
+		return base + assetPath + "?v=" + url.QueryEscape(Version+"-"+CommitID)
+	}
+	manifest := map[string]any{
+		"name": name, "short_name": name, "description": desc,
+		"start_url": s.withBaseURL(r, "/?source=pwa"), "scope": s.withBaseURL(r, "/"),
+		"display": "standalone", "orientation": "any", "background_color": "#0d1117",
+		"theme_color": themeColor, "categories": []string{"utilities"},
+		"icons": []map[string]string{
+			{"src": assetURL("/static/icons/icon-72.png"), "sizes": "72x72", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-96.png"), "sizes": "96x96", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-128.png"), "sizes": "128x128", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-144.png"), "sizes": "144x144", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-152.png"), "sizes": "152x152", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-192.png"), "sizes": "192x192", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-384.png"), "sizes": "384x384", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-512.png"), "sizes": "512x512", "type": "image/png"},
+			{"src": assetURL("/static/icons/icon-maskable-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+			{"src": assetURL("/static/icons/icon-maskable-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+		},
+	}
+	writeVersionedJSON(w, r, manifest)
 }
 
-// handleServiceWorker serves /sw.js for PWA offline support (AI.md PART 16).
+// handleServiceWorker serves a build-stamped worker with a guaranteed offline
+// response. Only pages marked X-Offline-Cache: public are retained for use offline.
 func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
-	appName := s.config.Branding.Title
-	if appName == "" {
-		appName = constants.InternalName
-	}
-
-	sw := fmt.Sprintf(`// Service Worker for %s (AI.md PART 16 PWA support)
-const CACHE_VERSION = 'v1';
-const CACHE_NAME = '%s-cache-' + CACHE_VERSION;
-
+	base := s.GetBaseURL(r)
+	stamp := Version + "-" + CommitID
+	cacheName := constants.InternalName + "-cache-" + stamp
+	script := `const CACHE_NAME = @@CACHE@@;
+const CACHE_PREFIX = @@PREFIX@@;
+const BASE_PATH = @@BASE@@;
+const STAMP = @@STAMP@@;
+const STRINGS_CACHE = @@STRINGS@@;
+const NAV_TIMEOUT_MS = 8000;
 const PRECACHE_ASSETS = [
-  '/',
-  '/static/css/main.css',
-  '/static/js/main.js',
-  '/static/js/offline.js',
-  '/offline.html'
+  BASE_PATH + '/static/css/main.css?v=' + STAMP,
+  BASE_PATH + '/static/js/app.js?v=' + STAMP,
+  BASE_PATH + '/static/icons/icon-192.png?v=' + STAMP,
+  BASE_PATH + '/static/icons/icon-512.png?v=' + STAMP
 ];
+const DEFAULT_STRINGS = {lang:'en',dir:'ltr',title:'Offline',heading:'You are offline',message:'This page could not be loaded. Check your connection and try again.'};
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE_ASSETS)));
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil(caches.keys().then(keys => Promise.all(
+    keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key))
+  )).then(() => self.clients.claim()));
 });
 
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  if (event.request.url.includes('/api/')) return;
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('network timeout')), ms);
+    promise.then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
+  });
+}
 
-  event.respondWith(
-    caches.match(event.request)
-      .then(cached => cached || fetch(event.request)
-        .then(response => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match('/offline.html'))
-      )
-  );
+function escapeHTML(value) {
+  return String(value).replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+}
+
+async function offlineResponse() {
+  let strings = DEFAULT_STRINGS;
+  try {
+    const stored = await (await caches.open(STRINGS_CACHE)).match(BASE_PATH + '/offline-strings.json');
+    if (stored) strings = Object.assign({}, DEFAULT_STRINGS, await stored.json());
+  } catch (_) {}
+  return new Response('<!doctype html><html lang="' + escapeHTML(strings.lang) + '" dir="' + escapeHTML(strings.dir) + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHTML(strings.title) + '</title></head><body><main><h1>' + escapeHTML(strings.heading) + '</h1><p>' + escapeHTML(strings.message) + '</p></main></body></html>', {status:503,statusText:'Service Unavailable',headers:{'Content-Type':'text/html; charset=utf-8'}});
+}
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith(BASE_PATH + '/api/')) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(withTimeout(fetch(request), NAV_TIMEOUT_MS).then(async response => {
+      const cache = await caches.open(CACHE_NAME);
+      if (response.redirected) {
+        await cache.delete(request);
+        throw new Error('navigation redirected');
+      }
+      if (response.ok && !response.redirected && response.headers.get('X-Offline-Cache') === 'public') {
+        await cache.put(request, response.clone());
+      } else {
+        await cache.delete(request);
+      }
+      return response;
+    }).catch(async () => (await caches.match(request)) || offlineResponse()).catch(() => offlineResponse()));
+    return;
+  }
+
+  if (url.pathname.startsWith(BASE_PATH + '/static/')) {
+    event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(async response => {
+      if (response.ok && !response.redirected) await (await caches.open(CACHE_NAME)).put(request, response.clone());
+      return response;
+    })).catch(() => new Response('', {status:504,statusText:'Gateway Timeout'})));
+  }
 });
 
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
-`, appName, appName)
-
-	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-	w.Header().Set("Service-Worker-Allowed", "/")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, sw)
+`
+	script = strings.NewReplacer(
+		"@@CACHE@@", jsString(cacheName),
+		"@@PREFIX@@", jsString(constants.InternalName+"-cache-"),
+		"@@BASE@@", jsString(base),
+		"@@STAMP@@", jsString(stamp),
+		"@@STRINGS@@", jsString(constants.InternalName+"-offline-strings"),
+	).Replace(script)
+	w.Header().Set("Service-Worker-Allowed", s.withBaseURL(r, "/"))
+	writeVersionedScript(w, r, []byte(script), stamp)
 }
 
-// handleOfflinePage serves /offline.html shown by the service worker when offline (AI.md PART 16).
-func (s *Server) handleOfflinePage(w http.ResponseWriter, r *http.Request) {
-	name := s.config.Branding.Title
-	if name == "" {
-		name = constants.InternalName
-	}
-
+// handleOfflineStrings returns language-specific, non-sensitive copy for the
+// service worker's synthesized fallback page.
+func (s *Server) handleOfflineStrings(w http.ResponseWriter, r *http.Request) {
 	lang := LangFromContext(r.Context())
-	dir := i18n.Dir(lang)
-	title := translateKey(lang, "pwa.offline_title")
-	message := translateKey(lang, "pwa.offline_message")
-	retry := translateKey(lang, "pwa.offline_retry")
+	strings := map[string]string{
+		"lang": lang, "dir": i18n.Dir(lang),
+		"title":   translateKey(lang, "pwa.offline_title"),
+		"heading": translateKey(lang, "pwa.offline_title"),
+		"message": translateKey(lang, "pwa.offline_message"),
+	}
+	body, err := json.Marshal(strings)
+	if err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writeVersioned(w, r, "application/json; charset=utf-8", body)
+}
 
-	page := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="%s" dir="%s">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Offline — %s</title>
-<link rel="stylesheet" href="/static/css/main.css">
-</head>
-<body class="offline-page">
-<main id="main-content">
-  <h1>%s</h1>
-  <p>%s</p>
-  <button type="button" id="offline-retry">%s</button>
-</main>
-<script src="/static/js/offline.js"></script>
-</body>
-</html>`, lang, dir, name, title, message, retry)
+func jsString(value string) string {
+	encoded, _ := json.Marshal(value)
+	return string(encoded)
+}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+func writeVersionedJSON(w http.ResponseWriter, r *http.Request, value any) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writeVersioned(w, r, "application/manifest+json; charset=utf-8", body)
+}
+
+func writeVersionedScript(w http.ResponseWriter, r *http.Request, body []byte, stamp string) {
+	writeVersioned(w, r, "application/javascript; charset=utf-8", body, stamp)
+}
+
+func writeVersioned(w http.ResponseWriter, r *http.Request, contentType string, body []byte, stamps ...string) {
+	stamp := Version + "-" + CommitID
+	if len(stamps) > 0 {
+		stamp = stamps[0]
+	}
+	etag := fmt.Sprintf("\"%s\"", strings.ReplaceAll(stamp, "\"", ""))
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, page)
+	_, _ = w.Write(body)
 }

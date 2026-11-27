@@ -2,34 +2,48 @@ pipeline {
     agent none
 
     triggers {
-        // Daily build at 3am UTC (matches GitHub Actions daily.yml)
-        cron('0 3 * * *')
+        // Devel build at 3am UTC (matches GitHub Actions devel.yml) and
+        // devel devel image rebuild at 4am UTC (matches docker.yml build-devel job)
+        cron('0 3 * * *\n0 4 * * *')
     }
 
     environment {
-        PROJECTNAME = 'whois'
-        PROJECTORG = 'apimgr'
-        INTERNAL_NAME = 'caswhois'
+        PROJECT_NAME = 'caswhois'
+        PROJECT_ORG = 'apimgr'
         BINDIR = 'binaries'
         RELDIR = 'releases'
+        INTERNAL_NAME = 'caswhois'
+        // Jenkins-native Go caches: persistent directories on the agent under JENKINS_HOME, never user home paths
+        GO_CACHE = "${JENKINS_HOME}/cache/${PROJECT_ORG}/${PROJECT_NAME}/go-mod"
+        GO_BUILD = "${JENKINS_HOME}/cache/${PROJECT_ORG}/${PROJECT_NAME}/go-build"
 
+        // =========================================================================
         // GIT PROVIDER CONFIGURATION
         // Uncomment ONE block below based on your git hosting platform
+        // =========================================================================
 
         // ----- GITHUB (default) -----
         GIT_FQDN = 'github.com'
+        // Jenkins credentials ID
         GIT_TOKEN = credentials('github-token')
-        REGISTRY = "ghcr.io/${PROJECTORG}/${INTERNAL_NAME}"
+        REGISTRY = "ghcr.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 
         // ----- GITEA / FORGEJO (self-hosted) -----
-        // GIT_FQDN = 'git.example.com'
-        // GIT_TOKEN = credentials('gitea-token')
-        // REGISTRY = "${GIT_FQDN}/${PROJECTORG}/${INTERNAL_NAME}"
+        // GIT_FQDN = 'git.example.com'  // Your Gitea/Forgejo domain
+        // GIT_TOKEN = credentials('gitea-token')  // Jenkins credentials ID
+        // REGISTRY = "${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}"
 
         // ----- GITLAB (gitlab.com or self-hosted) -----
-        // GIT_FQDN = 'gitlab.com'
-        // GIT_TOKEN = credentials('gitlab-token')
-        // REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/${INTERNAL_NAME}"
+        // GIT_FQDN = 'gitlab.com'  // or your self-hosted GitLab domain
+        // GIT_TOKEN = credentials('gitlab-token')  // Jenkins credentials ID
+        // REGISTRY = "registry.${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}"
+
+        // ----- DOCKER HUB -----
+        // GIT_FQDN = 'github.com'  // Git provider (separate from registry)
+        // GIT_TOKEN = credentials('github-token')
+        // REGISTRY = "docker.io/${PROJECT_ORG}/${INTERNAL_NAME}"
+
+        // =========================================================================
     }
 
     stages {
@@ -41,46 +55,54 @@ pipeline {
                     if (env.TAG_NAME) {
                         // Release build (tag push) - matches release.yml
                         env.BUILD_TYPE = 'release'
-                        env.VERSION = env.TAG_NAME.replaceAll('^v', '')
+                        env.VERSION = env.TAG_NAME.replaceFirst('^v', '')
                     } else if (env.BRANCH_NAME == 'beta') {
-                        // Beta branch build - matches beta.yml
+                        // Beta build - matches beta.yml
                         env.BUILD_TYPE = 'beta'
-                        env.VERSION = "beta-${env.GIT_COMMIT.take(8)}"
+                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
+                    } else if (env.BRANCH_NAME == 'main') {
+                        // Devel build - matches devel.yml
+                        // Devel identity is the commit being built, not a timestamp
+                        env.BUILD_TYPE = 'devel'
+                        env.VERSION = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
                     } else {
-                        // Daily build (main/master or scheduled) - matches daily.yml
-                        env.BUILD_TYPE = 'daily'
-                        env.VERSION = sh(script: "cat release.txt 2>/dev/null || echo 'devel'", returnStdout: true).trim()
+                        // Other branches - dev build
+                        env.BUILD_TYPE = 'dev'
+                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-dev'
                     }
-
-                    // Set build metadata
-                    env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.BUILD_DATE = sh(script: 'date -u +"%a %b %d, %Y at %H:%M:%S UTC"', returnStdout: true).trim()
-                    env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=https://caswhois.apimgr.dev'"
-
-                    // Check for CLI source
-                    env.HAS_CLI = sh(script: 'test -d src/client && echo true || echo false', returnStdout: true).trim()
+                    env.COMMIT_ID = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                    env.BUILD_EPOCH = sh(script: 'date -u +%s', returnStdout: true).trim()
+                    env.BUILD_DATE = sh(script: "date -u -d @${env.BUILD_EPOCH} +\"%Y-%m-%dT%H:%M:%SZ\"", returnStdout: true).trim()
+                    // OFFICIAL_SITE (optional): site.txt wins; otherwise use Jenkins credentials or leave empty
+                    // Never guess or assume - must be explicitly defined by user
+                    env.OFFICIAL_SITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}"', returnStdout: true).trim()
+                    env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildEpoch=${env.BUILD_EPOCH}' -X 'main.OfficialSite=${env.OFFICIAL_SITE}'"
+                    env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
+                    env.IS_SCHEDULED = currentBuild.getBuildCauses().any { it._class?.contains('TimerTriggerCause') }.toString()
                 }
+                sh 'mkdir -p ${BINDIR} ${RELDIR} ${GO_CACHE} ${GO_BUILD}'
+                echo "Build type: ${BUILD_TYPE}, Version: ${VERSION}"
             }
         }
 
         stage('Build Server') {
             parallel {
+                // Linux
                 stage('Linux AMD64') {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-linux-amd64 ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-linux-amd64 ./src
                         '''
                     }
                 }
@@ -88,37 +110,36 @@ pipeline {
                     agent { label 'arm64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-linux-arm64 ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-linux-arm64 ./src
                         '''
                     }
                 }
+                // Darwin (macOS)
                 stage('Darwin AMD64') {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-darwin-amd64 ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-darwin-amd64 ./src
                         '''
                     }
                 }
@@ -126,37 +147,36 @@ pipeline {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-darwin-arm64 ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-darwin-arm64 ./src
                         '''
                     }
                 }
+                // Windows
                 stage('Windows AMD64') {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-windows-amd64.exe ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-windows-amd64.exe ./src
                         '''
                     }
                 }
@@ -164,37 +184,36 @@ pipeline {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-windows-arm64.exe ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-windows-arm64.exe ./src
                         '''
                     }
                 }
+                // FreeBSD
                 stage('FreeBSD AMD64') {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-freebsd-amd64 ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-freebsd-amd64 ./src
                         '''
                     }
                 }
@@ -202,24 +221,24 @@ pipeline {
                     agent { label 'amd64' }
                     steps {
                         sh '''
-                            mkdir -p ${BINDIR}
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-freebsd-arm64 ./src
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-freebsd-arm64 ./src
                         '''
                     }
                 }
             }
         }
 
+        // CLI builds - only if src/client/ exists (matches GitHub Actions)
         stage('Build CLI') {
             when {
                 expression { env.HAS_CLI == 'true' }
@@ -230,16 +249,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-linux-amd64 ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-linux-amd64 ./src/client
                         '''
                     }
                 }
@@ -248,16 +267,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-linux-arm64 ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-linux-arm64 ./src/client
                         '''
                     }
                 }
@@ -266,16 +285,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-darwin-amd64 ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-darwin-amd64 ./src/client
                         '''
                     }
                 }
@@ -284,16 +303,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-darwin-arm64 ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-darwin-arm64 ./src/client
                         '''
                     }
                 }
@@ -302,16 +321,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-windows-amd64.exe ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-windows-amd64.exe ./src/client
                         '''
                     }
                 }
@@ -320,16 +339,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-windows-arm64.exe ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-windows-arm64.exe ./src/client
                         '''
                     }
                 }
@@ -338,16 +357,16 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-freebsd-amd64 ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-freebsd-amd64 ./src/client
                         '''
                     }
                 }
@@ -356,19 +375,37 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                                -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 casjaysdev/go:latest \
-                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${INTERNAL_NAME}-cli-freebsd-arm64 ./src/client
+                                go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-cli-freebsd-arm64 ./src/client
                         '''
                     }
                 }
+            }
+        }
+
+        stage('Lint') {
+            agent { label 'amd64' }
+            steps {
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
+                        -v ${WORKSPACE}:/app \
+                        -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                        -v ${GO_BUILD}:/usr/local/share/go/cache \
+                        -w /app \
+                        -e PROJECT_ORG=${PROJECT_ORG} \
+                        -e PROJECT_NAME=${PROJECT_NAME} \
+                        casjaysdev/go:latest \
+                        sh -lc 'go vet ./... && staticcheck ./... && bash scripts/verify-licenses.sh'
+                '''
             }
         }
 
@@ -377,17 +414,95 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm \
-                        --name "${INTERNAL_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                         -v ${WORKSPACE}:/app \
-                        -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
-                        -v ${GO_BUILD:-$HOME/.cache/go-build/${INTERNAL_NAME}}:/usr/local/share/go/cache \
+                        -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                        -v ${GO_BUILD}:/usr/local/share/go/cache \
                         -w /app \
+                        -e PROJECT_ORG=${PROJECT_ORG} \
+                        -e PROJECT_NAME=${PROJECT_NAME} \
                         casjaysdev/go:latest \
-                        go test -v -cover ./...
+                        sh -lc '\
+                            set -eu; \
+                            mkdir -p "/tmp/${PROJECT_ORG}"; \
+                            COVDIR=$(mktemp -d "/tmp/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX"); \
+                            chmod 0700 "$COVDIR"; \
+                            trap '\''rm -rf "$COVDIR"'\'' EXIT; \
+                            mkdir -p "$COVDIR/data"; \
+                            TMPDIR="$COVDIR" go test -v -cover ./... -args -test.gocoverdir="$COVDIR/data"; \
+                            go tool covdata textfmt -i="$COVDIR/data" -o="$COVDIR/coverage.out"; \
+                            PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '\''/^total:/ {gsub("%","",$3); print int($3)}'\''); \
+                            if [ "$PCT" -lt 60 ]; then echo "coverage $PCT% is below 60%" >&2; exit 1; fi'
                 '''
             }
         }
 
+        // Security - matches the ci.yml security jobs (secret scan, workflow policy, vulnerability scan, image scan)
+        stage('Security') {
+            parallel {
+                stage('Secret scan') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            if [ "${IS_SCHEDULED}" = "true" ] || ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+                                docker run --rm \
+                                    --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
+                                    -v ${WORKSPACE}:/repo -w /repo trufflesecurity/trufflehog:3.99.0@sha256:39ee0643ae620664287bcc95f133f3fc8484590d6ca4e7105d96b90dac4b9f6f \
+                                    git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+                            else
+                                docker run --rm \
+                                    --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
+                                    -v ${WORKSPACE}:/repo -w /repo trufflesecurity/trufflehog:3.99.0@sha256:39ee0643ae620664287bcc95f133f3fc8484590d6ca4e7105d96b90dac4b9f6f \
+                                    git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+                            fi
+                        '''
+                    }
+                }
+                stage('Workflow policy') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+                            if [ -n "$bad" ]; then echo "unpinned actions found:"; echo "$bad"; exit 1; fi
+                        '''
+                    }
+                }
+                stage('Vulnerability scan') {
+                    when { expression { fileExists('go.sum') } }
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/app \
+                                -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD}:/usr/local/share/go/cache \
+                                -w /app \
+                                casjaysdev/go:latest \
+                                govulncheck ./...
+                        '''
+                    }
+                }
+                stage('Image scan') {
+                    when { expression { fileExists('docker/Dockerfile') } }
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker build -t local/scan-target:ci -f docker/Dockerfile .
+                            bash tests/docker.sh --image-check local/scan-target:ci
+                            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+                                image --exit-code 1 --severity CRITICAL,HIGH local/scan-target:ci
+                        '''
+                    }
+                    post {
+                        always {
+                            sh 'docker rmi local/scan-target:ci || true'
+                        }
+                    }
+                }
+            }
+        }
+
+        // Stable Release - matches release.yml (tag push only)
         stage('Release: Stable') {
             agent { label 'amd64' }
             when {
@@ -395,10 +510,9 @@ pipeline {
             }
             steps {
                 sh '''
-                    mkdir -p ${RELDIR}
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/${INTERNAL_NAME}-*; do
+                    for f in ${BINDIR}/${PROJECT_NAME}-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -406,12 +520,29 @@ pipeline {
                     tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
                         --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
                         --exclude='*.tar.gz' \
-                        -czf ${RELDIR}/${INTERNAL_NAME}-${VERSION}-source.tar.gz .
+                        -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+                '''
+                // SBOM tooling lives in the build image - never install it on the agent
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
+                        -v ${WORKSPACE}:/app \
+                        -w /app \
+                        -e GOFLAGS=-buildvcs=false \
+                        casjaysdev/go:latest \
+                        cyclonedx-gomod mod -json -output "${RELDIR}/${PROJECT_NAME}-${VERSION}-sbom.cdx.json"
+                '''
+                sh '''
+                    cd ${RELDIR}
+                    FILES="$(ls)"
+                    sha256sum $FILES > sha256.txt
+                    sha512sum $FILES > sha512.txt
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
         }
 
+        // Beta Release - matches beta.yml (beta branch only)
         stage('Release: Beta') {
             agent { label 'amd64' }
             when {
@@ -419,95 +550,205 @@ pipeline {
             }
             steps {
                 sh '''
-                    mkdir -p ${RELDIR}
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/${INTERNAL_NAME}-*; do
+                    for f in ${BINDIR}/${PROJECT_NAME}-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
+
+                    tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+                        --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
+                        --exclude='*.tar.gz' \
+                        -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+                '''
+                // SBOM tooling lives in the build image - never install it on the agent
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
+                        -v ${WORKSPACE}:/app \
+                        -w /app \
+                        -e GOFLAGS=-buildvcs=false \
+                        casjaysdev/go:latest \
+                        cyclonedx-gomod mod -json -output "${RELDIR}/${PROJECT_NAME}-${VERSION}-sbom.cdx.json"
+                '''
+                sh '''
+                    cd ${RELDIR}
+                    FILES="$(ls)"
+                    sha256sum $FILES > sha256.txt
+                    sha512sum $FILES > sha512.txt
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
         }
 
-        stage('Release: Daily') {
+        // Devel Release - matches devel.yml (main + scheduled)
+        stage('Release: Devel') {
             agent { label 'amd64' }
             when {
-                expression { env.BUILD_TYPE == 'daily' }
+                expression { env.BUILD_TYPE == 'devel' }
             }
             steps {
                 sh '''
-                    mkdir -p ${RELDIR}
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/${INTERNAL_NAME}-*; do
+                    for f in ${BINDIR}/${PROJECT_NAME}-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
+
+                    tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+                        --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
+                        --exclude='*.tar.gz' \
+                        -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+                '''
+                // SBOM tooling lives in the build image - never install it on the agent
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
+                        -v ${WORKSPACE}:/app \
+                        -w /app \
+                        -e GOFLAGS=-buildvcs=false \
+                        casjaysdev/go:latest \
+                        cyclonedx-gomod mod -json -output "${RELDIR}/${PROJECT_NAME}-${VERSION}-sbom.cdx.json"
+                '''
+                sh '''
+                    cd ${RELDIR}
+                    FILES="$(ls)"
+                    sha256sum $FILES > sha256.txt
+                    sha512sum $FILES > sha512.txt
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
         }
 
+        // Docker - matches docker.yml (ALL branches and tags)
         stage('Docker') {
             agent { label 'amd64' }
             steps {
                 script {
-                    def tags = "-t ${REGISTRY}:${env.COMMIT_ID}"
+                    def tags = "-t ${REGISTRY}:${COMMIT_ID}"
 
                     if (env.BUILD_TYPE == 'release') {
+                        // Release tag - version, latest, YYMM
                         def yymm = new Date().format('yyMM')
-                        tags += " -t ${REGISTRY}:${env.VERSION}"
+                        tags += " -t ${REGISTRY}:${VERSION}"
                         tags += " -t ${REGISTRY}:latest"
                         tags += " -t ${REGISTRY}:${yymm}"
                     } else if (env.BUILD_TYPE == 'beta') {
+                        // Beta branch - beta
                         tags += " -t ${REGISTRY}:beta"
-                        tags += " -t ${REGISTRY}:devel"
-                    } else {
-                        tags += " -t ${REGISTRY}:devel"
                     }
+                    // else: all other branches get only the {commit_id} tag
+                    // above — :devel is built separately by the "Docker: Devel"
+                    // stage below, never by this stage
 
+                    // Login to container registry
+                    // Works with: ghcr.io, registry.gitlab.com, gitea/forgejo, docker.io
                     sh """
-                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECTORG} --password-stdin
+                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECT_ORG} --password-stdin
                     """
 
+                    // Build multi-arch with OCI labels and manifest annotations
                     sh """
-                        docker buildx create --name ${INTERNAL_NAME}-builder --use 2>/dev/null || docker buildx use ${INTERNAL_NAME}-builder
+                        docker buildx create --name multiarch-builder --use 2>/dev/null || docker buildx use multiarch-builder
                         docker buildx build \
                             -f docker/Dockerfile \
                             --platform linux/amd64,linux/arm64 \
-                            --build-arg VERSION="${env.VERSION}" \
-                            --build-arg COMMIT_ID="${env.COMMIT_ID}" \
-                            --build-arg BUILD_DATE="${env.BUILD_DATE}" \
-                            --label "org.opencontainers.image.vendor=${PROJECTORG}" \
-                            --label "org.opencontainers.image.authors=${PROJECTORG}" \
-                            --label "org.opencontainers.image.title=${INTERNAL_NAME}" \
-                            --label "org.opencontainers.image.base.name=${INTERNAL_NAME}" \
-                            --label "org.opencontainers.image.description=caswhois - self-hosted WHOIS lookup service" \
+                            --build-arg VERSION="${VERSION}" \
+                            --build-arg COMMIT_ID="${COMMIT_ID}" \
+                            --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
+                            --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
+                            --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
+                            --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
+                            --label "org.opencontainers.image.title=${PROJECT_NAME}" \
+                            --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
+                            --label "org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
                             --label "org.opencontainers.image.licenses=MIT" \
-                            --label "org.opencontainers.image.version=${env.VERSION}" \
-                            --label "org.opencontainers.image.created=${env.BUILD_DATE}" \
-                            --label "org.opencontainers.image.revision=${env.COMMIT_ID}" \
-                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/whois" \
-                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/whois" \
-                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/whois" \
-                            --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.title=${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.version=${VERSION}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.revision=${COMMIT_ID}" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
+                            --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
+                            --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
-                            --annotation "manifest:org.opencontainers.image.version=${env.VERSION}" \
-                            --annotation "manifest:org.opencontainers.image.created=${env.BUILD_DATE}" \
-                            --annotation "manifest:org.opencontainers.image.revision=${env.COMMIT_ID}" \
-                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/whois" \
-                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/whois" \
+                            --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
+                            --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
                             ${tags} \
                             --push \
                             .
                     """
+                    sh 'bash tests/docker.sh --image-check "${REGISTRY}:${COMMIT_ID}"'
                 }
             }
         }
+
+        // Docker Devel - matches docker.yml build-devel job (main push + daily cron, never the main Docker stage)
+        stage('Docker: Devel') {
+            agent { label 'amd64' }
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    // Runs on every push to main (this pipeline's global cron trigger above
+                    // also fires it devel) and always builds Dockerfile.dev with a
+                    // single static :devel tag - MODE=development is baked into
+                    // Dockerfile.dev via ENV, no extra build-arg needed here.
+                    sh """
+                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECT_ORG} --password-stdin
+                    """
+
+                    sh """
+                        docker buildx create --name multiarch-builder --use 2>/dev/null || docker buildx use multiarch-builder
+                        docker buildx build \
+                            -f docker/Dockerfile.dev \
+                            --platform linux/amd64,linux/arm64 \
+                            --build-arg COMMIT_ID="${COMMIT_ID}" \
+                            --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
+                            --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
+                            --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
+                            --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
+                            --label "org.opencontainers.image.title=${PROJECT_NAME}" \
+                            --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
+                            --label "org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
+                            --label "org.opencontainers.image.licenses=MIT" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.revision=${COMMIT_ID}" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
+                            --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
+                            --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
+                            --annotation "manifest:org.opencontainers.image.licenses=MIT" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
+                            --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            -t ${REGISTRY}:devel \
+                            --push \
+                            .
+                    """
+                    sh 'bash tests/docker.sh --image-check "${REGISTRY}:devel"'
+                }
+            }
+        }
+
     }
 
     post {

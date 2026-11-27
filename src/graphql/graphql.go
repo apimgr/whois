@@ -115,8 +115,8 @@ func WriteResponse(w http.ResponseWriter, status int, resp GraphQLResponse) {
 	data, _ := json.MarshalIndent(resp, "", "  ")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write(data)
-	w.Write([]byte("\n"))
+	_, _ = w.Write(data)
+	_, _ = w.Write([]byte("\n"))
 }
 
 // WriteError writes a GraphQL error response with the given status code.

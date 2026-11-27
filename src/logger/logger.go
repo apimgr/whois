@@ -253,6 +253,7 @@ type AuditEntry struct {
 	Level      string `json:"level"`
 	Category   string `json:"category"`
 	Action     string `json:"action"`
+	Source     string `json:"source,omitempty"`
 	ActorIP    string `json:"actor_ip,omitempty"`
 	TargetType string `json:"target_type,omitempty"`
 	TargetID   string `json:"target_id,omitempty"`

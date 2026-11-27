@@ -79,7 +79,7 @@ func (sm *ServiceManager) restart() error {
 		return exec.Command("systemctl", "--user", "restart", sm.Name).Run()
 	case "launchd":
 		// Launchd restart
-		exec.Command("launchctl", "stop", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
+		_ = exec.Command("launchctl", "stop", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
 		return exec.Command("launchctl", "start", "io.github."+constants.InternalOrg+"."+sm.Name).Run()
 	case "openrc":
 		return exec.Command("rc-service", sm.Name, "restart").Run()

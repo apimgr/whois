@@ -1,0 +1,16 @@
+{{define "public.tmpl"}}
+<!DOCTYPE html>
+<html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
+<head>{{template "head" .}}</head>
+<body>
+<a class="skip-link" href="#main-content">{{t .Lang "common.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "common.skip_to_nav"}}</a>
+{{.ConsentBannerHTML}}
+{{.AnnouncementsHTML}}
+{{template "site_header" .}}
+{{template "page_content" .}}
+{{template "public_footer" .}}
+{{template "scripts" .}}
+</body>
+</html>
+{{end}}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/apimgr/whois/security/advisories/new
+    about: Report vulnerabilities privately. Do not use a public issue.
+  - name: Documentation
+    url: https://apimgr-whois.readthedocs.io/
+    about: Check installation, configuration, API, and troubleshooting documentation.

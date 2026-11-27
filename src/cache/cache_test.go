@@ -137,7 +137,7 @@ func newTestCache() *MemoryCache {
 // clamped to sane defaults instead of producing a broken cache.
 func TestNewMemoryCache_Defaults(t *testing.T) {
 	mc := NewMemoryCache(0, 0)
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	if mc.maxSize != 100*1024*1024 {
 		t.Errorf("maxSize default: got %d, want %d", mc.maxSize, 100*1024*1024)
 	}
@@ -149,7 +149,7 @@ func TestNewMemoryCache_Defaults(t *testing.T) {
 // TestMemoryCache_SetGet covers the fundamental get-after-set and miss cases.
 func TestMemoryCache_SetGet(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	cases := []struct {
@@ -183,7 +183,7 @@ func TestMemoryCache_SetGet(t *testing.T) {
 // TestMemoryCache_Get_Miss verifies Get returns ErrNotFound for absent keys.
 func TestMemoryCache_Get_Miss(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	_, err := mc.Get(ctx, "does-not-exist")
@@ -198,7 +198,7 @@ func TestMemoryCache_Get_Miss(t *testing.T) {
 // TestMemoryCache_Get_Expired verifies that an expired item is treated as a miss.
 func TestMemoryCache_Get_Expired(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "exp", []byte("data"), time.Millisecond); err != nil {
@@ -220,7 +220,7 @@ func TestMemoryCache_Get_Expired(t *testing.T) {
 // the 1-hour default so the item is retrievable immediately after Set.
 func TestMemoryCache_Set_ZeroTTL(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "z", []byte("v"), 0); err != nil {
@@ -234,7 +234,7 @@ func TestMemoryCache_Set_ZeroTTL(t *testing.T) {
 // TestMemoryCache_Delete verifies that a key is gone after Delete.
 func TestMemoryCache_Delete(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "del", []byte("v"), time.Minute); err != nil {
@@ -251,7 +251,7 @@ func TestMemoryCache_Delete(t *testing.T) {
 // TestMemoryCache_Delete_NonExistent verifies deleting an absent key is a no-op.
 func TestMemoryCache_Delete_NonExistent(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Delete(ctx, "ghost"); err != nil {
@@ -262,7 +262,7 @@ func TestMemoryCache_Delete_NonExistent(t *testing.T) {
 // TestMemoryCache_Clear verifies that Clear removes all items.
 func TestMemoryCache_Clear(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	keys := []string{"a", "b", "c"}
@@ -284,7 +284,7 @@ func TestMemoryCache_Clear(t *testing.T) {
 // TestMemoryCache_Exists covers present, absent, and expired key cases.
 func TestMemoryCache_Exists(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "live", []byte("v"), time.Minute); err != nil {
@@ -321,7 +321,7 @@ func TestMemoryCache_Exists(t *testing.T) {
 // omits misses (both absent and expired keys).
 func TestMemoryCache_GetMulti(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "m1", []byte("one"), time.Minute); err != nil {
@@ -356,7 +356,7 @@ func TestMemoryCache_GetMulti(t *testing.T) {
 // TestMemoryCache_GetMulti_Empty exercises the empty-key-slice path.
 func TestMemoryCache_GetMulti_Empty(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	result, err := mc.GetMulti(ctx, []string{})
@@ -372,7 +372,7 @@ func TestMemoryCache_GetMulti_Empty(t *testing.T) {
 // retrievable and that zero TTL defaults to 1 hour.
 func TestMemoryCache_SetMulti(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	items := map[string][]byte{
@@ -398,7 +398,7 @@ func TestMemoryCache_SetMulti(t *testing.T) {
 // defaults to 1 hour (items are immediately retrievable).
 func TestMemoryCache_SetMulti_ZeroTTL(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.SetMulti(ctx, map[string][]byte{"z": []byte("v")}, 0); err != nil {
@@ -413,7 +413,7 @@ func TestMemoryCache_SetMulti_ZeroTTL(t *testing.T) {
 // and that uptime is non-negative.
 func TestMemoryCache_Stats_HitRate(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	// Populate two keys; perform two hits and one miss.
@@ -423,9 +423,9 @@ func TestMemoryCache_Stats_HitRate(t *testing.T) {
 	if err := mc.Set(ctx, "s2", []byte("v2"), time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	mc.Get(ctx, "s1")
-	mc.Get(ctx, "s2")
-	mc.Get(ctx, "absent")
+	_, _ = mc.Get(ctx, "s1")
+	_, _ = mc.Get(ctx, "s2")
+	_, _ = mc.Get(ctx, "absent")
 
 	stats, err := mc.Stats(ctx)
 	if err != nil {
@@ -453,7 +453,7 @@ func TestMemoryCache_Stats_HitRate(t *testing.T) {
 // no accesses (avoids divide-by-zero).
 func TestMemoryCache_Stats_ZeroHitRate(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	stats, err := mc.Stats(ctx)
@@ -475,7 +475,7 @@ func TestMemoryCache_Stats_ZeroHitRate(t *testing.T) {
 // when the cache has at least one item.
 func TestMemoryCache_Stats_AvgItemSize(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "key", []byte("value"), time.Minute); err != nil {
@@ -505,7 +505,7 @@ func TestMemoryCache_Close(t *testing.T) {
 // the value rather than duplicating it.
 func TestMemoryCache_Overwrite(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "ow", []byte("first"), time.Minute); err != nil {
@@ -534,7 +534,7 @@ func TestMemoryCache_Overwrite(t *testing.T) {
 func TestMemoryCache_Eviction_WhenFull(t *testing.T) {
 	// Max size: 10 bytes — small enough to trigger eviction.
 	mc := NewMemoryCache(10, time.Hour)
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	// "k1" + "AAAAAAA" = 3 + 7 = 10 bytes — exactly fills the cache.
@@ -561,7 +561,7 @@ func TestMemoryCache_Eviction_WhenFull(t *testing.T) {
 func TestMemoryCache_EvictOldest_PreferExpired(t *testing.T) {
 	// Max size just big enough for one item so the second triggers eviction.
 	mc := NewMemoryCache(8, time.Hour)
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	// Write an expired item.
@@ -583,7 +583,7 @@ func TestMemoryCache_EvictOldest_PreferExpired(t *testing.T) {
 // checking that expired items are removed and the eviction counter increments.
 func TestMemoryCache_cleanup(t *testing.T) {
 	mc := newTestCache()
-	defer mc.Close()
+	defer func() { _ = mc.Close() }()
 	ctx := context.Background()
 
 	if err := mc.Set(ctx, "gone", []byte("v"), time.Millisecond); err != nil {

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
-	"github.com/apimgr/whois/src/email"
 )
 
 // PrivacyPageData holds the dynamic data for the /server/privacy page
@@ -49,7 +48,7 @@ type ThirdPartyServiceView struct {
 	PolicyURL string
 }
 
-var privacyTmpl = mustParseTemplate("privacy", "privacy.html")
+var privacyTmpl = mustParseTemplate("privacy", "page/privacy.tmpl")
 
 // handlePrivacyPage serves the privacy policy page.
 // GET /server/privacy
@@ -103,7 +102,7 @@ func (s *Server) handlePrivacyPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderTemplate(privacyTmpl, w, r, data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }
 
@@ -214,9 +213,9 @@ func (s *Server) handlePrivacyAPI(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("data_sold: " + boolStr(resp.Summary.DataSold) + "\n"))
-		w.Write([]byte("data_stored_on_server: " + boolStr(resp.Summary.DataStoredOnServer) + "\n"))
-		w.Write([]byte("ccpa_applicable: " + boolStr(resp.CCPA.Applicable) + "\n"))
+		_, _ = w.Write([]byte("data_sold: " + boolStr(resp.Summary.DataSold) + "\n"))
+		_, _ = w.Write([]byte("data_stored_on_server: " + boolStr(resp.Summary.DataStoredOnServer) + "\n"))
+		_, _ = w.Write([]byte("ccpa_applicable: " + boolStr(resp.CCPA.Applicable) + "\n"))
 		return
 	}
 	SendSuccess(w, resp)
@@ -232,110 +231,38 @@ func boolStr(b bool) string {
 // ContactPageData holds the dynamic data for the /server/contact page.
 type ContactPageData struct {
 	translatablePageData
-	Name           string
-	Enabled        bool
-	Captcha        string
-	SuccessMessage string
-	Submitted      bool
-	AbuseEmail     string
+	Name            string
+	Enabled         bool
+	Captcha         string
+	SuccessMessage  string
+	Submitted       bool
+	AbuseEmail      string
+	FormToken       string
+	ReviewToken     string
+	CaptchaID       string
+	CaptchaQuestion string
+	Step            string
+	Review          bool
+	SecurityMode    bool
+	Values          map[string]string
+	ErrorMessage    string
+	Chooser         bool
+	Type            string
+	FQDN            string
 }
 
-var contactTmpl = mustParseTemplate("contact", "contact.html")
+var contactTmpl = mustParseTemplate("contact", "page/contact.tmpl")
 
 // handleContactPage serves the contact form page and processes submissions.
 // GET/POST /server/contact
 func (s *Server) handleContactPage(w http.ResponseWriter, r *http.Request) {
-	name := s.config.Branding.Title
-	if name == "" {
-		name = constants.InternalName
-	}
-	submitted := false
-	if r.Method == http.MethodPost {
-		s.processContactSubmission(r)
-		submitted = true
-	}
-	abuseEmail := s.config.Contact.Abuse.Email
-	if abuseEmail == "" {
-		abuseEmail = s.config.Contact.General.Email
-	}
-	successMsg := s.config.Pages.Contact.SuccessMessage
-	if successMsg == "" {
-		successMsg = "Thank you for your message. We'll respond soon."
-	}
-	captcha := s.config.Pages.Contact.Captcha
-	if captcha == "" {
-		captcha = "simple"
-	}
-	data := ContactPageData{
-		translatablePageData: s.newPageData(w, r),
-		Name:                 name,
-		Enabled:              s.config.Pages.Contact.Enabled,
-		Captcha:              captcha,
-		SuccessMessage:       successMsg,
-		Submitted:            submitted,
-		AbuseEmail:           abuseEmail,
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.renderTemplate(contactTmpl, w, r, data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
-}
-
-// processContactSubmission validates and routes a contact form submission to
-// server.contact.general.email, falling back to server.contact.admin.email
-// when general is unset (AI.md PART 16 — /server/contact, Configuration).
-func (s *Server) processContactSubmission(r *http.Request) {
-	name := strings.TrimSpace(r.FormValue("name"))
-	senderEmail := strings.TrimSpace(r.FormValue("email"))
-	subject := strings.TrimSpace(r.FormValue("subject"))
-	message := strings.TrimSpace(r.FormValue("message"))
-	if name == "" || senderEmail == "" || subject == "" || message == "" {
-		return
-	}
-	recipient := s.config.Contact.General.Email
-	if recipient == "" {
-		recipient = s.config.Contact.Admin.Email
-	}
-	if recipient == "" || s.email == nil {
-		return
-	}
-	appName := s.config.Branding.Title
-	if appName == "" {
-		appName = constants.InternalName
-	}
-	_ = s.email.SendEmail(recipient, "contact", email.EmailData{
-		"subject":      subject,
-		"app_name":     appName,
-		"fqdn":         s.config.FQDN,
-		"app_url":      s.config.FQDN,
-		"timestamp":    time.Now().UTC().Format(time.RFC3339),
-		"sender_name":  name,
-		"sender_email": senderEmail,
-		"message":      message,
-	})
+	s.handleContactFlow(w, r, false)
 }
 
 // handleContactAPI processes a contact form submission via the JSON API.
 // POST /api/{api_version}/server/contact
 func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
-	if !s.config.Pages.Contact.Enabled {
-		SendError(w, ErrForbidden, "contact form is disabled")
-		return
-	}
-	name := strings.TrimSpace(r.FormValue("name"))
-	email := strings.TrimSpace(r.FormValue("email"))
-	subject := strings.TrimSpace(r.FormValue("subject"))
-	message := strings.TrimSpace(r.FormValue("message"))
-	if name == "" || email == "" || subject == "" || message == "" {
-		SendError(w, ErrValidationFailed, "name, email, subject, and message are required")
-		return
-	}
-	s.processContactSubmission(r)
-	successMsg := s.config.Pages.Contact.SuccessMessage
-	if successMsg == "" {
-		successMsg = "Thank you for your message. We'll respond soon."
-	}
-	SendSuccess(w, map[string]string{"message": successMsg})
+	s.handleContactFlow(w, r, true)
 }
 
 // HelpPageData holds the dynamic data for the /server/help page.
@@ -346,10 +273,13 @@ type HelpPageData struct {
 	TorEnabled bool
 	TorRunning bool
 	OnionAddr  string
+	I2PRunning bool
+	I2PAddr    string
 	CustomHTML string
+	MorePages  []pageRegistryEntry
 }
 
-var helpTmpl = mustParseTemplate("help", "help.html")
+var helpTmpl = mustParseTemplate("help", "page/help.tmpl")
 
 // handleHelpPage serves the help page.
 // GET /server/help
@@ -358,13 +288,10 @@ func (s *Server) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = constants.InternalName
 	}
-	torEnabled := s.torService != nil
-	torRunning := false
-	onionAddr := ""
-	if s.torService != nil {
-		onionAddr = s.torService.OnionAddress()
-		torRunning = onionAddr != "" && onionAddr != ".onion"
-	}
+	tor := s.buildTorInfo()
+	torEnabled := tor.Enabled
+	torRunning := tor.Running
+	onionAddr := tor.Hostname
 	data := HelpPageData{
 		translatablePageData: s.newPageData(w, r),
 		Name:                 name,
@@ -372,11 +299,21 @@ func (s *Server) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 		TorEnabled:           torEnabled,
 		TorRunning:           torRunning,
 		OnionAddr:            onionAddr,
-		CustomHTML:           s.config.Pages.Help.Content,
+		I2PRunning:           func() bool { svc := s.currentI2P(); return svc != nil && svc.Status() == "running" }(),
+		I2PAddr: func() string {
+			if s.config.I2P.Expose {
+				if svc := s.currentI2P(); svc != nil {
+					return svc.Address()
+				}
+			}
+			return ""
+		}(),
+		CustomHTML: s.config.Pages.Help.Content,
+		MorePages:  s.registeredPages("help"),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderTemplate(helpTmpl, w, r, data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }
 
@@ -384,14 +321,19 @@ func (s *Server) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 // GET /api/{api_version}/server/help
 func (s *Server) handleHelpAPI(w http.ResponseWriter, r *http.Request) {
 	content := s.config.Pages.Help.Content
+	registered := s.registeredPages("help")
+	pages := make([]map[string]string, 0, len(registered))
+	for _, page := range registered {
+		pages = append(pages, map[string]string{"path": page.Path, "title": translateKey(LangFromContext(r.Context()), page.TitleKey), "description": translateKey(LangFromContext(r.Context()), page.Description)})
+	}
 	accept := r.Header.Get("Accept")
 	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, _ = w.Write([]byte(content))
 		return
 	}
-	SendSuccess(w, map[string]string{"content": content})
+	SendSuccess(w, map[string]any{"content": content, "pages": pages})
 }
 
 // TermsPageData holds the dynamic data for the /server/terms page.
@@ -401,7 +343,7 @@ type TermsPageData struct {
 	Content string
 }
 
-var termsTmpl = mustParseTemplate("terms", "terms.html")
+var termsTmpl = mustParseTemplate("terms", "page/terms.tmpl")
 
 // defaultTermsContent is used when server.pages.terms.content is empty
 // (AI.md PART 16 — /server/terms: "Default template provided, customizable via API").
@@ -437,7 +379,7 @@ func (s *Server) handleTermsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderTemplate(termsTmpl, w, r, data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }
 
@@ -452,8 +394,159 @@ func (s *Server) handleTermsAPI(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, _ = w.Write([]byte(content))
 		return
 	}
 	SendSuccess(w, map[string]string{"content": content})
+}
+
+type dpoPageData struct {
+	translatablePageData
+	AppName string
+	Name    string
+	Email   string
+}
+
+var dpoTmpl = mustParseTemplate("dpo", "page/dpo.tmpl")
+
+func (s *Server) dpoContact() (string, string) {
+	name := s.config.Contact.DPO.Name
+	email := s.config.Contact.DPO.Email
+	if email == "" {
+		email = s.config.Contact.General.Email
+	}
+	return name, email
+}
+
+func (s *Server) handleDPOPage(w http.ResponseWriter, r *http.Request) {
+	name, email := s.dpoContact()
+	data := dpoPageData{
+		translatablePageData: s.newPageData(w, r),
+		AppName:              s.brandName(),
+		Name:                 name,
+		Email:                email,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderTemplate(dpoTmpl, w, r, data); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleDPOAPI(w http.ResponseWriter, r *http.Request) {
+	name, email := s.dpoContact()
+	SendSuccess(w, map[string]string{
+		"name":        name,
+		"email":       email,
+		"privacy_url": s.BuildURL(r, "/server/privacy"),
+	})
+}
+
+type securityPageData struct {
+	translatablePageData
+	AppName           string
+	Email             string
+	ReportURL         string
+	SecurityReportURL string
+	PolicyURL         string
+	SecurityTxt       string
+	Expires           string
+	Policy            string
+}
+
+var securityTmpl = mustParseTemplate("security", "page/security.tmpl")
+var securityPolicyTmpl = mustParseTemplate("security-policy", "page/security_policy.tmpl")
+
+const disclosurePolicy = `## Reporting a vulnerability
+
+Use this policy to report vulnerabilities in caswhois. Include the affected version, a clear description, and steps to reproduce. Please avoid accessing, changing, or deleting data that belongs to others, and stop testing if you encounter sensitive information.
+
+We will review good-faith reports and coordinate a fix and disclosure with the reporter. Do not include secrets or personal data in a report.`
+
+func (s *Server) securityEmail() string {
+	if s.config.Contact.Security.Email != "" {
+		return s.config.Contact.Security.Email
+	}
+	return ""
+}
+
+func (s *Server) securityExpires(now time.Time) string {
+	if s.config.Web.Security.Expires != "" {
+		return s.config.Web.Security.Expires
+	}
+	return now.AddDate(1, 0, 0).UTC().Format("2006-01-02T15:04:05Z")
+}
+
+func (s *Server) securityPolicy() string {
+	if s.config.Web.Security.Policy != "" {
+		return s.config.Web.Security.Policy
+	}
+	return disclosurePolicy
+}
+
+func (s *Server) handleSecurityPage(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC()
+	reportURL := s.config.Web.Security.ReportURL
+	if reportURL == "" {
+		reportURL = constants.RepoURL + "/security/advisories/new"
+	}
+	data := securityPageData{
+		translatablePageData: s.newPageData(w, r),
+		AppName:              s.brandName(),
+		Email:                s.securityEmail(),
+		ReportURL:            reportURL,
+		SecurityReportURL:    s.securityReportURL(r.Context(), r, now),
+		PolicyURL:            s.BuildURL(r, "/server/security/policy"),
+		SecurityTxt:          s.BuildURL(r, "/.well-known/security.txt"),
+		Expires:              s.securityExpires(now),
+		Policy:               s.securityPolicy(),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderTemplate(securityTmpl, w, r, data); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleSecurityPolicyPage(w http.ResponseWriter, r *http.Request) {
+	data := securityPageData{
+		translatablePageData: s.newPageData(w, r),
+		AppName:              s.brandName(),
+		Email:                s.securityEmail(),
+		Policy:               s.securityPolicy(),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderTemplate(securityPolicyTmpl, w, r, data); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleSecurityAPI(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC()
+	reportURL := s.config.Web.Security.ReportURL
+	if reportURL == "" {
+		reportURL = constants.RepoURL + "/security/advisories/new"
+	}
+	contacts := make([]map[string]string, 0, 3)
+	contacts = append(contacts, map[string]string{"type": "github", "value": reportURL})
+	if contactURL := s.securityReportURL(r.Context(), r, now); contactURL != "" {
+		contacts = append(contacts, map[string]string{"type": "form", "value": contactURL})
+	}
+	if email := s.securityEmail(); email != "" {
+		contacts = append(contacts, map[string]string{"type": "email", "value": "mailto:" + email})
+	}
+	response := map[string]interface{}{
+		"contacts":         contacts,
+		"expires":          s.securityExpires(now),
+		"policy_url":       s.BuildURL(r, "/server/security/policy"),
+		"thanks_url":       s.BuildURL(r, "/server/security/thanks"),
+		"security_txt_url": s.BuildURL(r, "/.well-known/security.txt"),
+		"policy":           s.securityPolicy(),
+	}
+	if s.config.Pages.Contact.Enabled {
+		response["report_url"] = s.BuildURL(r, "/server/contact")
+	}
+	SendSuccess(w, response)
+}
+
+func (s *Server) handleSecurityPolicyAPI(w http.ResponseWriter, r *http.Request) {
+	SendSuccess(w, map[string]string{"policy": s.securityPolicy()})
 }

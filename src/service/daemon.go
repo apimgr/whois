@@ -79,7 +79,22 @@ func IsContainer() bool {
 
 // detectServiceManagerImpl contains the real service-manager detection logic.
 func detectServiceManagerImpl() string {
-	// Check for container environment first
+	// A system container that runs its own init is a service host. Detect its
+	// active init before generic LXC/container markers so Incus and LXC service
+	// tests can install and manage native units.
+	if data, err := os.ReadFile("/proc/1/comm"); err == nil && strings.TrimSpace(string(data)) == "systemd" {
+		if _, err := os.Stat("/run/systemd/system"); err == nil {
+			return "systemd"
+		}
+	}
+	if _, err := os.Stat("/sbin/openrc-run"); err == nil {
+		if _, err := os.Stat("/run/openrc"); err == nil {
+			return "openrc"
+		}
+	}
+
+	// Application containers without an active system init must not install
+	// host services into their image.
 	if isContainerFn() {
 		return "container"
 	}

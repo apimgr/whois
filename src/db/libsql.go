@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 // NewLibSQL creates a libsql/Turso remote database connection for server.db.
@@ -22,7 +20,7 @@ func NewLibSQL(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 	}
 
 	dsn := buildLibSQLDSN(cfg.URL, cfg.Token)
-	serverDB, err := sql.Open("libsql", dsn)
+	serverDB, err := sql.Open(libSQLDriverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open libsql connection: %w", err)
 	}
@@ -30,17 +28,18 @@ func NewLibSQL(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 	ConfigurePool(serverDB, cfg.Pool)
 
 	if err := Ping(ctx, serverDB); err != nil {
-		serverDB.Close()
+		_ = serverDB.Close()
 		return nil, fmt.Errorf("ping libsql connection: %w", err)
 	}
 
-	database.Server = serverDB
+	database.readDB = serverDB
+	database.writeDB = serverDB
 
 	// Ensure schema exists (idempotent CREATE TABLE IF NOT EXISTS) — libsql
 	// is SQLite wire-compatible, so the same schema statements apply
 	// (AI.md PART 10, "Remote Database Updates").
 	if err := database.ensureSchema(ctx); err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, fmt.Errorf("ensure schema: %w", err)
 	}
 

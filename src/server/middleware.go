@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -12,11 +14,16 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/apimgr/whois/src/cache"
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/geoip"
 	"github.com/apimgr/whois/src/ratelimit"
 )
+
+var rateLimitFallbackWarning sync.Once
 
 // URLNormalizeMiddleware normalizes URLs for consistent routing
 // - Removes trailing slashes (except for root "/")
@@ -97,7 +104,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 
 		// Reject ".." in the decoded path.
 		if strings.Contains(original, "..") {
-			http.Error(w, "Invalid path", http.StatusBadRequest)
+			writeRequestError(w, r, http.StatusBadRequest)
 			log.Printf("Path security violation (traversal): %s", original)
 			return
 		}
@@ -108,7 +115,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 			if strings.Contains(lower, "%2e%2e") ||
 				strings.Contains(lower, "%2e.") ||
 				strings.Contains(lower, ".%2e") {
-				http.Error(w, "Invalid path", http.StatusBadRequest)
+				writeRequestError(w, r, http.StatusBadRequest)
 				log.Printf("Path security violation (encoded traversal): %s", rawPath)
 				return
 			}
@@ -162,7 +169,7 @@ func GeoIPMiddleware(geoipMgr *geoip.GeoIPManager, denyCountries, allowCountries
 			if geoipMgr != nil && geoipMgr.Enabled() {
 				clientIP := extractClientIP(r, additional)
 				if geoipMgr.IsCountryBlocked(clientIP, denyCountries, allowCountries) {
-					http.Error(w, "Access denied", http.StatusForbidden)
+					writeRequestError(w, r, http.StatusForbidden)
 					log.Printf("GeoIP block: %s", clientIP)
 					return
 				}
@@ -367,6 +374,183 @@ func RateLimitMiddleware(limiter *ratelimit.Limiter, limit, window int) func(htt
 	}
 }
 
+func (s *Server) configuredRateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limiter := s.ratelimit
+		limit := s.config.RateLimit.Read
+		if isHealthRoute(r.URL.Path) {
+			limiter = s.healthLimiter
+			limit = s.config.RateLimit.Health
+		} else if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			limiter = s.writeLimiter
+			limit = s.config.RateLimit.Write
+		}
+		clientKey := s.rateLimitClientKey(r)
+		bucket := "read"
+		if isHealthRoute(r.URL.Path) {
+			bucket = "health"
+		} else if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			bucket = "write"
+		}
+		limited := !s.allowRateLimit(r.Context(), bucket, limiter, clientKey, limit.Requests, time.Duration(limit.Window)*time.Second, true)
+		if !s.allowRateLimit(r.Context(), "global", s.globalBurstLimiter, clientKey, s.config.RateLimit.GlobalBurst, time.Minute, true) {
+			limited = true
+			limit = config.RateLimitEndpointConfig{Requests: s.config.RateLimit.GlobalBurst, Window: 60}
+		}
+		if limited {
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit.Requests))
+			w.Header().Set("X-RateLimit-Window", strconv.Itoa(limit.Window))
+			w.Header().Set("Retry-After", strconv.Itoa(limit.Window))
+			SendError(w, ErrRateLimited, MsgRateLimited)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) allowRateLimit(ctx context.Context, bucket string, fallback *ratelimit.Limiter, clientKey string, requests int, window time.Duration, consume bool) (allowed bool) {
+	defer func() {
+		s.metrics.RecordRateLimit(bucket, allowed)
+	}()
+	memoryFallback := func() bool {
+		if fallback == nil {
+			return false
+		}
+		fallbackKey := bucket + ":" + clientKey
+		if !consume {
+			return !fallback.IsLimitedWithLimit(fallbackKey, requests, window)
+		}
+		rateLimitFallbackWarning.Do(func() {
+			log.Printf("WARN: persistent rate-limit storage unavailable; using in-process counters")
+		})
+		return fallback.AllowWithLimit(fallbackKey, requests, window)
+	}
+	if s.database == nil || s.database.Read() == nil {
+		return memoryFallback()
+	}
+	if requests <= 0 {
+		requests = 60
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	sum := sha256.Sum256([]byte(bucket + "\x00" + clientKey))
+	key := fmt.Sprintf("%x", sum[:])
+	if s.config.Cache.Type == "redis" || s.config.Cache.Type == "valkey" {
+		if backend, ok := s.cache.(cache.RateLimitCache); ok {
+			allowed, err := backend.AllowRateLimit(ctx, key, requests, window, consume)
+			if err == nil {
+				if allowed && consume && (bucket == "strict" || bucket == "auth_failure") && fallback != nil {
+					_ = fallback.Allow(bucket + ":" + clientKey)
+				}
+				return allowed
+			}
+		}
+		return memoryFallback()
+	}
+	if fallback == nil {
+		return false
+	}
+	fallbackKey := bucket + ":" + clientKey
+	if !consume {
+		return !fallback.IsLimitedWithLimit(fallbackKey, requests, window)
+	}
+	allowed = fallback.AllowWithLimit(fallbackKey, requests, window)
+	if allowed {
+		s.queueRateLimitEvent(key, time.Now().UnixMilli())
+	}
+	return allowed
+}
+
+func (s *Server) maxRateLimitWindow() int64 {
+	maximum := int64(900)
+	for _, seconds := range []int{s.config.RateLimit.Read.Window, s.config.RateLimit.Write.Window,
+		s.config.RateLimit.Health.Window, s.config.RateLimit.Strict.Window, s.config.RateLimit.AuthFailures.Window, 60} {
+		if seconds > int(maximum) {
+			maximum = int64(seconds)
+		}
+	}
+	return maximum
+}
+
+func isHealthRoute(path string) bool {
+	switch path {
+	case "/healthz", "/readyz", "/livez", "/server/healthz", "/api/healthz":
+		return true
+	default:
+		return strings.HasSuffix(path, "/server/healthz") || strings.HasSuffix(path, "/server/readyz") || strings.HasSuffix(path, "/server/livez")
+	}
+}
+
+func (s *Server) rateLimitClientKey(r *http.Request) string {
+	clientIP := extractClientIP(r, s.config.TrustedProxies.Additional)
+	token := extractBearerToken(r)
+	if token == "" {
+		return "ip:" + clientIP
+	}
+	tokenHash := sha256.Sum256([]byte(token))
+	if subtle.ConstantTimeCompare(tokenHash[:], s.getServerTokenHash()) == 1 {
+		return "token:" + hex.EncodeToString(tokenHash[:])
+	}
+	if s.database != nil && s.database.Read() != nil {
+		if _, err := s.lookupOwnerToken(r.Context(), token); err == nil {
+			return "token:" + hex.EncodeToString(tokenHash[:])
+		}
+	}
+	return "ip:" + clientIP
+}
+
+// strictRateLimit applies the configured sensitive-action limit before a handler
+// so invalid and valid attempts consume the same per-client budget.
+func (s *Server) strictRateLimit(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.strictLimiter != nil {
+			limit := s.config.RateLimit.Strict
+			key := extractClientIP(r, s.config.TrustedProxies.Additional)
+			if s.database != nil && s.database.Read() != nil {
+				if owner, err := s.ownerFromRequest(r, true); err == nil {
+					key = "owner:" + owner.OwnerID
+				} else {
+					key = "ip:" + key
+				}
+			}
+			if !s.allowRateLimit(r.Context(), "strict", s.strictLimiter, key, limit.Requests, time.Duration(limit.Window)*time.Second, true) {
+				w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit.Requests))
+				w.Header().Set("X-RateLimit-Window", strconv.Itoa(limit.Window))
+				w.Header().Set("Retry-After", strconv.Itoa(limit.Window))
+				SendError(w, ErrRateLimited, MsgRateLimited)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
+func (s *Server) authFailureKey(r *http.Request) string {
+	return "auth:" + extractClientIP(r, s.config.TrustedProxies.Additional)
+}
+
+func (s *Server) authFailureBlocked(w http.ResponseWriter, r *http.Request) bool {
+	limit := s.config.RateLimit.AuthFailures
+	key := s.authFailureKey(r)
+	if s.authFailureLimiter == nil || s.allowRateLimit(r.Context(), "auth_failure", s.authFailureLimiter, key, limit.Requests, time.Duration(limit.Window)*time.Second, false) {
+		return false
+	}
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit.Requests))
+	w.Header().Set("X-RateLimit-Window", strconv.Itoa(limit.Window))
+	w.Header().Set("Retry-After", strconv.Itoa(limit.Window))
+	SendError(w, ErrRateLimited, MsgRateLimited)
+	return true
+}
+
+func (s *Server) recordAuthFailure(w http.ResponseWriter, r *http.Request) bool {
+	limit := s.config.RateLimit.AuthFailures
+	if s.authFailureLimiter == nil || s.allowRateLimit(r.Context(), "auth_failure", s.authFailureLimiter, s.authFailureKey(r), limit.Requests, time.Duration(limit.Window)*time.Second, true) {
+		return false
+	}
+	return s.authFailureBlocked(w, r)
+}
+
 // AuthMiddleware annotates the request context with auth status.
 // Token validation for protected routes is handled by requireToken() at the
 // route level (see token_auth.go). This middleware is a pass-through that
@@ -395,18 +579,25 @@ func (s *Server) LoggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(wrapped, r)
 
 		// Extract host without port for the Apache Combined remote-addr field.
-		remoteHost := r.RemoteAddr
-		if host, _, err := net.SplitHostPort(remoteHost); err == nil {
-			remoteHost = host
+		remoteHost, torRequest := torRequestIdentity(r)
+		if !torRequest {
+			remoteHost = r.RemoteAddr
+			if host, _, err := net.SplitHostPort(remoteHost); err == nil {
+				remoteHost = host
+			}
 		}
 
 		// Write Apache Combined Log Format line to access.log.
 		// Falls back silently when no logger / file is configured.
 		if s.logger != nil {
+			requestURI := r.URL.RequestURI()
+			if strings.HasPrefix(r.URL.Path, "/server/security/report/") {
+				requestURI = r.URL.Path
+			}
 			s.logger.WriteAccess(
 				remoteHost,
 				r.Method,
-				r.URL.RequestURI(),
+				requestURI,
 				r.Proto,
 				wrapped.statusCode,
 				wrapped.bytesWritten,
@@ -416,10 +607,14 @@ func (s *Server) LoggingMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Emit a compact summary to stderr/stdout for interactive use.
+		logRemote := r.RemoteAddr
+		if torRequest {
+			logRemote = remoteHost
+		}
 		log.Printf("[%s] %s %s %d %dB",
 			r.Method,
 			r.URL.Path,
-			r.RemoteAddr,
+			logRemote,
 			wrapped.statusCode,
 			wrapped.bytesWritten,
 		)

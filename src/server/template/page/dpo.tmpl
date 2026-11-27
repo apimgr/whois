@@ -1,0 +1,34 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "dpo.meta_description"}} {{.AppName}}">
+<title>{{t .Lang "dpo.title"}} — {{.AppName}}</title>
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <div class="container container-sm">
+    <header class="page-header">
+      <h1 class="page-title">{{t .Lang "dpo.title"}}</h1>
+      <p>{{t .Lang "dpo.lead"}}</p>
+    </header>
+    <section class="card section-card" aria-labelledby="dpo-contact">
+      <h2 id="dpo-contact">{{t .Lang "dpo.contact"}}</h2>
+      {{if .Email}}
+      {{if .Name}}<p>{{.Name}}</p>{{end}}
+      <p><a href="mailto:{{.Email}}">{{.Email}}</a></p>
+      {{else}}
+      {{if .Name}}<p>{{.Name}}</p>{{end}}
+      <p>{{t .Lang "dpo.unconfigured"}} <a href="{{path "/server/security"}}">{{t .Lang "dpo.security_link"}}</a>.</p>
+      {{end}}
+      <p><a href="{{path "/server/privacy"}}">{{t .Lang "nav.privacy"}}</a></p>
+    </section>
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

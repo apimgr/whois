@@ -7,11 +7,16 @@ import (
 	"bytes"
 	"crypto/tls"
 	"embed"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"mime"
+	"mime/multipart"
 	"net"
+	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -53,6 +58,14 @@ type EmailTemplate struct {
 
 // EmailData holds data for template rendering
 type EmailData map[string]string
+
+// EmailAttachment contains an in-memory attachment. Callers must provide
+// already-encrypted content when attaching sensitive data.
+type EmailAttachment struct {
+	Filename    string
+	ContentType string
+	Content     []byte
+}
 
 // NewEmailManager creates a new email manager
 func NewEmailManager(configDir string) *EmailManager {
@@ -186,17 +199,19 @@ func (em *EmailManager) testSMTPConnection(host string, port int, quick bool) bo
 	if err != nil {
 		return false
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Set read/write deadline
-	conn.SetDeadline(time.Now().Add(timeout))
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return false
+	}
 
 	// Try SMTP handshake (EHLO)
 	client, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return false
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Send EHLO
 	if err := client.Hello("localhost"); err != nil {
@@ -247,6 +262,25 @@ func (em *EmailManager) GetSMTPInfo() map[string]interface{} {
 // SendEmail sends an email using the specified template and data
 // If SMTP is not configured or disabled, this is a no-op (no error, no logging)
 func (em *EmailManager) SendEmail(to, templateName string, data EmailData) error {
+	return em.sendEmail(to, "", templateName, data)
+}
+
+// SendEmailWithReplyTo sends a message from the configured sender and sets a
+// validated Reply-To address for messages that need a human response.
+func (em *EmailManager) SendEmailWithReplyTo(to, replyTo, templateName string, data EmailData) error {
+	parsed, err := mail.ParseAddress(strings.TrimSpace(replyTo))
+	if err != nil || parsed.Address != strings.TrimSpace(replyTo) || strings.ContainsAny(replyTo, "\r\n") {
+		return fmt.Errorf("invalid reply-to address")
+	}
+	return em.sendEmail(to, parsed.String(), templateName, data)
+}
+
+// SendEmailWithAttachment sends a templated message with one attachment.
+func (em *EmailManager) SendEmailWithAttachment(to, templateName string, data EmailData, attachment EmailAttachment) error {
+	return em.sendEmail(to, "", templateName, data, &attachment)
+}
+
+func (em *EmailManager) sendEmail(to, replyTo, templateName string, data EmailData, attachments ...*EmailAttachment) error {
 	em.mu.RLock()
 	enabled := em.enabled
 	em.mu.RUnlock()
@@ -267,7 +301,11 @@ func (em *EmailManager) SendEmail(to, templateName string, data EmailData) error
 	body := em.renderTemplate(template.Body, data)
 
 	// Send email
-	return em.sendSMTP(to, subject, body)
+	var attachment *EmailAttachment
+	if len(attachments) > 0 {
+		attachment = attachments[0]
+	}
+	return em.sendSMTPWithReplyTo(to, replyTo, subject, body, attachment)
 }
 
 // loadTemplate loads a template by name
@@ -333,6 +371,10 @@ func (em *EmailManager) renderTemplate(template string, data EmailData) string {
 
 // sendSMTP sends an email via SMTP
 func (em *EmailManager) sendSMTP(to, subject, body string) error {
+	return em.sendSMTPWithReplyTo(to, "", subject, body, nil)
+}
+
+func (em *EmailManager) sendSMTPWithReplyTo(to, replyTo, subject, body string, attachment *EmailAttachment) error {
 	em.mu.RLock()
 	host := em.smtpHost
 	port := em.smtpPort
@@ -355,13 +397,20 @@ func (em *EmailManager) sendSMTP(to, subject, body string) error {
 
 	// Build message
 	var msg bytes.Buffer
-	msg.WriteString(fmt.Sprintf("From: %s\r\n", from))
-	msg.WriteString(fmt.Sprintf("To: %s\r\n", to))
-	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	fmt.Fprintf(&msg, "From: %s\r\n", from)
+	fmt.Fprintf(&msg, "To: %s\r\n", to)
+	if replyTo != "" {
+		fmt.Fprintf(&msg, "Reply-To: %s\r\n", replyTo)
+	}
+	fmt.Fprintf(&msg, "Subject: %s\r\n", subject)
 	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	contentType, bodyBytes, err := buildMIMEBody(body, attachment)
+	if err != nil {
+		return err
+	}
+	msg.WriteString("Content-Type: " + contentType + "\r\n")
 	msg.WriteString("\r\n")
-	msg.WriteString(body)
+	msg.Write(bodyBytes)
 
 	// Determine TLS strategy
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
@@ -388,6 +437,48 @@ func (em *EmailManager) sendSMTP(to, subject, body string) error {
 	}
 }
 
+func buildMIMEBody(body string, attachment *EmailAttachment) (string, []byte, error) {
+	if attachment == nil {
+		return "text/plain; charset=UTF-8", []byte(body), nil
+	}
+	if attachment.Filename == "" || strings.ContainsAny(attachment.Filename, "\r\n") || len(attachment.Content) == 0 {
+		return "", nil, fmt.Errorf("invalid email attachment")
+	}
+	mediaType, _, err := mime.ParseMediaType(attachment.ContentType)
+	if err != nil || mediaType == "" {
+		return "", nil, fmt.Errorf("invalid attachment content type")
+	}
+	var payload bytes.Buffer
+	writer := multipart.NewWriter(&payload)
+	textPart, err := writer.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=UTF-8"}})
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := textPart.Write([]byte(body)); err != nil {
+		return "", nil, err
+	}
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": attachment.Filename})
+	attachmentHeader := textproto.MIMEHeader{}
+	attachmentHeader.Set("Content-Type", mediaType)
+	attachmentHeader.Set("Content-Disposition", disposition)
+	attachmentHeader.Set("Content-Transfer-Encoding", "base64")
+	attachmentPart, err := writer.CreatePart(attachmentHeader)
+	if err != nil {
+		return "", nil, err
+	}
+	encoder := base64.NewEncoder(base64.StdEncoding, attachmentPart)
+	if _, err := encoder.Write(attachment.Content); err != nil {
+		return "", nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return "", nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return "", nil, err
+	}
+	return "multipart/mixed; boundary=" + writer.Boundary(), payload.Bytes(), nil
+}
+
 // sendWithTLS sends email using implicit TLS (typically port 465)
 func (em *EmailManager) sendWithTLS(addr, username, password, from, to string, msg []byte) error {
 	tlsConfig := &tls.Config{
@@ -398,13 +489,13 @@ func (em *EmailManager) sendWithTLS(addr, username, password, from, to string, m
 	if err != nil {
 		return fmt.Errorf("TLS dial failed: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client, err := smtp.NewClient(conn, tlsConfig.ServerName)
 	if err != nil {
 		return fmt.Errorf("SMTP client creation failed: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	return em.sendWithClient(client, tlsConfig.ServerName, username, password, from, to, msg)
 }
@@ -415,7 +506,7 @@ func (em *EmailManager) sendWithSTARTTLS(addr, host, username, password, from, t
 	if err != nil {
 		return fmt.Errorf("SMTP dial failed: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Try STARTTLS
 	if ok, _ := client.Extension("STARTTLS"); ok {
@@ -436,7 +527,7 @@ func (em *EmailManager) sendPlain(addr, username, password, from, to string, msg
 	if err != nil {
 		return fmt.Errorf("SMTP dial failed: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	host := strings.Split(addr, ":")[0]
 	return em.sendWithClient(client, host, username, password, from, to, msg)
@@ -467,12 +558,13 @@ func (em *EmailManager) sendWithClient(client *smtp.Client, host, username, pass
 	if err != nil {
 		return fmt.Errorf("DATA command failed: %w", err)
 	}
-	defer w.Close()
-
 	if _, err := w.Write(msg); err != nil {
+		_ = w.Close()
 		return fmt.Errorf("message write failed: %w", err)
 	}
-
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("close SMTP message: %w", err)
+	}
 	return nil
 }
 
@@ -495,7 +587,7 @@ func getDefaultGateway() string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	// Skip the header line.

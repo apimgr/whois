@@ -9,6 +9,7 @@ RUN apk add --no-cache git bash
 ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
+ARG BUILD_EPOCH=0
 ARG COMMIT_ID
 ARG OFFICIAL_SITE=
 
@@ -21,7 +22,7 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -buildvcs=false -trimpath \
-    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
+    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
     -o /app/binary/caswhois ./src
 
 # =============================================================================
@@ -48,6 +49,7 @@ RUN apk add --no-cache \
     bash \
     tini \
     tor \
+    i2pd \
     ca-certificates \
     tzdata
 

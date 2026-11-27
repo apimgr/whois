@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
+	"encoding/binary"
+	"encoding/xml"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -11,7 +14,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,6 +26,7 @@ import (
 	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/email"
 	"github.com/apimgr/whois/src/geoip"
+	"github.com/apimgr/whois/src/i2p"
 	caslogger "github.com/apimgr/whois/src/logger"
 	"github.com/apimgr/whois/src/metrics"
 	"github.com/apimgr/whois/src/ratelimit"
@@ -36,30 +42,99 @@ import (
 )
 
 // Server represents the HTTP server
+type torRuntime interface {
+	OnionAddress() string
+	OutboundEnabled() bool
+	GetHTTPClient(bool) *http.Client
+	Health(context.Context) error
+	Serve(http.Handler, time.Duration, time.Duration, time.Duration) error
+	Close() error
+}
+
 type Server struct {
-	config     *config.ServerConfig
-	server     *http.Server
-	info       *runtimeinfo.RuntimeInfo
-	cache      cache.Cache
-	ratelimit  *ratelimit.Limiter
-	database   *db.DB
-	scheduler  *scheduler.Scheduler
-	geoip      *geoip.GeoIPManager
-	email      *email.EmailManager
-	metrics    *metrics.Collector
-	torService *castor.TorService
+	config             *config.ServerConfig
+	pidFileOverride    string
+	server             *http.Server
+	httpsServer        *http.Server
+	apiRouter          chi.Router
+	info               *runtimeinfo.RuntimeInfo
+	cache              cache.Cache
+	ratelimit          *ratelimit.Limiter
+	writeLimiter       *ratelimit.Limiter
+	healthLimiter      *ratelimit.Limiter
+	globalBurstLimiter *ratelimit.Limiter
+	strictLimiter      *ratelimit.Limiter
+	authFailureLimiter *ratelimit.Limiter
+	database           *db.DB
+	scheduler          *scheduler.Scheduler
+	geoip              *geoip.GeoIPManager
+	email              *email.EmailManager
+	metrics            *metrics.Collector
+	torService         torRuntime
+	torMu              sync.RWMutex
+	torStatus          string
+	torActions         chan torActionRequest
+	torMaintenance     *castor.Maintenance
+	i2pService         *i2p.Service
+	i2pMu              sync.RWMutex
+	i2pUpdateMu        sync.Mutex
+	i2pStatus          string
+	i2pProvider        i2p.Provider
+	i2pListener        net.Listener
+	i2pServer          *http.Server
 	// logger manages the four required log files (PART 11).
 	logger *caslogger.Logger
 	// startTime is the server start time, used for uptime calculation.
 	startTime time.Time
 	// stats holds atomic runtime counters surfaced via /server/stats.
-	stats serverStats
+	stats       serverStats
+	hotCounters hotCounterBuffer
 	// lookupService handles RDAP-first lookups with WHOIS fallback
-	lookupService *whois.LookupService
+	lookupService       *whois.LookupService
+	serverTokenHashOnce sync.Once
+	serverTokenHash     [32]byte
 	// configManager polls server.yml for external edits and applies
 	// hot-reloadable settings in place, flagging restart-required ones
 	// (AI.md PART 8 — Smart Config Reload).
 	configManager *config.ConfigManager
+}
+
+type torRequestContextKey struct{}
+
+func torRequestHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity := torCircuitIdentity(r.RemoteAddr)
+		r = r.WithContext(context.WithValue(r.Context(), torRequestContextKey{}, identity))
+		r.RemoteAddr = identity
+		next.ServeHTTP(w, r)
+	})
+}
+
+func torRequestIdentity(r *http.Request) (string, bool) {
+	identity, ok := r.Context().Value(torRequestContextKey{}).(string)
+	return identity, ok
+}
+
+func torCircuitIdentity(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]")).To16()
+	if ip == nil {
+		return "tor"
+	}
+	return "tor:" + strconv.FormatUint(uint64(binary.BigEndian.Uint32(ip[12:16])), 10)
+}
+
+func ipv6Unavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "address family not supported") ||
+		strings.Contains(message, "family not supported by protocol") ||
+		strings.Contains(message, "protocol not supported")
 }
 
 // New creates a new Server instance.
@@ -84,7 +159,42 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		log.Printf("WARN: Failed to initialize %q cache backend, falling back to in-process memory: %v", cfg.Cache.Type, err)
 		memCache = cache.NewMemoryCache(100*1024*1024, 5*time.Minute)
 	}
-	rateLimiter := ratelimit.New(60, 1*time.Minute)
+	readLimit := cfg.RateLimit.Read
+	if readLimit.Requests <= 0 || readLimit.Window <= 0 {
+		readLimit = config.RateLimitEndpointConfig{Requests: 120, Window: 60}
+	}
+	writeLimit := cfg.RateLimit.Write
+	if writeLimit.Requests <= 0 || writeLimit.Window <= 0 {
+		writeLimit = config.RateLimitEndpointConfig{Requests: 10, Window: 60}
+	}
+	healthLimit := cfg.RateLimit.Health
+	if healthLimit.Requests <= 0 || healthLimit.Window <= 0 {
+		healthLimit = config.RateLimitEndpointConfig{Requests: 120, Window: 60}
+	}
+	globalBurst := cfg.RateLimit.GlobalBurst
+	if globalBurst <= 0 {
+		globalBurst = 240
+	}
+	cfg.RateLimit.Read = readLimit
+	cfg.RateLimit.Write = writeLimit
+	cfg.RateLimit.Health = healthLimit
+	cfg.RateLimit.GlobalBurst = globalBurst
+	rateLimiter := ratelimit.New(readLimit.Requests, time.Duration(readLimit.Window)*time.Second)
+	writeLimiter := ratelimit.New(writeLimit.Requests, time.Duration(writeLimit.Window)*time.Second)
+	healthLimiter := ratelimit.New(healthLimit.Requests, time.Duration(healthLimit.Window)*time.Second)
+	globalBurstLimiter := ratelimit.New(globalBurst, time.Minute)
+	strictLimit := cfg.RateLimit.Strict
+	if strictLimit.Requests <= 0 || strictLimit.Window <= 0 {
+		strictLimit = config.RateLimitEndpointConfig{Requests: 10, Window: 900}
+	}
+	authFailureLimit := cfg.RateLimit.AuthFailures
+	if authFailureLimit.Requests <= 0 || authFailureLimit.Window <= 0 {
+		authFailureLimit = config.RateLimitEndpointConfig{Requests: 5, Window: 900}
+	}
+	cfg.RateLimit.Strict = strictLimit
+	cfg.RateLimit.AuthFailures = authFailureLimit
+	strictLimiter := ratelimit.New(strictLimit.Requests, time.Duration(strictLimit.Window)*time.Second)
+	authFailureLimiter := ratelimit.New(authFailureLimit.Requests, time.Duration(authFailureLimit.Window)*time.Second)
 
 	// Initialize scheduler with configurable timezone and catch-up window (AI.md PART 18).
 	schedTimezone := cfg.Scheduler.Timezone
@@ -97,10 +207,13 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 			schedCatchUp = d
 		}
 	}
-	sched, err := scheduler.New(database.Server, schedTimezone, schedCatchUp)
+	sched, err := scheduler.NewWithStore(database, schedTimezone, schedCatchUp)
 	if err != nil {
 		log.Printf("WARN: Failed to initialize scheduler: %v", err)
 		sched = nil
+	}
+	if sched != nil {
+		sched.SetSecurityCleanup(cfg.Security.Reports.RetentionDays, filepath.Join(cfg.ConfigDir, "security", "pgp.priv.old.asc.enc"))
 	}
 
 	// Initialize GeoIP (AI.md PART 19 — server.geoip.*).
@@ -137,6 +250,9 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		SizeBuckets:     cfg.Metrics.SizeBuckets,
 	}
 	metricsCollector := metrics.New(constants.InternalName, metricsCfg)
+	if database != nil {
+		database.SetWriteMetrics(metricsCollector)
+	}
 	if metricsCollector != nil {
 		// Set application info from build variables (will be set by main.go)
 		metricsCollector.SetAppInfo("0.1.0", "dev", "unknown", "go1.21")
@@ -188,19 +304,25 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 	}
 
 	srv := &Server{
-		config:        cfg,
-		info:          runtimeinfo.Detect(),
-		cache:         memCache,
-		ratelimit:     rateLimiter,
-		database:      database,
-		scheduler:     sched,
-		geoip:         geoipMgr,
-		email:         emailMgr,
-		metrics:       metricsCollector,
-		logger:        lgr,
-		startTime:     time.Now(),
-		lookupService: lookupSvc,
+		config:             cfg,
+		info:               runtimeinfo.Detect(),
+		cache:              memCache,
+		ratelimit:          rateLimiter,
+		writeLimiter:       writeLimiter,
+		healthLimiter:      healthLimiter,
+		globalBurstLimiter: globalBurstLimiter,
+		strictLimiter:      strictLimiter,
+		authFailureLimiter: authFailureLimiter,
+		database:           database,
+		scheduler:          sched,
+		geoip:              geoipMgr,
+		email:              emailMgr,
+		metrics:            metricsCollector,
+		logger:             lgr,
+		startTime:          time.Now(),
+		lookupService:      lookupSvc,
 	}
+	srv.getServerTokenHash()
 
 	// Register built-in tasks if scheduler initialized.
 	if sched != nil {
@@ -213,6 +335,15 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		sched.BackupHourlyHook = func(ctx context.Context) error {
 			_, err := srv.runBackup("backup-hourly")
 			return err
+		}
+		sched.I2PHealthHook = func(ctx context.Context) error {
+			srv.i2pMu.RLock()
+			svc := srv.i2pService
+			srv.i2pMu.RUnlock()
+			if svc == nil {
+				return nil
+			}
+			return svc.Health(ctx)
 		}
 		// Wire GeoIP update hook if GeoIP is enabled (PART 19).
 		if geoipMgr != nil && geoipMgr.Enabled() {
@@ -251,7 +382,7 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 					if result.Domain == nil {
 						continue
 					}
-					if upErr := records.UpsertRecord(ctx, srv.database.Server, q, result.Type.String(), result.Domain); upErr != nil {
+					if upErr := records.UpsertRecordInStore(ctx, srv.database, q, result.Type.String(), result.Domain); upErr != nil {
 						return upErr
 					}
 				}
@@ -298,6 +429,7 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		if err := sched.RegisterBuiltInTasks(); err != nil {
 			log.Printf("WARN: Failed to register built-in tasks: %v", err)
 		}
+		_ = sched.DisableTask("i2p_health")
 
 		// Apply per-task retry overrides from server.yml (AI.md PART 18).
 		if len(cfg.Scheduler.Tasks) > 0 {
@@ -325,34 +457,104 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 	return srv
 }
 
-// Start starts the HTTP server
+func (s *Server) currentTor() torRuntime {
+	s.torMu.RLock()
+	defer s.torMu.RUnlock()
+	return s.torService
+}
+
+// SetPIDFilePath applies the --pid/PID_FILE override before Start.
+func (s *Server) SetPIDFilePath(path string) {
+	s.pidFileOverride = strings.TrimSpace(path)
+}
+
+// Start starts the HTTP server and waits for an operating-system shutdown signal.
 func (s *Server) Start() error {
-	// Get PID file path
-	pidPath := s.getPIDFilePath()
+	return s.Run(context.Background(), nil)
+}
 
-	// Check for existing running instance
-	running, existingPID, err := CheckPIDFile(pidPath)
-	if err != nil {
-		return fmt.Errorf("error checking pid file: %w", err)
+// Run serves on listener until ctx is canceled or the operating system asks
+// the process to shut down. A nil listener binds the configured TCP address.
+func (s *Server) Run(ctx context.Context, listener net.Listener) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if running {
-		return fmt.Errorf("server already running (pid %d)", existingPID)
+	runCtx, cancelRun := context.WithCancel(ctx)
+	var configManagerDone <-chan struct{}
+	var extraSignalsDone <-chan struct{}
+	defer func() {
+		cancelRun()
+		if configManagerDone != nil {
+			<-configManagerDone
+		}
+		if extraSignalsDone != nil {
+			<-extraSignalsDone
+		}
+	}()
+	defer func() {
+		if s.ratelimit != nil {
+			s.ratelimit.Close()
+		}
+		if s.writeLimiter != nil {
+			s.writeLimiter.Close()
+		}
+		if s.healthLimiter != nil {
+			s.healthLimiter.Close()
+		}
+		if s.globalBurstLimiter != nil {
+			s.globalBurstLimiter.Close()
+		}
+		if s.strictLimiter != nil {
+			s.strictLimiter.Close()
+		}
+		if s.authFailureLimiter != nil {
+			s.authFailureLimiter.Close()
+		}
+	}()
+	writePIDFile := pidFileSupported() && !config.IsContainer() && (s.config.PIDFile || s.pidFileOverride != "")
+	pidPath := ""
+	if writePIDFile {
+		pidPath = s.getPIDFilePath()
+	}
+	if err := prepareRuntimeOwnership(*s.config, pidPath); err != nil {
+		return fmt.Errorf("prepare service runtime directories: %w", err)
+	}
+	if writePIDFile {
+		// Check for an existing instance, then write the PID before dropping
+		// privileges so the service-owned runtime directory stays writable.
+		running, existingPID, err := CheckPIDFile(pidPath)
+		if err != nil {
+			return fmt.Errorf("error checking pid file: %w", err)
+		}
+		if running {
+			return fmt.Errorf("server already running (pid %d)", existingPID)
+		}
+		if err := WritePIDFile(pidPath, s.config.Port); err != nil {
+			return fmt.Errorf("failed to write pid file: %w", err)
+		}
+		defer func() { _ = RemovePIDFile(pidPath) }()
 	}
 
-	// Write PID file with port
-	if err := WritePIDFile(pidPath, s.config.Port); err != nil {
-		return fmt.Errorf("failed to write pid file: %w", err)
-	}
-
-	// Ensure PID file is removed on exit
-	defer RemovePIDFile(pidPath)
+	hotCounterCtx, stopHotCounters := context.WithCancel(context.Background())
+	hotCounterDone := make(chan struct{})
+	go func() {
+		defer close(hotCounterDone)
+		s.runHotCounterFlush(hotCounterCtx)
+	}()
+	defer func() {
+		stopHotCounters()
+		<-hotCounterDone
+	}()
 
 	// Setup routes and middleware
+	s.torMaintenance = &castor.Maintenance{DataDir: s.config.DataDir}
+	s.torActions = make(chan torActionRequest, 16)
 	handler := s.setupRoutes()
 	handler = s.setupMiddleware(handler)
 
 	// Create HTTP server with configurable timeouts from server.limits (AI.md PART 12).
-	addr := fmt.Sprintf("%s:%d", s.config.Address, s.config.Port)
+	bindAddress := strings.Trim(s.config.Address, "[]")
+	addr := net.JoinHostPort(bindAddress, fmt.Sprint(s.config.Port))
 	readTimeout := parseDurationDefault(s.config.Limits.ReadTimeout, 30*time.Second)
 	writeTimeout := parseDurationDefault(s.config.Limits.WriteTimeout, 30*time.Second)
 	idleTimeout := parseDurationDefault(s.config.Limits.IdleTimeout, 120*time.Second)
@@ -382,6 +584,12 @@ func (s *Server) Start() error {
 		if err := s.scheduler.Start(); err != nil {
 			log.Printf("ERROR: Failed to start scheduler: %v", err)
 		} else {
+			defer func() {
+				log.Printf("Stopping scheduler...")
+				if err := s.scheduler.Stop(); err != nil {
+					log.Printf("ERROR: Failed to stop scheduler: %v", err)
+				}
+			}()
 			log.Printf("Scheduler started with 8 built-in tasks")
 		}
 	}
@@ -389,14 +597,34 @@ func (s *Server) Start() error {
 	// Bind the listener while still privileged so ports below 1024 can be
 	// claimed, then drop to the unprivileged service account before serving
 	// any request (AI.md PART 23 — bind privileged port, then drop privileges).
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("failed to bind %s: %w", addr, err)
+	var err error
+	if listener == nil {
+		listener, err = net.Listen("tcp", addr)
+		if err != nil && bindAddress == "::" && ipv6Unavailable(err) {
+			bindAddress = "0.0.0.0"
+			addr = net.JoinHostPort(bindAddress, fmt.Sprint(s.config.Port))
+			log.Printf("WARN: IPv6 wildcard listener is unavailable; falling back to %s", bindAddress)
+			listener, err = net.Listen("tcp", addr)
+			if err == nil {
+				s.server.Addr = addr
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to bind %s: %w", addr, err)
+		}
+	} else {
+		addr = listener.Addr().String()
+		s.server.Addr = addr
+		if host, _, splitErr := net.SplitHostPort(addr); splitErr == nil {
+			bindAddress = strings.Trim(host, "[]")
+		}
 	}
 
-	// When SSL is enabled, wrap the listener with TLS (AI.md PART 15).
-	// TLS 1.2 is the minimum version; 1.3 is preferred.
-	if s.config.TLS.Enabled {
+	var httpsListener net.Listener
+	dualPort := s.config.HTTPPort > 0 && s.config.HTTPSPort > 0
+	// A configured HTTPS port enables TLS even when the single-port SSL switch
+	// is off. TLS 1.2 is the minimum version; 1.3 is preferred.
+	if s.config.TLS.Enabled || s.config.HTTPSPort > 0 {
 		fqdn := s.config.TLS.Domain
 		if fqdn == "" {
 			fqdn = s.config.FQDN
@@ -405,7 +633,7 @@ func (s *Server) Start() error {
 		if loadErr := certMgr.LoadCertificate(); loadErr != nil {
 			log.Printf("WARN: TLS cert not found (%v); requesting from Let's Encrypt", loadErr)
 			if reqErr := certMgr.RequestNewCertificate(); reqErr != nil {
-				listener.Close()
+				_ = listener.Close()
 				return fmt.Errorf("TLS certificate unavailable: %w", reqErr)
 			}
 		}
@@ -417,7 +645,17 @@ func (s *Server) Start() error {
 			GetCertificate: certMgr.GetCertificate,
 			MinVersion:     minTLS,
 		}
-		listener = tls.NewListener(listener, tlsCfg)
+		if dualPort {
+			httpsAddr := net.JoinHostPort(bindAddress, fmt.Sprint(s.config.HTTPSPort))
+			httpsListener, err = net.Listen("tcp", httpsAddr)
+			if err != nil {
+				_ = listener.Close()
+				return fmt.Errorf("failed to bind HTTPS listener %s: %w", httpsAddr, err)
+			}
+			httpsListener = tls.NewListener(httpsListener, tlsCfg)
+		} else {
+			listener = tls.NewListener(listener, tlsCfg)
+		}
 
 		// Start HTTP→HTTPS redirect server on port 80 (AI.md PART 15).
 		redirectMux := http.NewServeMux()
@@ -425,22 +663,28 @@ func (s *Server) Start() error {
 			target := "https://" + r.Host + r.URL.RequestURI()
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 		})
+		redirectAddr := net.JoinHostPort(bindAddress, "80")
 		redirectSrv := &http.Server{
-			Addr:         s.config.Address + ":80",
+			Addr:         redirectAddr,
 			Handler:      redirectMux,
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
 		}
-		go func() {
-			log.Printf("HTTP→HTTPS redirect listening on %s:80", s.config.Address)
-			if listenErr := redirectSrv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
-				log.Printf("WARN: HTTP redirect server error: %v", listenErr)
-			}
-		}()
+		if !dualPort && s.config.Port != 80 {
+			go func() {
+				log.Printf("HTTP→HTTPS redirect listening on %s", redirectAddr)
+				if listenErr := redirectSrv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
+					log.Printf("WARN: HTTP redirect server error: %v", listenErr)
+				}
+			}()
+		}
 	}
 
 	if err := dropPrivileges(s.config.User, s.config.Group); err != nil {
-		listener.Close()
+		_ = listener.Close()
+		if httpsListener != nil {
+			_ = httpsListener.Close()
+		}
 		return fmt.Errorf("failed to drop privileges: %w", err)
 	}
 
@@ -452,48 +696,88 @@ func (s *Server) Start() error {
 		log.Printf("Server starting on %s", addr)
 		serverErrors <- s.server.Serve(listener)
 	}()
+	if httpsListener != nil {
+		s.httpsServer = &http.Server{Addr: net.JoinHostPort(bindAddress, fmt.Sprint(s.config.HTTPSPort)), Handler: handler, ReadTimeout: readTimeout, WriteTimeout: writeTimeout, IdleTimeout: idleTimeout}
+		go func() {
+			log.Printf("HTTPS server starting on %s", s.httpsServer.Addr)
+			serverErrors <- s.httpsServer.Serve(httpsListener)
+		}()
+	}
 
-	// Start Tor hidden service (PART 31) — non-blocking, optional
-	// Tor starts after the HTTP listener is already running so ADD_ONION can forward to it.
-	torCtx, torCancel := context.WithCancel(context.Background())
-	defer torCancel()
+	i2pCtx, i2pCancel := context.WithCancel(context.Background())
+	i2pUpdates := make(chan i2p.Config, 1)
+	i2pDone := make(chan struct{})
 	go func() {
-		torCfg := castor.TorConfig{
-			Binary:                    s.config.Tor.Binary,
-			UseNetwork:                s.config.Tor.UseNetwork,
-			MaxCircuits:               s.config.Tor.MaxCircuits,
-			CircuitTimeout:            s.config.Tor.CircuitTimeout,
-			BootstrapTimeout:          s.config.Tor.BootstrapTimeout,
-			SafeLogging:               s.config.Tor.SafeLogging,
-			MaxStreamsPerCircuit:      s.config.Tor.MaxStreamsPerCircuit,
-			CloseCircuitOnStreamLimit: s.config.Tor.CloseCircuitOnStreamLimit,
-			BandwidthRate:             s.config.Tor.BandwidthRate,
-			BandwidthBurst:            s.config.Tor.BandwidthBurst,
-			MaxMonthlyBandwidth:       s.config.Tor.MaxMonthlyBandwidth,
-			NumIntroPoints:            s.config.Tor.NumIntroPoints,
-			VirtualPort:               s.config.Tor.VirtualPort,
-		}
-		svc, err := castor.Start(torCtx, s.config.Port, &torCfg, s.config.ConfigDir, s.config.DataDir)
-		if err != nil {
-			log.Printf("[Tor] bootstrap failed: %v", err)
+		defer close(i2pDone)
+		s.runI2PManager(i2pCtx, s.makeI2PConfig(s.config.I2P), handler, readTimeout, writeTimeout, idleTimeout, i2pUpdates)
+	}()
+	defer func() {
+		i2pCancel()
+		<-i2pDone
+	}()
+
+	// Start the dedicated Tor hidden service asynchronously after the clearnet listener is live.
+	torCtx, torCancel := context.WithCancel(context.Background())
+	torDone := make(chan struct{})
+	defer func() { torCancel(); <-torDone }()
+	torActions := s.torActions
+	torUpdates := make(chan config.TorConfig, 1)
+	torBinary := castor.FindBinary(s.config.Tor.Binary)
+	s.torMu.Lock()
+	if torBinary == "" {
+		s.torStatus = "disabled"
+	} else {
+		s.torStatus = "starting"
+	}
+	s.torMu.Unlock()
+	go func() {
+		defer close(torDone)
+		if torBinary == "" {
 			return
 		}
-		if svc != nil {
-			s.torService = svc
-		}
+		s.runTorManager(torCtx, torConfigFromServer(s.config.Tor), handler, readTimeout, writeTimeout, idleTimeout, torActions, torUpdates)
 	}()
 
 	// Start polling server.yml for external edits and hot-reload what we
 	// can in place (AI.md PART 8 — Smart Config Reload; polling, not fsnotify).
 	s.configManager = config.NewConfigManager(s.config.ConfigDir, s.config)
-	s.configManager.Start()
+	s.configManager.I2PConfigHook = func(next config.I2PConfig) {
+		updated := s.makeI2PConfig(next)
+		if s.scheduler != nil && !next.Enabled {
+			_ = s.scheduler.DisableTask("i2p_health")
+		}
+		s.i2pUpdateMu.Lock()
+		select {
+		case i2pUpdates <- updated:
+		default:
+			select {
+			case <-i2pUpdates:
+			default:
+			}
+			i2pUpdates <- updated
+		}
+		s.i2pUpdateMu.Unlock()
+	}
+	s.configManager.TorConfigHook = func(next config.TorConfig) {
+		select {
+		case torUpdates <- next:
+		default:
+			select {
+			case <-torUpdates:
+			default:
+			}
+			torUpdates <- next
+		}
+	}
+	configManagerDone = s.configManager.Start(runCtx)
 
 	// Channel for OS signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
 
 	// SIGUSR1 (log rotation) and SIGHUP (config reload) — Unix only.
-	setupExtraSignals(s)
+	extraSignalsDone = setupExtraSignals(runCtx, s)
 
 	// Wait for shutdown signal or server error
 	select {
@@ -501,43 +785,297 @@ func (s *Server) Start() error {
 		return fmt.Errorf("server error: %w", err)
 	case sig := <-shutdown:
 		log.Printf("Received signal %v, shutting down gracefully...", sig)
+	case <-runCtx.Done():
+		log.Printf("Run context canceled; shutting down gracefully...")
+	}
+	cancelRun()
+	if configManagerDone != nil {
+		<-configManagerDone
+		configManagerDone = nil
+	}
+	if extraSignalsDone != nil {
+		<-extraSignalsDone
+		extraSignalsDone = nil
+	}
 
-		// Stop Tor first (PART 31)
-		torCancel()
-		if s.torService != nil {
-			if err := s.torService.Close(); err != nil {
-				log.Printf("[Tor] shutdown error: %v", err)
-			}
+	// Stop Tor and I2P before draining HTTP requests.
+	torCancel()
+	<-torDone
+	i2pCancel()
+	<-i2pDone
+	if torService := s.currentTor(); torService != nil {
+		if err := torService.Close(); err != nil {
+			log.Printf("[Tor] shutdown error: %v", err)
 		}
-
-		// Stop scheduler (AI.md PART 19)
-		if s.scheduler != nil {
-			log.Printf("Stopping scheduler...")
-			if err := s.scheduler.Stop(); err != nil {
-				log.Printf("ERROR: Failed to stop scheduler: %v", err)
-			} else {
-				log.Printf("Scheduler stopped")
-			}
-		}
-
-		// Give outstanding requests a deadline for completion
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		// Graceful shutdown
-		if err := s.server.Shutdown(ctx); err != nil {
-			// Force close
-			s.server.Close()
-			return fmt.Errorf("could not stop server gracefully: %w", err)
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := s.server.Shutdown(shutdownCtx); err != nil {
+		_ = s.server.Close()
+		return fmt.Errorf("could not stop server gracefully: %w", err)
+	}
+	if s.httpsServer != nil {
+		if err := s.httpsServer.Shutdown(shutdownCtx); err != nil {
+			_ = s.httpsServer.Close()
+			return fmt.Errorf("could not stop HTTPS server gracefully: %w", err)
 		}
 	}
 
 	return nil
 }
 
+func (s *Server) setI2PStatus(status string) {
+	s.i2pMu.Lock()
+	s.i2pStatus = status
+	s.i2pMu.Unlock()
+}
+
+func i2pRequestHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.Clone(context.WithValue(r.Context(), i2pRequestContextKey{}, true))
+		r.Header = r.Header.Clone()
+		for key := range r.Header {
+			lower := strings.ToLower(key)
+			if strings.HasPrefix(lower, "x-i2p-") || strings.HasPrefix(lower, "x-forwarded-") || lower == "x-real-ip" || lower == "x-real-host" || lower == "x-original-host" || lower == "x-url-scheme" || lower == "x-script-name" || lower == "forwarded" {
+				r.Header.Del(key)
+			}
+		}
+		r.RemoteAddr = "127.0.0.2:1"
+		next.ServeHTTP(w, r)
+	})
+}
+
+type i2pRequestContextKey struct{}
+
+func (s *Server) makeI2PConfig(c config.I2PConfig) i2p.Config {
+	return i2p.Config{Enabled: c.Enabled, Binary: c.Binary, SAMAddress: c.SAMAddress, ConfigDir: s.config.ConfigDir, DataDir: s.config.DataDir, LogDir: s.config.LogDir, VirtualPort: c.VirtualPort, InboundLength: c.InboundLength, OutboundLength: c.OutboundLength, InboundQuantity: c.InboundQuantity, OutboundQuantity: c.OutboundQuantity, SignatureType: c.SignatureType, BootstrapTimeout: c.BootstrapTimeout, StateHook: func(state string) {
+		if state != "running" {
+			s.setI2PStatus(state)
+		}
+	}}
+}
+
+func (s *Server) runI2PManager(ctx context.Context, cfg i2p.Config, handler http.Handler, readTimeout, writeTimeout, idleTimeout time.Duration, updates <-chan i2p.Config) {
+	backoff := 5 * time.Second
+	wait := func(delay time.Duration) (i2p.Config, bool, bool) {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return cfg, false, false
+		case next := <-updates:
+			return next, true, true
+		case <-timer.C:
+			return cfg, true, false
+		}
+	}
+	closeBackend := func(server *http.Server, listener net.Listener) {
+		if server != nil {
+			_ = server.Close()
+		}
+		if listener != nil {
+			_ = listener.Close()
+		}
+		s.i2pMu.Lock()
+		if s.i2pServer == server {
+			s.i2pServer = nil
+			s.i2pListener = nil
+		}
+		s.i2pMu.Unlock()
+	}
+	for ctx.Err() == nil {
+		if !cfg.Enabled {
+			s.setI2PStatus("disabled")
+			s.i2pMu.Lock()
+			s.i2pProvider = ""
+			s.i2pMu.Unlock()
+			next, ok, _ := wait(24 * time.Hour)
+			if !ok {
+				return
+			}
+			cfg = next
+			continue
+		}
+		s.setI2PStatus("starting")
+		provider, _, _ := i2p.Resolve(cfg)
+		s.i2pMu.Lock()
+		s.i2pProvider = provider
+		s.i2pMu.Unlock()
+		if provider == "" {
+			s.setI2PStatus("no_provider")
+			if s.scheduler != nil {
+				_ = s.scheduler.DisableTask("i2p_health")
+			}
+			next, ok, _ := wait(30 * time.Second)
+			if !ok {
+				return
+			}
+			cfg = next
+			continue
+		}
+		if s.scheduler != nil {
+			_ = s.scheduler.EnableTask("i2p_health")
+		}
+		listener, err := i2p.ListenBackend()
+		if err != nil {
+			s.setI2PStatus("error")
+			log.Printf("WARN: I2P backend listener unavailable")
+			next, ok, updated := wait(backoff)
+			if !ok {
+				return
+			}
+			cfg = next
+			if updated {
+				backoff = 5 * time.Second
+			} else {
+				backoff = min(backoff*2, 300*time.Second)
+			}
+			continue
+		}
+		backend := &http.Server{Handler: i2pRequestHandler(handler), ReadTimeout: readTimeout, WriteTimeout: writeTimeout, IdleTimeout: idleTimeout}
+		serveErrors := make(chan error, 1)
+		go func() { serveErrors <- backend.Serve(listener) }()
+		s.i2pMu.Lock()
+		s.i2pServer = backend
+		s.i2pListener = listener
+		s.i2pMu.Unlock()
+		cfg.StateHook = func(state string) {
+			if state != "running" {
+				s.setI2PStatus(state)
+			}
+		}
+		startCtx, cancelStart := context.WithCancel(ctx)
+		started := make(chan struct {
+			service *i2p.Service
+			err     error
+		}, 1)
+		go func() {
+			svc, startErr := i2p.Start(startCtx, cfg, listener.Addr().(*net.TCPAddr).Port)
+			started <- struct {
+				service *i2p.Service
+				err     error
+			}{svc, startErr}
+		}()
+		var svc *i2p.Service
+		select {
+		case <-ctx.Done():
+			cancelStart()
+			result := <-started
+			if result.service != nil {
+				_ = result.service.Close()
+			}
+			closeBackend(backend, listener)
+			return
+		case next := <-updates:
+			cancelStart()
+			result := <-started
+			if result.service != nil {
+				_ = result.service.Close()
+			}
+			closeBackend(backend, listener)
+			cfg = next
+			backoff = 5 * time.Second
+			continue
+		case result := <-started:
+			cancelStart()
+			svc, err = result.service, result.err
+		}
+		if err != nil {
+			closeBackend(backend, listener)
+			if !errors.Is(err, context.Canceled) {
+				s.setI2PStatus("error")
+				log.Printf("WARN: I2P startup failed: %v", err)
+			}
+			if delay := i2p.RetryDelay(err); delay > 0 {
+				backoff = delay
+			}
+			next, ok, updated := wait(backoff)
+			if !ok {
+				return
+			}
+			cfg = next
+			if updated {
+				backoff = 5 * time.Second
+			} else if backoff < 300*time.Second {
+				backoff = min(backoff*2, 300*time.Second)
+			}
+			continue
+		}
+		s.i2pMu.Lock()
+		s.i2pService = svc
+		s.i2pMu.Unlock()
+		s.setI2PStatus("running")
+		backoff = 5 * time.Second
+		ticker := time.NewTicker(30 * time.Second)
+		restart := false
+		for !restart {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				_ = svc.Close()
+				s.i2pMu.Lock()
+				s.i2pService = nil
+				s.i2pMu.Unlock()
+				closeBackend(backend, listener)
+				return
+			case next := <-updates:
+				ticker.Stop()
+				_ = svc.Close()
+				s.i2pMu.Lock()
+				s.i2pService = nil
+				s.i2pMu.Unlock()
+				closeBackend(backend, listener)
+				cfg = next
+				backoff = 5 * time.Second
+				restart = true
+			case serveErr := <-serveErrors:
+				ticker.Stop()
+				_ = svc.Close()
+				s.i2pMu.Lock()
+				s.i2pService = nil
+				s.i2pMu.Unlock()
+				closeBackend(backend, listener)
+				if serveErr != http.ErrServerClosed {
+					s.setI2PStatus("error")
+					log.Printf("WARN: I2P backend listener stopped")
+				}
+				restart = true
+			case <-ticker.C:
+				if healthErr := svc.Health(ctx); healthErr != nil {
+					ticker.Stop()
+					_ = svc.Close()
+					s.i2pMu.Lock()
+					s.i2pService = nil
+					s.i2pMu.Unlock()
+					closeBackend(backend, listener)
+					s.setI2PStatus("error")
+					log.Printf("WARN: I2P provider failed; retrying with backoff")
+					restart = true
+				}
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if cfg.Enabled {
+			next, ok, updated := wait(backoff)
+			if !ok {
+				return
+			}
+			cfg = next
+			if updated {
+				backoff = 5 * time.Second
+			} else if backoff < 300*time.Second {
+				backoff = min(backoff*2, 300*time.Second)
+			}
+		}
+	}
+}
+
 // setupRoutes configures HTTP routes using chi (PART 13 — every web page has a corresponding API endpoint).
 func (s *Server) setupRoutes() http.Handler {
 	r := chi.NewRouter()
+	r.Handle("/server/tor/*", http.HandlerFunc(s.handleTorControl))
 
 	// Metrics endpoint (PART 20) — internal only, token-protected
 	if s.metrics != nil && s.config.Metrics.Enabled {
@@ -551,6 +1089,9 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// API base path from config (AI.md PART 14 — never hardcode v1)
 	apiBase := s.config.APIBasePath()
+	r.Handle(apiBase+"/server/mcp", http.HandlerFunc(s.handleMCP))
+	r.Handle("/api/mcp", http.HandlerFunc(s.handleMCP))
+	r.Handle("/mcp", http.HandlerFunc(s.handleMCP))
 
 	// Health check endpoints (PART 13)
 	r.Get("/server/healthz", s.handleHealth)
@@ -583,10 +1124,10 @@ func (s *Server) setupRoutes() http.Handler {
 	// Also serve llms.txt at root per spec
 	r.Get("/llms.txt", s.handleLLMsTxt)
 
-	// PWA support (PART 16) — manifest, service worker, offline fallback
+	// PWA support (PART 16) — manifest, versioned service worker, translated fallback strings
 	r.Get("/manifest.json", s.handleManifest)
 	r.Get("/sw.js", s.handleServiceWorker)
-	r.Get("/offline.html", s.handleOfflinePage)
+	r.Get("/offline-strings.json", s.handleOfflineStrings)
 
 	// Public content pages
 	r.Get("/server", func(w http.ResponseWriter, r *http.Request) {
@@ -594,6 +1135,7 @@ func (s *Server) setupRoutes() http.Handler {
 	})
 	r.Get("/server/about", s.handleAboutPage)
 	r.Get("/about", s.handleAboutPage)
+	r.Get(apiBase+"/server/about", s.handleAboutAPI)
 	r.Get("/server/docs", s.handleDocsPage)
 	r.Get("/docs", s.handleDocsPage)
 
@@ -602,11 +1144,55 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get(apiBase+"/server/privacy", s.handlePrivacyAPI)
 	r.Get("/server/contact", s.handleContactPage)
 	r.Post("/server/contact", s.requireCSRF(s.handleContactPage))
+	r.Get(apiBase+"/server/contact", s.handleContactAPI)
 	r.Post(apiBase+"/server/contact", s.handleContactAPI)
+	r.Get("/server/security/report/{tracking_id}", s.handleSecurityReportStatus)
+	// Anonymous owner tokens (AI.md PART 12 — Owner Token Management).
+	r.Get("/server/preferences", s.handlePreferencesPage)
+	r.Post("/server/preferences", s.requireCSRF(s.handlePreferencesPage))
+	r.Get(apiBase+"/server/preferences", s.handlePreferencesAPI)
+	r.Post(apiBase+"/server/preferences", s.handlePreferencesAPI)
+	r.Get("/server/preferences/sync", s.handlePreferencesSyncPage)
+	r.Post("/server/preferences/sync", s.requireCSRF(s.handlePreferencesSyncPage))
+	r.Get(apiBase+"/server/preferences/sync", s.handlePreferencesSyncAPI)
+	r.Get("/server/preferences/sync/import", s.handlePreferencesSyncImportPage)
+	r.Get(apiBase+"/server/preferences/sync/import", s.handlePreferencesSyncImportAPI)
+	r.Method(http.MethodGet, "/server/preferences/tokens", s.refreshOwnerCookie(http.HandlerFunc(s.handleOwnerTokensPage)))
+	r.Method(http.MethodPost, "/server/preferences/token/create", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleIssuePrimaryTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/token/restore", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRestoreOwnerTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/token/reveal", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRevealPrimaryTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/token/rotate", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRotateTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/token/revoke", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRevokePrimaryTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/tokens", s.refreshOwnerCookie(s.requireCSRF(s.handleCreateLinkedTokenPage)))
+	r.Method(http.MethodPost, "/server/preferences/tokens/{id}/reveal", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRevealLinkedTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/tokens/{id}/rotate", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRotateTokenPage))))
+	r.Method(http.MethodPost, "/server/preferences/tokens/{id}/update", s.refreshOwnerCookie(s.requireCSRF(s.handleUpdateLinkedTokenPage)))
+	r.Method(http.MethodPost, "/server/preferences/tokens/{id}/revoke", s.refreshOwnerCookie(s.requireCSRF(s.handleRevokeLinkedTokenPage)))
+	r.Method(http.MethodPost, "/server/preferences/token/forget", s.refreshOwnerCookie(s.requireCSRF(s.handleForgetOwnerTokenPage)))
+	r.Get(apiBase+"/server/preferences/tokens", s.handleListOwnerTokensAPI)
+	r.Post(apiBase+"/server/preferences/tokens/primary", s.strictRateLimit(s.handleIssuePrimaryTokenAPI))
+	r.Post(apiBase+"/server/preferences/tokens/primary/reveal", s.strictRateLimit(s.handleRevealPrimaryTokenAPI))
+	r.Post(apiBase+"/server/preferences/tokens/primary/rotate", s.strictRateLimit(s.handleRotatePrimaryTokenAPI))
+	r.Delete(apiBase+"/server/preferences/tokens/primary", s.strictRateLimit(s.handleRevokePrimaryTokenAPI))
+	r.Post(apiBase+"/server/preferences/tokens", s.handleCreateLinkedTokenAPI)
+	r.Post(apiBase+"/server/preferences/tokens/{id}/reveal", s.strictRateLimit(s.handleRevealLinkedTokenAPI))
+	r.Post(apiBase+"/server/preferences/tokens/{id}/rotate", s.strictRateLimit(s.handleRotateLinkedTokenAPI))
+	r.Patch(apiBase+"/server/preferences/tokens/{id}", s.handleUpdateLinkedTokenAPI)
+	r.Delete(apiBase+"/server/preferences/tokens/{id}", s.handleRevokeLinkedTokenAPI)
 	r.Get("/server/help", s.handleHelpPage)
 	r.Get(apiBase+"/server/help", s.handleHelpAPI)
+	r.Get("/server/help/mcp", s.handleMCPHelpPage)
+	r.Get(apiBase+"/server/help/mcp", s.handleMCPHelpAPI)
 	r.Get("/server/terms", s.handleTermsPage)
 	r.Get(apiBase+"/server/terms", s.handleTermsAPI)
+	r.Get("/server/dpo", s.handleDPOPage)
+	r.Get(apiBase+"/server/dpo", s.handleDPOAPI)
+	r.Get("/server/security", s.handleSecurityPage)
+	r.Get("/server/security/policy", s.handleSecurityPolicyPage)
+	r.Get("/server/security/thanks", s.handleSecurityThanksPage)
+	r.Get(apiBase+"/server/security", s.handleSecurityAPI)
+	r.Get(apiBase+"/server/security/policy", s.handleSecurityPolicyAPI)
+	r.Get(apiBase+"/server/security/thanks", s.handleSecurityThanksAPI)
 
 	// Cookie consent / CCPA opt-out (AI.md PART 16)
 	r.Post("/server/consent", s.requireCSRF(s.handleConsent))
@@ -622,8 +1208,9 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// GraphQL endpoints (AI.md PART 14)
 	r.Get("/server/docs/graphql", s.handleGraphiQL)
-	r.Post("/api/graphql", s.requireCSRF(s.handleGraphQL))
-	r.Post(apiBase+"/server/graphql", s.requireCSRF(s.handleGraphQL))
+	r.Post("/server/docs/graphql", s.requireCSRF(s.handleGraphiQL))
+	r.Post("/api/graphql", s.handleGraphQL)
+	r.Post(apiBase+"/server/graphql", s.handleGraphQL)
 
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
 	r.Get("/whois", s.handleWHOISPage)
@@ -672,12 +1259,14 @@ func (s *Server) setupRoutes() http.Handler {
 	// Catch-all 404 for all unmatched paths
 	r.NotFound(s.handleNotFound)
 
-	return r
+	s.apiRouter = r
+	return s.offlineCacheSignal(s.baseURLRouter(apiContentNegotiation(r)))
 }
 
 // setupMiddleware configures the middleware chain per AI.md PART 5.
 // The last handler applied is the outermost wrapper and therefore runs FIRST on each request.
-// Execution order (first → last): URLNormalize → RequestID → PathSecurity →
+// Recovery wraps the complete chain; request context is attached before it runs.
+// Execution order (first → last): recovery → URLNormalize → RequestID → PathSecurity →
 // SecurityHeaders → Language → Allowlist → Blocklist → RateLimit → GeoIP → Auth → Logging → Metrics
 func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	if s.metrics != nil {
@@ -690,14 +1279,14 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	handler = AuthMiddleware(handler)
 	// 8. GeoIP country block/allow enforcement.
 	handler = GeoIPMiddleware(s.geoip, s.config.GeoIP.DenyCountries, s.config.GeoIP.AllowCountries, s.config.TrustedProxies.Additional)(handler)
-	// 7. Rate limiting — use configured read limit as the global header default.
-	handler = RateLimitMiddleware(s.ratelimit, s.config.RateLimit.Read.Requests, s.config.RateLimit.Read.Window)(handler)
+	// 7. Rate limiting — configured endpoint class plus global burst ceiling.
+	handler = s.configuredRateLimitMiddleware(handler)
 	// 6. Blocklist — blocks denied IPs before rate-limit accounting.
 	handler = BlocklistMiddleware(handler)
 	// 5. Allowlist — enforces IP allowlist before blocklist.
 	handler = AllowlistMiddleware(handler)
 	// 4a. Request-language detection (project-specific, between security headers and allowlist).
-	handler = LanguageMiddleware(handler)
+	handler = s.languageMiddleware(handler)
 	// 4. Security response headers + Sec-Fetch validation (AI.md PART 11).
 	handler = SecFetchValidationMiddleware(handler)
 	handler = SecurityHeadersMiddleware(s.config.FQDN, s.config.APIVersion, s.config.TLS.Enabled, s.config.Debug)(handler)
@@ -709,7 +1298,7 @@ func (s *Server) setupMiddleware(handler http.Handler) http.Handler {
 	handler = RequestIDMiddleware(handler)
 	// 1. URL normalization — outermost, runs first on every request.
 	handler = URLNormalizeMiddleware(handler)
-	return handler
+	return withServerContext(s, s.recoveryMiddleware(handler))
 }
 
 // handleWHOIS handles WHOIS lookup requests.
@@ -762,11 +1351,18 @@ func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
 
 // getPIDFilePath returns the PID file path based on privilege level (AI.md PART 23).
 func (s *Server) getPIDFilePath() string {
+	if s.pidFileOverride != "" {
+		return filepath.Clean(s.pidFileOverride)
+	}
 	// System-wide PID file when running as root.
 	if os.Geteuid() == 0 {
-		return "/var/run/" + constants.InternalOrg + "/" + constants.InternalName + ".pid"
+		return filepath.Join("/var/run", constants.InternalOrg, constants.InternalName, constants.InternalName+".pid")
 	}
-	// User-specific PID file otherwise.
+	// User-specific PID files live inside the resolved data directory so --data
+	// and DATA_DIR continue to work after startup has resolved the paths.
+	if s.config != nil && strings.TrimSpace(s.config.DataDir) != "" {
+		return filepath.Join(s.config.DataDir, constants.InternalName+".pid")
+	}
 	homeDir, _ := os.UserHomeDir()
 	return filepath.Join(homeDir, ".local", "share", constants.InternalOrg, constants.InternalName, constants.InternalName+".pid")
 }
@@ -786,7 +1382,7 @@ func (s *Server) handleMetrics() http.Handler {
 			got := []byte(r.Header.Get("Authorization"))
 			if subtle.ConstantTimeCompare(got, expected) != 1 {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="Metrics"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				writeRequestError(w, r, http.StatusUnauthorized)
 				return
 			}
 
@@ -811,94 +1407,86 @@ func (s *Server) handleMetrics() http.Handler {
 // handleSecurityTxt serves security.txt file (AI.md PART 14)
 // REQUIRED: ALL projects MUST serve a valid security.txt file
 func (s *Server) handleSecurityTxt(w http.ResponseWriter, r *http.Request) {
-	// Default contact email
-	contact := "security@" + s.config.FQDN
-	if contact == "security@" {
-		contact = "security@localhost"
+	now := time.Now().UTC()
+	reportURL := s.config.Web.Security.ReportURL
+	if reportURL == "" {
+		reportURL = constants.RepoURL + "/security/advisories/new"
 	}
-
-	// Expiry date: 1 year from now
-	expiryDate := time.Now().AddDate(1, 0, 0).Format("2006-01-02T15:04:05Z")
-
-	// Generate security.txt content
-	content := fmt.Sprintf(`# Security Contact Information
-Contact: mailto:%s
-Expires: %s
-Preferred-Languages: en
-`, contact, expiryDate)
+	content := fmt.Sprintf("Contact: %s\n", reportURL)
+	if reportURL := s.securityReportURL(r.Context(), r, now); reportURL != "" {
+		content += fmt.Sprintf("Contact: %s\n", reportURL)
+	}
+	if contact := s.securityEmail(); contact != "" {
+		content += "Contact: mailto:" + contact + "\n"
+	}
+	content += fmt.Sprintf("Policy: %s\nExpires: %s\nPreferred-Languages: en\n", s.BuildURL(r, "/server/security/policy"), s.securityExpires(now))
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, content)
+	_, _ = fmt.Fprint(w, content)
 }
 
 // handleSitemap serves dynamically generated sitemap.xml (AI.md PART 16)
 // REQUIRED: ALL projects MUST serve a dynamically generated sitemap
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	// Base URL
-	baseURL := "http://localhost:" + fmt.Sprintf("%d", s.config.Port)
-	if s.config.FQDN != "" {
-		baseURL = "https://" + s.config.FQDN
+	lastMod := time.Now().UTC().Format("2006-01-02")
+	type sitemapPage struct {
+		path, frequency, priority string
 	}
-
-	// Last modified date
-	lastMod := time.Now().Format("2006-01-02")
-
-	// Generate sitemap XML
-	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>%s/</loc>
-    <lastmod>%s</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>%s/about</loc>
-    <lastmod>%s</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>%s/docs</loc>
-    <lastmod>%s</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-</urlset>
-`, baseURL, lastMod, baseURL, lastMod, baseURL, lastMod)
+	pages := []sitemapPage{
+		{path: "/", frequency: "daily", priority: "1.0"},
+		{path: "/about", frequency: "weekly", priority: "0.8"},
+		{path: "/docs", frequency: "weekly", priority: "0.8"},
+		{path: "/server/docs/swagger", frequency: "weekly", priority: "0.7"},
+		{path: "/server/docs/graphql", frequency: "weekly", priority: "0.7"},
+		{path: "/server/privacy", frequency: "weekly", priority: "0.8"},
+		{path: "/server/help", frequency: "weekly", priority: "0.8"},
+		{path: "/server/terms", frequency: "weekly", priority: "0.8"},
+		{path: "/server/dpo", frequency: "weekly", priority: "0.8"},
+		{path: "/server/security", frequency: "weekly", priority: "0.8"},
+		{path: "/server/security/policy", frequency: "weekly", priority: "0.8"},
+	}
+	for _, page := range s.registeredPages("help") {
+		for _, registered := range serverPageRegistry {
+			if registered.Path == page.Path && registered.Sitemap {
+				pages = append(pages, sitemapPage{path: page.Path, frequency: "weekly", priority: "0.8"})
+				break
+			}
+		}
+	}
+	var body strings.Builder
+	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
+	for _, page := range pages {
+		var escapedURL strings.Builder
+		_ = xml.EscapeText(&escapedURL, []byte(s.BuildURL(r, page.path)))
+		fmt.Fprintf(&body, "  <url><loc>%s</loc><lastmod>%s</lastmod><changefreq>%s</changefreq><priority>%s</priority></url>\n", escapedURL.String(), lastMod, page.frequency, page.priority)
+	}
+	body.WriteString("</urlset>\n")
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, content)
+	_, _ = w.Write([]byte(body.String()))
 }
 
 // handleRobotsTxt serves robots.txt file (AI.md PART 14)
 func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
-	sitemapURL := fmt.Sprintf("http://localhost:%d/sitemap.xml", s.config.Port)
-	if s.config.FQDN != "" {
-		sitemapURL = "https://" + s.config.FQDN + "/sitemap.xml"
-	}
+	sitemapURL := s.BuildURL(r, "/sitemap.xml")
 
 	content := fmt.Sprintf("User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: %s\n", sitemapURL)
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, content)
+	_, _ = fmt.Fprint(w, content)
 }
 
 // handleLLMsTxt serves llms.txt for AI agent discovery (AI.md PART 14).
 // Required for ALL projects. Tells AI agents what the application does and
 // what API endpoints are available.
 func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
-	baseURL := fmt.Sprintf("http://localhost:%d", s.config.Port)
-	if s.config.FQDN != "" {
-		baseURL = "https://" + s.config.FQDN
-	}
-
 	// Security contact
-	securityContact := "security@" + s.config.FQDN
-	if s.config.FQDN == "" {
+	_, requestHost, _ := s.GetURLVars(r)
+	securityContact := "security@" + requestHost
+	if requestHost == "" {
 		securityContact = "security@localhost"
 	}
 
@@ -908,23 +1496,24 @@ func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
 		rateLimit = 100
 	}
 
+	apiBase := s.config.APIBasePath()
 	content := fmt.Sprintf(`# caswhois
 > WHOIS lookup service with domain, IP, and ASN queries
 
 ## API
-Base URL: %s/api/v1
+Base URL: %s
 Authentication: Bearer token (optional for public endpoints)
 Rate limit: %d requests/minute
 
 ## Endpoints
-- GET /api/v1/server/healthz - Health check (no auth)
-- GET /api/v1/whois/{query} - Auto-detect lookup (domain/IP/ASN)
-- GET /api/v1/whois/domain/{domain} - Domain WHOIS lookup
-- GET /api/v1/whois/ip/{ip} - IP WHOIS lookup
-- GET /api/v1/whois/asn/{asn} - ASN WHOIS lookup
-- GET /api/v1/whois/validate/{query} - Validate query without lookup
-- GET /api/v1/whois/search?q={owner} - Search by owner/registrant
-- POST /api/v1/whois/bulk - Bulk lookup (requires token)
+- GET %s/server/healthz - Health check (no auth)
+- GET %s/whois/{query} - Auto-detect lookup (domain/IP/ASN)
+- GET %s/whois/domain/{domain} - Domain WHOIS lookup
+- GET %s/whois/ip/{ip} - IP WHOIS lookup
+- GET %s/whois/asn/{asn} - ASN lookup
+- GET %s/whois/validate/{query} - Validate query without lookup
+- GET %s/whois/search?owner={owner} - Search by owner/registrant
+- POST %s/whois/bulk - Bulk lookup (requires token)
 
 ## Capabilities
 - Domain WHOIS lookups with parsed fields
@@ -941,11 +1530,11 @@ Rate limit: %d requests/minute
 ## Contact
 API issues: %s
 Security: %s
-`, baseURL, rateLimit, securityContact, securityContact)
+`, s.BuildURL(r, apiBase), rateLimit, apiBase, apiBase, apiBase, apiBase, apiBase, apiBase, apiBase, apiBase, securityContact, securityContact)
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, content)
+	_, _ = fmt.Fprint(w, content)
 }
 
 // handleWellKnownNotFound returns 404 for unknown /.well-known/* entries.
@@ -953,7 +1542,7 @@ Security: %s
 func (s *Server) handleWellKnownNotFound(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprint(w, "404 Not Found\n")
+	_, _ = fmt.Fprint(w, "404 Not Found\n")
 }
 
 // wellKnownMethodCheck is middleware that enforces GET/HEAD only for /.well-known/*.
@@ -964,7 +1553,7 @@ func wellKnownMethodCheck(next http.Handler) http.Handler {
 			w.Header().Set("Allow", "GET, HEAD")
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			fmt.Fprint(w, "405 Method Not Allowed\n")
+			_, _ = fmt.Fprint(w, "405 Method Not Allowed\n")
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -75,7 +75,7 @@ type schedulerTaskInfo struct {
 }
 
 // handleSchedulerStatus returns the list of registered scheduler tasks.
-// GET /api/v1/server/schedulers  (requires server token)
+// GET /api/{api_version}/server/schedulers  (requires server token)
 func (s *Server) handleSchedulerStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		SendError(w, ErrMethodNotAllowed, "Method not allowed")
@@ -115,7 +115,7 @@ func (s *Server) handleSchedulerStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSchedulerRun triggers an immediate run of a named task.
-// POST /api/v1/server/schedulers/run?task=<id>  (requires server token)
+// POST /api/{api_version}/server/schedulers/run?task=<id>  (requires server token)
 func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendError(w, ErrMethodNotAllowed, "Method not allowed")
@@ -154,7 +154,7 @@ type backupInfo struct {
 }
 
 // handleBackupStatus lists available backups.
-// GET /api/v1/server/backups  (requires server token)
+// GET /api/{api_version}/server/backups  (requires server token)
 func (s *Server) handleBackupStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		SendError(w, ErrMethodNotAllowed, "Method not allowed")
@@ -198,7 +198,7 @@ func (s *Server) handleBackupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBackupRun triggers an immediate backup.
-// POST /api/v1/server/backups/run  (requires server token)
+// POST /api/{api_version}/server/backups/run  (requires server token)
 func (s *Server) handleBackupRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendError(w, ErrMethodNotAllowed, "Method not allowed")

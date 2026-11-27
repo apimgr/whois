@@ -1,0 +1,34 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "swagger.subtitle"}}">
+<title>{{t .Lang "swagger.title"}} — {{.Name}}</title>
+
+<link rel="stylesheet" href="{{path "/static/vendor/swagger-ui/swagger-ui.css"}}">
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <div class="container section-pad container-md">
+    <header class="page-header">
+      <h1 class="page-title">{{t .Lang "swagger.title"}}</h1>
+      <p class="page-lead">{{t .Lang "swagger.subtitle"}}</p>
+    </header>
+    <section class="section-card" aria-labelledby="swagger-details-heading">
+      <h2 id="swagger-details-heading">{{t .Lang "common.details"}}</h2>
+      <p><a href="{{.SpecURL}}">{{t .Lang "swagger.open_schema"}}</a></p>
+      <div id="swagger-ui" data-spec-url="{{.SpecURL}}">
+        <p>{{t .Lang "swagger.enable_js"}}</p>
+      </div>
+      <noscript><p>{{t .Lang "swagger.enable_js"}} <a href="{{.SpecURL}}">{{t .Lang "swagger.open_schema"}}</a></p></noscript>
+    </section>
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+<script defer src="{{path "/static/vendor/swagger-ui/swagger-ui-bundle.js"}}"></script>
+<script defer src="{{path "/static/vendor/swagger-ui/swagger-ui-standalone-preset.js"}}"></script>
+{{end}}
+
+{{template "public.tmpl" .}}

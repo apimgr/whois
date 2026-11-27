@@ -102,6 +102,23 @@ func TestAllowBasic(t *testing.T) {
 	}
 }
 
+func TestAllowWithLimitUsesLiveSettings(t *testing.T) {
+	l := New(10, time.Minute)
+	defer l.Close()
+	if !l.AllowWithLimit("key", 1, time.Minute) {
+		t.Fatal("first request should be allowed")
+	}
+	if l.AllowWithLimit("key", 1, time.Minute) {
+		t.Fatal("second request should be denied under one-request limit")
+	}
+	if !l.AllowWithLimit("key", 2, time.Minute) {
+		t.Fatal("live limit increase should permit the second request")
+	}
+	if !l.IsLimitedWithLimit("key", 2, time.Minute) {
+		t.Fatal("updated limit should be exhausted")
+	}
+}
+
 // TestAllowIndependentKeys confirms two different keys do not share quota.
 func TestAllowIndependentKeys(t *testing.T) {
 	l := New(1, time.Minute)

@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apimgr/whois/src/client/config"
 	"github.com/apimgr/whois/src/client/display"
@@ -22,9 +24,16 @@ import (
 var (
 	Version      = "dev"
 	CommitID     = "unknown"
-	BuildDate    = "unknown"
+	BuildEpoch   = "0"
+	BuildDate    = "N/A"
 	OfficialSite = ""
 )
+
+func init() {
+	if epoch, err := strconv.ParseInt(BuildEpoch, 10, 64); err == nil && epoch > 0 {
+		BuildDate = time.Unix(epoch, 0).UTC().Format(time.RFC3339)
+	}
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))

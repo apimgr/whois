@@ -8,9 +8,9 @@ import (
 )
 
 type cronField struct {
-	values    map[int]bool
-	wildcard  bool
-	min, max  int
+	values   map[int]bool
+	wildcard bool
+	min, max int
 }
 
 func nextScheduledTime(schedule string, after time.Time, location *time.Location) (time.Time, error) {

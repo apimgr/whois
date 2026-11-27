@@ -126,7 +126,7 @@ func (b *Bootstrap) downloadFile(ctx context.Context, client *http.Client, url, 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -140,9 +140,9 @@ func (b *Bootstrap) downloadFile(ctx context.Context, client *http.Client, url, 
 	}
 
 	_, err = io.Copy(f, resp.Body)
-	f.Close()
+	_ = f.Close()
 	if err != nil {
-		os.Remove(tmpDest)
+		_ = os.Remove(tmpDest)
 		return err
 	}
 

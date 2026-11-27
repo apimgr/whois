@@ -1,0 +1,53 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "health.title"}} — {{.AppName}}">
+<title>{{t .Lang "health.title"}} — {{.AppName}}</title>
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <div class="container container-md">
+    <header class="page-header">
+      <h1 class="page-title">{{t .Lang "health.title"}}</h1>
+      <p>{{.Project.Description}}</p>
+    </header>
+    <section class="card section-card" aria-labelledby="health-summary">
+      <h2 id="health-summary">{{t .Lang "health.status"}}</h2>
+      <p><strong>{{if eq .Status "healthy"}}{{t .Lang "health.healthy"}}{{else if eq .Status "degraded"}}{{t .Lang "health.degraded"}}{{else}}{{t .Lang "health.unhealthy"}}{{end}}</strong></p>
+      <dl>
+        <dt>{{t .Lang "health.version"}}</dt><dd>{{.Version}}</dd>
+        <dt>{{t .Lang "health.uptime"}}</dt><dd>{{.UptimeDisplay}}</dd>
+        <dt>{{t .Lang "health.mode"}}</dt><dd>{{if eq .Mode "production"}}{{t .Lang "health.production"}}{{else}}{{t .Lang "health.development"}}{{end}}</dd>
+      </dl>
+    </section>
+    <section class="card section-card" aria-labelledby="health-checks">
+      <h2 id="health-checks">{{t .Lang "health.checks"}}</h2>
+      <dl>
+        <dt>{{t .Lang "health.database"}}</dt><dd>{{if eq .Checks.Database "ok"}}{{t .Lang "health.ok"}}{{else}}{{t .Lang "health.error"}}{{end}}</dd>
+        <dt>{{t .Lang "health.cache"}}</dt><dd>{{if eq .Checks.Cache "ok"}}{{t .Lang "health.ok"}}{{else}}{{t .Lang "health.error"}}{{end}}</dd>
+        <dt>{{t .Lang "health.disk"}}</dt><dd>{{if eq .Checks.Disk "ok"}}{{t .Lang "health.ok"}}{{else}}{{t .Lang "health.error"}}{{end}}</dd>
+        <dt>{{t .Lang "health.scheduler"}}</dt><dd>{{if eq .Checks.Scheduler "ok"}}{{t .Lang "health.ok"}}{{else}}{{t .Lang "health.error"}}{{end}}</dd>
+        {{if .Checks.Tor}}<dt>{{t .Lang "health.tor"}}</dt><dd>{{if eq .Checks.Tor "ok"}}{{t .Lang "health.ok"}}{{else if eq .Checks.Tor "degraded"}}{{t .Lang "health.degraded"}}{{else}}{{t .Lang "health.error"}}{{end}}</dd>{{end}}
+        {{if .Checks.I2P}}<dt>{{t .Lang "health.i2p"}}</dt><dd>{{if eq .Checks.I2P "ok"}}{{t .Lang "health.ok"}}{{else if eq .Checks.I2P "degraded"}}{{t .Lang "health.degraded"}}{{else}}{{t .Lang "health.error"}}{{end}}</dd>{{end}}
+      </dl>
+    </section>
+    {{if .Features.Tor.Enabled}}<section class="card section-card" aria-labelledby="health-tor">
+      <h2 id="health-tor">{{t .Lang "health.tor"}}</h2>
+      <p>{{if eq .Features.Tor.Status "healthy"}}{{t .Lang "health.healthy"}}{{else if eq .Features.Tor.Status "starting"}}{{t .Lang "health.starting"}}{{else if eq .Features.Tor.Status "unavailable"}}{{t .Lang "health.unavailable"}}{{else}}{{t .Lang "health.disabled"}}{{end}}</p>
+      {{if .Features.Tor.Hostname}}<p><code>{{.Features.Tor.Hostname}}</code></p>{{end}}
+    </section>{{end}}
+    {{if .Features.I2P.Enabled}}<section class="card section-card" aria-labelledby="health-i2p">
+      <h2 id="health-i2p">{{t .Lang "health.i2p"}}</h2>
+      <p>{{if eq .Features.I2P.Status "healthy"}}{{t .Lang "health.healthy"}}{{else if eq .Features.I2P.Status "starting"}}{{t .Lang "health.starting"}}{{else if eq .Features.I2P.Status "unavailable"}}{{t .Lang "health.unavailable"}}{{else}}{{t .Lang "health.disabled"}}{{end}}</p>
+      {{if .Features.I2P.Hostname}}<p><code>{{.Features.I2P.Hostname}}</code></p>{{end}}
+    </section>{{end}}
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

@@ -118,7 +118,7 @@ func TestNewGeoIPManager_EnabledNoDBs(t *testing.T) {
 	if !m.Enabled() {
 		t.Error("Enabled() = false, want true")
 	}
-	m.Close()
+	_ = m.Close()
 }
 
 // TestLookup_InvalidIP confirms an invalid IP string returns an error when the
@@ -134,7 +134,7 @@ func TestLookup_InvalidIP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	_, err = m.Lookup("not-an-ip")
 	if err == nil {
@@ -155,7 +155,7 @@ func TestLookup_NilDBs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	result, err := m.Lookup("192.168.1.1")
 	if err != nil {
@@ -189,7 +189,7 @@ func TestLookup_IPv6_NilDBs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	result, err := m.Lookup("2001:db8::1")
 	if err != nil {
@@ -208,7 +208,7 @@ func TestUpdateDatabases_NoDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	before := time.Now()
 	ctx := context.Background()
@@ -313,7 +313,7 @@ func TestNewGeoIPManager_DirCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	if _, statErr := os.Stat(newDir); os.IsNotExist(statErr) {
 		t.Errorf("expected directory %q to be created", newDir)
@@ -415,7 +415,7 @@ func TestEnabled_True(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	if !m.Enabled() {
 		t.Error("Enabled() = false, want true")
 	}
@@ -428,7 +428,7 @@ func TestLastUpdate_AfterUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGeoIPManager: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	before := time.Now()
 	if err := m.UpdateDatabases(context.Background(), DatabaseConfig{}); err != nil {
@@ -486,7 +486,7 @@ func TestDownloadDatabase_Success(t *testing.T) {
 	content := []byte("fake mmdb content for testing")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer srv.Close()
 
@@ -629,7 +629,7 @@ func TestLoadDatabases_ASN_Success(t *testing.T) {
 		t.Error("expected m.asnDB to be non-nil after successful load")
 	}
 	// Clean up the reader.
-	m.asnDB.Close()
+	_ = m.asnDB.Close()
 }
 
 // TestLoadDatabases_Country_Success verifies the success branch for Country DB.
@@ -644,7 +644,7 @@ func TestLoadDatabases_Country_Success(t *testing.T) {
 	if m.countryDB == nil {
 		t.Error("expected m.countryDB to be non-nil after successful load")
 	}
-	m.countryDB.Close()
+	_ = m.countryDB.Close()
 }
 
 // TestLoadDatabases_City_Success verifies the success branch for City DBs (both
@@ -664,8 +664,8 @@ func TestLoadDatabases_City_Success(t *testing.T) {
 	if m.cityDBv6 == nil {
 		t.Error("expected m.cityDBv6 to be non-nil after successful load")
 	}
-	m.cityDBv4.Close()
-	m.cityDBv6.Close()
+	_ = m.cityDBv4.Close()
+	_ = m.cityDBv6.Close()
 }
 
 // TestLoadDatabases_WHOIS_Success verifies loadDatabases sets whoisEnabled when
@@ -778,7 +778,7 @@ func TestLookup_WithASNReader(t *testing.T) {
 		enabled: true,
 		asnDB:   r,
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	result, err := m.Lookup("1.2.3.4")
 	if err != nil {
@@ -816,7 +816,7 @@ func TestLookup_WithAllReaders(t *testing.T) {
 		cityDBv6:     openReader(),
 		whoisEnabled: true,
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	result, err := m.Lookup("2001:db8::1")
 	if err != nil {
@@ -861,7 +861,7 @@ func TestUpdateDatabases_WithValidReload(t *testing.T) {
 	if lu.Before(before) || lu.After(after) {
 		t.Errorf("LastUpdate() = %v, expected between %v and %v", lu, before, after)
 	}
-	m.Close()
+	_ = m.Close()
 }
 
 // ---------------------------------------------------------------------------

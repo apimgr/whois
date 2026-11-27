@@ -9,38 +9,45 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// registerDebugRoutes registers debug endpoints (--debug / DEBUG=true only).
-// All debug routes are under /debug/. In production without --debug, requests
-// to /debug/* fall through to handleNotFound returning 404 (PART 6).
+// registerDebugRoutes registers operator-protected debug endpoints only when
+// debug mode is explicitly enabled.
 func (s *Server) registerDebugRoutes(r chi.Router) {
 	if !s.config.IsDebug() {
 		return
 	}
 
-	// pprof endpoints
-	r.HandleFunc("/debug/pprof/", pprof.Index)
-	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	r.Handle("/debug/pprof/heap", pprof.Handler("heap"))
-	r.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	r.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
-	r.Handle("/debug/pprof/block", pprof.Handler("block"))
-	r.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
-	r.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	r.Route("/debug", func(debug chi.Router) {
+		debug.Use(s.requireOperatorToken)
+		debug.HandleFunc("/pprof", pprof.Index)
+		debug.HandleFunc("/pprof/", pprof.Index)
+		debug.HandleFunc("/pprof/cmdline", pprof.Cmdline)
+		debug.HandleFunc("/pprof/profile", pprof.Profile)
+		debug.HandleFunc("/pprof/symbol", pprof.Symbol)
+		debug.HandleFunc("/pprof/trace", pprof.Trace)
+		debug.Handle("/pprof/heap", pprof.Handler("heap"))
+		debug.Handle("/pprof/goroutine", pprof.Handler("goroutine"))
+		debug.Handle("/pprof/allocs", pprof.Handler("allocs"))
+		debug.Handle("/pprof/block", pprof.Handler("block"))
+		debug.Handle("/pprof/mutex", pprof.Handler("mutex"))
+		debug.Handle("/pprof/threadcreate", pprof.Handler("threadcreate"))
+		debug.Handle("/vars", expvar.Handler())
+		debug.Get("/config", s.handleDebugConfig)
+		debug.Get("/routes", s.handleDebugRoutes)
+		debug.Get("/cache", s.handleDebugCache)
+		debug.Get("/db", s.handleDebugDB)
+		debug.Get("/scheduler", s.handleDebugScheduler)
+		debug.Get("/memory", s.handleDebugMemory)
+		debug.Get("/goroutines", s.handleDebugGoroutines)
+		debug.Get("/error500", s.handleDebugError500)
+	})
+}
 
-	// expvar
-	r.Handle("/debug/vars", expvar.Handler())
-
-	// Custom debug endpoints
-	r.Get("/debug/config", s.handleDebugConfig)
-	r.Get("/debug/routes", s.handleDebugRoutes)
-	r.Get("/debug/cache", s.handleDebugCache)
-	r.Get("/debug/db", s.handleDebugDB)
-	r.Get("/debug/scheduler", s.handleDebugScheduler)
-	r.Get("/debug/memory", s.handleDebugMemory)
-	r.Get("/debug/goroutines", s.handleDebugGoroutines)
+func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.requireToken(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})(w, r)
+	})
 }
 
 // handleDebugConfig returns sanitized configuration.
@@ -48,49 +55,29 @@ func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, s.config.Sanitized())
 }
 
-// handleDebugRoutes returns a static list of all registered API and debug routes.
+// handleDebugRoutes reports the routes registered on the current server.
 func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
-	routes := []map[string]string{
-		{"method": "GET", "route": "/server/healthz"},
-		{"method": "GET", "route": "/api/v1/server/healthz"},
-		{"method": "GET", "route": "/healthz"},
-		{"method": "GET", "route": "/metrics"},
-		{"method": "GET", "route": "/.well-known/security.txt"},
-		{"method": "GET", "route": "/sitemap.xml"},
-		{"method": "GET", "route": "/robots.txt"},
-		{"method": "GET", "route": "/"},
-		{"method": "GET", "route": "/about"},
-		{"method": "GET", "route": "/server/about"},
-		{"method": "GET", "route": "/docs"},
-		{"method": "GET", "route": "/server/docs"},
-		{"method": "GET", "route": "/whois"},
-		{"method": "GET", "route": "/api/v1/whois/{query}"},
-		{"method": "GET", "route": "/api/v1/whois/domain/{domain}"},
-		{"method": "GET", "route": "/api/v1/whois/ip/{ip}"},
-		{"method": "GET", "route": "/api/v1/whois/asn/{asn}"},
-		{"method": "GET", "route": "/api/v1/whois/validate/{query}"},
-		{"method": "POST", "route": "/api/v1/whois/bulk"},
-		{"method": "GET", "route": "/api/v1/whois-servers"},
-		{"method": "GET", "route": "/api/v1/server/stats"},
-		{"method": "GET", "route": "/api/v1/server/schedulers"},
-		{"method": "POST", "route": "/api/v1/server/schedulers/run"},
-		{"method": "GET", "route": "/api/v1/server/backups"},
-		{"method": "POST", "route": "/api/v1/server/backups/run"},
-		{"method": "GET", "route": "/debug/pprof/"},
-		{"method": "GET", "route": "/debug/vars"},
-		{"method": "GET", "route": "/debug/config"},
-		{"method": "GET", "route": "/debug/routes"},
-		{"method": "GET", "route": "/debug/cache"},
-		{"method": "GET", "route": "/debug/db"},
-		{"method": "GET", "route": "/debug/scheduler"},
-		{"method": "GET", "route": "/debug/memory"},
-		{"method": "GET", "route": "/debug/goroutines"},
+	routes := make([]map[string]string, 0)
+	if s.apiRouter == nil {
+		SendError(w, ErrServerError, "Routes are unavailable")
+		return
+	}
+	if err := chi.Walk(s.apiRouter, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		routes = append(routes, map[string]string{"method": method, "route": route})
+		return nil
+	}); err != nil {
+		SendError(w, ErrServerError, "Failed to walk routes")
+		return
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"count":  len(routes),
 		"routes": routes,
 	})
+}
+
+func (s *Server) handleDebugError500(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Deterministic debug error", http.StatusInternalServerError)
 }
 
 // handleDebugMemory returns memory statistics.
@@ -124,7 +111,7 @@ func (s *Server) handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.cache.Stats(r.Context())
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "SERVER_ERROR", "message": "Failed to get cache stats"})
+		writeLocalizedAPIError(w, http.StatusInternalServerError, ErrServerError, requestErrorLanguage(r))
 		return
 	}
 	respondJSON(w, http.StatusOK, stats)
@@ -132,11 +119,11 @@ func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
 
 // handleDebugDB returns database connection pool statistics.
 func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
-	if s.database == nil || s.database.Server == nil {
-		respondJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "SERVER_ERROR", "message": "Database not available"})
+	if s.database == nil || s.database.Read() == nil {
+		writeLocalizedAPIError(w, http.StatusServiceUnavailable, ErrMaintenance, requestErrorLanguage(r))
 		return
 	}
-	stats := s.database.Server.Stats()
+	stats := s.database.Read().Stats()
 	respondJSON(w, http.StatusOK, map[string]any{
 		"open_connections":    stats.OpenConnections,
 		"in_use":              stats.InUse,
@@ -151,7 +138,7 @@ func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
 // handleDebugScheduler returns scheduler task status.
 func (s *Server) handleDebugScheduler(w http.ResponseWriter, r *http.Request) {
 	if s.scheduler == nil {
-		respondJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "SERVER_ERROR", "message": "Scheduler not available"})
+		writeLocalizedAPIError(w, http.StatusServiceUnavailable, ErrMaintenance, requestErrorLanguage(r))
 		return
 	}
 	tasks := s.scheduler.Status()

@@ -73,7 +73,7 @@ func CheckCLIUpdates(serverURL, currentVersion string) (*UpdateInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("autodiscover request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("autodiscover returned status %d", resp.StatusCode)
@@ -120,7 +120,7 @@ func PerformCLIUpdate(serverURL, currentVersion string) error {
 	if err != nil {
 		return fmt.Errorf("download binary: %w", err)
 	}
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	// Verify checksum
 	if info.Checksum != "" {
@@ -223,7 +223,7 @@ func InstallUpdate(info *UpdateInfo) error {
 	if err != nil {
 		return fmt.Errorf("download binary: %w", err)
 	}
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	// Verify checksum
 	if err := verifyChecksum(tempFile, info.Checksum); err != nil {
@@ -329,7 +329,7 @@ func getLatestRelease(channel UpdateChannel) (*Release, error) {
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("no updates available (404)")
@@ -433,7 +433,7 @@ func getRecentReleases(channel UpdateChannel) ([]Release, error) {
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -516,31 +516,31 @@ func downloadBinary(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
-	defer tempFile.Close()
+	defer func() { _ = tempFile.Close() }()
 
 	// Download file
 	client := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
-		os.Remove(tempFile.Name())
+		_ = os.Remove(tempFile.Name())
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		os.Remove(tempFile.Name())
+		_ = os.Remove(tempFile.Name())
 		return "", fmt.Errorf("download failed: status %d", resp.StatusCode)
 	}
 
 	// Copy content
 	if _, err := io.Copy(tempFile, resp.Body); err != nil {
-		os.Remove(tempFile.Name())
+		_ = os.Remove(tempFile.Name())
 		return "", fmt.Errorf("copy content: %w", err)
 	}
 
 	// Make executable
 	if err := os.Chmod(tempFile.Name(), 0755); err != nil {
-		os.Remove(tempFile.Name())
+		_ = os.Remove(tempFile.Name())
 		return "", fmt.Errorf("set executable: %w", err)
 	}
 
@@ -567,7 +567,7 @@ func fetchExpectedChecksum(release *Release, assetName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download failed: status %d", resp.StatusCode)
@@ -599,7 +599,7 @@ func verifyChecksum(filePath, expectedChecksum string) error {
 	if err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Calculate SHA-256
 	h := sha256.New()

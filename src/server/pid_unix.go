@@ -15,6 +15,8 @@ import (
 	"github.com/apimgr/whois/src/common/constants"
 )
 
+func pidFileSupported() bool { return true }
+
 // CheckPIDFile checks if PID file exists and if the process is still running
 // Returns: (isRunning bool, pid int, err error)
 func CheckPIDFile(pidPath string) (bool, int, error) {
@@ -33,21 +35,21 @@ func CheckPIDFile(pidPath string) (bool, int, error) {
 	pid, err := strconv.Atoi(parts[0])
 	if err != nil {
 		// Corrupt PID file - remove it
-		os.Remove(pidPath)
+		_ = os.Remove(pidPath)
 		return false, 0, nil
 	}
 
 	// Check if process is running
 	if !isProcessRunning(pid) {
 		// Stale PID file - remove it
-		os.Remove(pidPath)
+		_ = os.Remove(pidPath)
 		return false, 0, nil
 	}
 
 	// Process exists - verify it's actually our process (not PID reuse)
 	if !isOurProcess(pid) {
 		// PID was reused by another process - remove stale file
-		os.Remove(pidPath)
+		_ = os.Remove(pidPath)
 		return false, 0, nil
 	}
 
@@ -109,7 +111,11 @@ func WritePIDFile(pidPath string, port int) error {
 	// Write our PID with port (format: PID:PORT)
 	pid := os.Getpid()
 	content := fmt.Sprintf("%d:%d\n", pid, port)
-	if err := os.WriteFile(pidPath, []byte(content), 0644); err != nil {
+	mode := os.FileMode(0644)
+	if os.Geteuid() != 0 {
+		mode = 0600
+	}
+	if err := os.WriteFile(pidPath, []byte(content), mode); err != nil {
 		return fmt.Errorf("failed to write pid file: %w", err)
 	}
 

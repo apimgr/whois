@@ -129,7 +129,7 @@ func QueryWHOISWithCache(ctx context.Context, query string, c cache.Cache) (*WHO
 	if err != nil {
 		if c != nil {
 			failureKey := cache.WHOISFailureKey(query)
-			c.Set(ctx, failureKey, []byte("1"), cache.DefaultTTLs.Failure)
+			_ = c.Set(ctx, failureKey, []byte("1"), cache.DefaultTTLs.Failure)
 		}
 		return nil, fmt.Errorf("WHOIS query failed: %w", err)
 	}
@@ -178,7 +178,7 @@ func QueryWHOISWithCache(ctx context.Context, query string, c cache.Cache) (*WHO
 		}
 
 		if data, err := json.Marshal(result); err == nil {
-			c.Set(ctx, cache.WHOISKey(query), data, ttl)
+			_ = c.Set(ctx, cache.WHOISKey(query), data, ttl)
 		}
 	}
 
@@ -192,10 +192,12 @@ func tcpQuery(server, query string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("connection failed: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Set read/write deadlines
-	conn.SetDeadline(time.Now().Add(30 * time.Second))
+	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		return "", err
+	}
 
 	// Send query
 	_, err = fmt.Fprintf(conn, "%s\r\n", query)

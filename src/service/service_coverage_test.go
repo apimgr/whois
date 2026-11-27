@@ -6,7 +6,6 @@ package service
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -64,11 +63,11 @@ func pipeStdin(t *testing.T, input string) {
 	}
 	orig := os.Stdin
 	os.Stdin = r
-	fmt.Fprint(w, input)
-	w.Close()
+	_, _ = fmt.Fprint(w, input)
+	_ = w.Close()
 	t.Cleanup(func() {
 		os.Stdin = orig
-		r.Close()
+		_ = r.Close()
 	})
 }
 
@@ -221,7 +220,7 @@ func TestUninstall_YesPrompt_NotElevated_CannotEscalate(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	pipeStdin(t, "y\n")
 	withElevated(t, false, func() {
@@ -249,7 +248,7 @@ func TestUninstall_YesPrompt_NotElevated_CanEscalate_Decline(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	// "y" accepts the uninstall warning; "n" declines escalation.
 	pipeStdin(t, "y\nn\n")
@@ -282,7 +281,7 @@ func TestDisable_SystemService_NotElevated_CannotEscalate(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withElevated(t, false, func() {
 		withCanEscalate(t, false, func() {
@@ -308,7 +307,7 @@ func TestDisable_SystemService_NotElevated_CanEscalate_Decline(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	pipeStdin(t, "n\n")
 	withElevated(t, false, func() {
@@ -339,7 +338,7 @@ func TestStart_SystemService_NotElevated(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withElevated(t, false, func() {
 		if err := sm.Start(); err == nil {
@@ -362,7 +361,7 @@ func TestStop_SystemService_NotElevated(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withElevated(t, false, func() {
 		if err := sm.Stop(); err == nil {
@@ -385,7 +384,7 @@ func TestRestart_SystemService_NotElevated(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withElevated(t, false, func() {
 		if err := sm.Restart(); err == nil {
@@ -408,7 +407,7 @@ func TestReload_SystemService_NotElevated(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withElevated(t, false, func() {
 		if err := sm.Reload(); err == nil {
@@ -439,7 +438,7 @@ func TestIsSystemServiceInstalled_SystemdPath(t *testing.T) {
 	if err := os.WriteFile(svcPath, []byte("[Unit]\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(svcPath) })
+	t.Cleanup(func() { _ = os.Remove(svcPath) })
 
 	if !sm.isSystemServiceInstalled() {
 		t.Error("isSystemServiceInstalled() = false, want true for /etc/systemd/system path")
@@ -464,7 +463,7 @@ func TestIsSystemServiceInstalled_InitdPath(t *testing.T) {
 	if err := os.WriteFile(initdPath, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(initdPath) })
+	t.Cleanup(func() { _ = os.Remove(initdPath) })
 
 	if !sm.isSystemServiceInstalled() {
 		t.Error("isSystemServiceInstalled() = false, want true for /etc/init.d path")
@@ -485,7 +484,7 @@ func TestDisable_Systemd_SystemService(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withManager(t, "systemd", func() {
 		// systemctl disable fails (not running), but the branch is covered.
@@ -513,7 +512,7 @@ func TestInstallSystemd_WithDir(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	svcPath := filepath.Join(dir, sm.Name+".service")
-	t.Cleanup(func() { os.Remove(svcPath) })
+	t.Cleanup(func() { _ = os.Remove(svcPath) })
 
 	// The function returns an error because systemctl is not running in the
 	// container, but the WriteFile step completes successfully first.
@@ -544,7 +543,7 @@ func TestInstallRCD_WithDir(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	scriptPath := filepath.Join(dir, sm.Name)
-	t.Cleanup(func() { os.Remove(scriptPath) })
+	t.Cleanup(func() { _ = os.Remove(scriptPath) })
 
 	withManager(t, "rcd", func() {
 		_ = sm.installRCD()
@@ -573,9 +572,9 @@ func TestInstallRunit_ServiceDirPresent(t *testing.T) {
 	}
 	linkPath := "/etc/service/" + sm.Name
 	t.Cleanup(func() {
-		os.Remove(linkPath)
-		os.RemoveAll("/etc/sv/" + sm.Name)
-		os.RemoveAll("/var/log/apimgr/" + sm.Name)
+		_ = os.Remove(linkPath)
+		_ = os.RemoveAll("/etc/sv/" + sm.Name)
+		_ = os.RemoveAll("/var/log/apimgr/" + sm.Name)
 	})
 
 	withManager(t, "runit", func() {
@@ -610,7 +609,7 @@ func TestUninstallSystemd_UserServicePath(t *testing.T) {
 	if err := os.WriteFile(userSvcPath, []byte("[Unit]\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(userSvcPath) })
+	t.Cleanup(func() { _ = os.Remove(userSvcPath) })
 
 	if err := sm.uninstallSystemd(); err != nil {
 		t.Errorf("uninstallSystemd() returned error: %v", err)
@@ -645,7 +644,7 @@ func TestUninstallLaunchd_UserAgentPath(t *testing.T) {
 	if err := os.WriteFile(plistPath, []byte("<?xml?>\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(plistPath) })
+	t.Cleanup(func() { _ = os.Remove(plistPath) })
 
 	if err := sm.uninstallLaunchd(); err != nil {
 		t.Errorf("uninstallLaunchd() returned error: %v", err)
@@ -669,6 +668,17 @@ func TestEnsureServiceUser_UserAlreadyExists(t *testing.T) {
 	}
 }
 
+func TestEnsureServiceDirectories(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "service-data")
+	sm := &ServiceManager{Name: "root", ServiceDirs: []string{dir}}
+	if err := sm.ensureServiceDirectories(); err != nil {
+		t.Fatalf("ensureServiceDirectories() error: %v", err)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("service directory was not created: %v", err)
+	}
+}
+
 // TestEnsureServiceUser_NewUser confirms ensureServiceUser creates a new system
 // group and user when neither exists (Alpine Linux: addgroup/adduser path).
 func TestEnsureServiceUser_NewUser(t *testing.T) {
@@ -676,10 +686,9 @@ func TestEnsureServiceUser_NewUser(t *testing.T) {
 		t.Skip("root required to create system users")
 	}
 	name := "caswhois-cov-svcusr"
-	sm := &ServiceManager{Name: name, DisplayName: name, Description: "coverage test user"}
+	sm := &ServiceManager{Name: name, DisplayName: name, Description: "coverage test user", DataDir: t.TempDir()}
 	t.Cleanup(func() {
-		exec.Command("deluser", name).Run()
-		exec.Command("delgroup", name).Run()
+		_ = sm.removeCreatedServiceAccount()
 	})
 	if err := sm.ensureServiceUser(); err != nil {
 		t.Errorf("ensureServiceUser() returned error: %v", err)
@@ -764,7 +773,7 @@ func TestUninstallSystemd_SystemPath(t *testing.T) {
 	if err := os.WriteFile(svcPath, []byte("[Unit]\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(svcPath) })
+	t.Cleanup(func() { _ = os.Remove(svcPath) })
 
 	if err := sm.uninstallSystemd(); err != nil {
 		t.Errorf("uninstallSystemd() unexpected error: %v", err)
@@ -798,9 +807,9 @@ func TestUninstallLaunchd_SystemPath(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	t.Cleanup(func() {
-		os.Remove(plistPath)
+		_ = os.Remove(plistPath)
 		// Remove the directory only if it was empty before our test.
-		os.Remove(systemDir)
+		_ = os.Remove(systemDir)
 	})
 
 	if err := sm.uninstallLaunchd(); err != nil {
@@ -831,7 +840,7 @@ func TestDisable_RCD_WithRcConf(t *testing.T) {
 	if err := os.WriteFile(rcConf, []byte(enableLine), 0644); err != nil {
 		t.Skipf("cannot write /etc/rc.conf: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(rcConf) })
+	t.Cleanup(func() { _ = os.Remove(rcConf) })
 
 	withManager(t, "rcd", func() {
 		if err := sm.disable(); err != nil {
@@ -870,8 +879,8 @@ func TestInstallRCD_WithRcConf(t *testing.T) {
 		t.Skipf("cannot write /etc/rc.conf: %v", err)
 	}
 	t.Cleanup(func() {
-		os.Remove(scriptPath)
-		os.Remove(rcConf)
+		_ = os.Remove(scriptPath)
+		_ = os.Remove(rcConf)
 	})
 
 	withManager(t, "rcd", func() {
@@ -900,7 +909,7 @@ func TestStartStop_Systemd_SystemService(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	// isSystemServiceInstalled() returns true because /etc/sv/<name> exists.
 	// systemctl will fail (not running), but the exec stmts are covered.
@@ -924,7 +933,7 @@ func TestRestartReload_Systemd_SystemService(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withManager(t, "systemd", func() {
 		_ = sm.restart()
@@ -950,7 +959,7 @@ func TestStatus_Systemd_SystemService(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	withManager(t, "systemd", func() {
 		// systemctl fails (not running), but the cmd assignment stmt is covered.
@@ -981,8 +990,8 @@ func TestStart_Launchd_SystemPlist(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	t.Cleanup(func() {
-		os.Remove(plistPath)
-		os.Remove(systemDir)
+		_ = os.Remove(plistPath)
+		_ = os.Remove(systemDir)
 	})
 
 	withManager(t, "launchd", func() {
@@ -1014,8 +1023,8 @@ func TestDisable_Launchd_SystemPlist(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	t.Cleanup(func() {
-		os.Remove(plistPath)
-		os.Remove(systemDir)
+		_ = os.Remove(plistPath)
+		_ = os.Remove(systemDir)
 	})
 
 	withManager(t, "launchd", func() {
@@ -1045,8 +1054,8 @@ func TestInstallLaunchd_WithDir(t *testing.T) {
 	}
 	plistPath := filepath.Join(systemDir, "io.github.apimgr."+sm.Name+".plist")
 	t.Cleanup(func() {
-		os.Remove(plistPath)
-		os.Remove(systemDir)
+		_ = os.Remove(plistPath)
+		_ = os.Remove(systemDir)
 	})
 
 	withManager(t, "launchd", func() {
@@ -1082,7 +1091,7 @@ func TestDetectServiceManagerImpl_RCSubr(t *testing.T) {
 	if err := os.WriteFile("/etc/rc.subr", []byte("# placeholder\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove("/etc/rc.subr") })
+	t.Cleanup(func() { _ = os.Remove("/etc/rc.subr") })
 	withoutContainer(t, func() {
 		got := detectServiceManagerImpl()
 		if got != "rcd" {
@@ -1140,7 +1149,7 @@ func TestDisable_SystemService_NotElevated_CanEscalate_Accept(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Skipf("cannot create %s (not root?): %v", svcDir, err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	// Empty response accepts escalation (default yes).
 	pipeStdin(t, "\n")
@@ -1167,7 +1176,7 @@ func TestUninstall_YesPrompt_NotElevated_CanEscalate_Accept(t *testing.T) {
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
 		t.Skipf("cannot create %s (not root?): %v", svcDir, err)
 	}
-	t.Cleanup(func() { os.RemoveAll(svcDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(svcDir) })
 
 	// "y\n" accepts the uninstall warning; "\n" (empty) accepts escalation.
 	pipeStdin(t, "y\n\n")

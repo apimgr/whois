@@ -261,7 +261,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check for auth-required responses - skip these endpoints per spec
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {

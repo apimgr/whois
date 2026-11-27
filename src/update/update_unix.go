@@ -29,7 +29,9 @@ func replaceBinary(currentPath, newBinaryPath string) error {
 	// Move new binary to current path
 	if err := os.Rename(newBinaryPath, currentPath); err != nil {
 		// Restore backup on failure
-		os.Rename(backupPath, currentPath)
+		if restoreErr := os.Rename(backupPath, currentPath); restoreErr != nil {
+			return fmt.Errorf("failed to replace binary: %w (also failed to restore backup: %v)", err, restoreErr)
+		}
 		return fmt.Errorf("failed to replace binary: %w", err)
 	}
 
@@ -39,7 +41,7 @@ func replaceBinary(currentPath, newBinaryPath string) error {
 	}
 
 	// Remove backup
-	os.Remove(backupPath)
+	_ = os.Remove(backupPath)
 
 	return nil
 }

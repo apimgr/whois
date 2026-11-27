@@ -1,0 +1,25 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "security.policy_description"}}">
+<title>{{t .Lang "security.policy_title"}} — {{.AppName}}</title>
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <div class="container container-md">
+    <header class="page-header"><h1 class="page-title">{{t .Lang "security.policy_title"}}</h1><p class="page-lead">{{t .Lang "security.policy_description"}}</p></header>
+    <section class="card section-card" aria-labelledby="policy-content-heading">
+      <h2 id="policy-content-heading">{{t .Lang "common.details"}}</h2>
+      {{.Policy | markdownToHTMLSection}}
+    </section>
+    <p><a href="{{path "/server/security"}}">{{t .Lang "security.other_reports"}}</a></p>
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

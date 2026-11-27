@@ -7,32 +7,27 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/apimgr/whois/src/common/constants"
 )
 
-// serverTokenHash caches SHA-256(config.ServerToken) at startup so we never
-// re-compute it on every request and never compare the raw token directly.
-var (
-	serverTokenHashOnce sync.Once
-	serverTokenHashVal  []byte
-)
-
 // getServerTokenHash returns the cached SHA-256 hash of the server token.
 func (s *Server) getServerTokenHash() []byte {
-	serverTokenHashOnce.Do(func() {
+	s.serverTokenHashOnce.Do(func() {
 		h := sha256.Sum256([]byte(s.config.ServerToken))
-		serverTokenHashVal = h[:]
+		s.serverTokenHash = h
 	})
-	return serverTokenHashVal
+	return s.serverTokenHash[:]
 }
 
 // requireToken returns an http.HandlerFunc that requires a valid server token.
-// Token is expected as: Authorization: Bearer tok_...
+// Token is expected as: Authorization: Bearer adm_...
 // Comparison is done via constant-time SHA-256 to prevent timing oracles.
 func (s *Server) requireToken(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s.authFailureBlocked(w, r) {
+			return
+		}
 		token := extractBearerToken(r)
 		if token == "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm=%q`, constants.InternalName))
@@ -46,6 +41,14 @@ func (s *Server) requireToken(next http.HandlerFunc) http.HandlerFunc {
 		// Compare against server token hash (constant-time)
 		expected := s.getServerTokenHash()
 		if subtle.ConstantTimeCompare(incoming[:], expected) != 1 {
+			if _, err := s.lookupOwnerToken(r.Context(), token); err == nil {
+				w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+				SendError(w, ErrForbidden, "Operator token required")
+				return
+			}
+			if s.recordAuthFailure(w, r) {
+				return
+			}
 			// Token format valid but hash does not match — 401 with generic message
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm=%q`, constants.InternalName))
 			SendError(w, ErrUnauthorized, "Invalid token")

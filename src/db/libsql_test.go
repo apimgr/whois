@@ -72,6 +72,38 @@ func TestBuildLibSQLDSN_ExistingAuthTokenNotDuplicated(t *testing.T) {
 	}
 }
 
+func TestDatabaseObjectName(t *testing.T) {
+	tests := []struct {
+		driver string
+		name   string
+		want   string
+	}{
+		{driver: "sqlite", name: "api_tokens", want: "api_tokens"},
+		{driver: "libsql", name: "api_tokens", want: "srv_api_tokens"},
+		{driver: "turso", name: "idx_api_tokens_primary", want: "srv_idx_api_tokens_primary"},
+		{driver: "libsql", name: "srv_api_tokens", want: "srv_api_tokens"},
+		{driver: "libsql", name: "token_hash", want: "token_hash"},
+	}
+	for _, test := range tests {
+		if got := DatabaseObjectName(test.driver, test.name); got != test.want {
+			t.Errorf("DatabaseObjectName(%q, %q) = %q, want %q", test.driver, test.name, got, test.want)
+		}
+	}
+}
+
+func TestRewriteLibSQLQueryPrefixesSchemaObjects(t *testing.T) {
+	query := "CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_linked_owner_name ON api_tokens(owner_id, name) WHERE kind = 'linked' AND name IS NOT NULL /* api_tokens */"
+	want := "CREATE UNIQUE INDEX IF NOT EXISTS srv_idx_api_tokens_linked_owner_name ON srv_api_tokens(owner_id, name) WHERE kind = 'linked' AND name IS NOT NULL /* api_tokens */"
+	if got := rewriteLibSQLQuery(query); got != want {
+		t.Fatalf("rewriteLibSQLQuery() = %q, want %q", got, want)
+	}
+	query = `SELECT name FROM sqlite_master WHERE name = 'api_tokens' AND type = 'table'`
+	want = `SELECT name FROM sqlite_master WHERE name = 'srv_api_tokens' AND type = 'table'`
+	if got := rewriteLibSQLQuery(query); got != want {
+		t.Fatalf("rewriteLibSQLQuery(metadata) = %q, want %q", got, want)
+	}
+}
+
 // --- NewLibSQL / New dispatch ---
 //
 // No live libsql/Turso server is available in the test environment, so these

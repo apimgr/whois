@@ -1,0 +1,35 @@
+{{define "page_head"}}
+<title>{{t .Lang "preferences.sync"}} — {{.Name}}</title>
+{{end}}
+
+{{define "page_content"}}
+<main id="main-content" class="container container-sm">
+    <header class="page-header">
+      <nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{path "/server/preferences"}}">{{t .Lang "owner_tokens.back_preferences"}}</a></nav>
+      <h1 class="page-title">{{t .Lang "preferences.sync"}}</h1>
+    </header>
+    {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+    <section class="card section-card" aria-labelledby="export-heading">
+      <h2 id="export-heading">{{t .Lang "preferences.export"}}</h2>
+      <label for="sync-url">{{t .Lang "preferences.export_url"}}</label>
+      <p id="sync-url" class="copy-value selectable-text">{{.PreferencesURL}}</p>
+      <button class="btn-secondary copy-token" type="button" data-copy-target="sync-url">{{t .Lang "owner_tokens.copy"}}</button>
+      <label for="sync-code">{{t .Lang "preferences.export_code"}}</label>
+      <p id="sync-code" class="copy-value selectable-text">{{.PreferencesCode}}</p>
+      <button class="btn-secondary copy-token" type="button" data-copy-target="sync-code">{{t .Lang "owner_tokens.copy"}}</button>
+    </section>
+    <form class="card section-card" aria-labelledby="import-heading" method="post" action="{{path "/server/preferences/sync"}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <h2 id="import-heading">{{t .Lang "preferences.import"}}</h2>
+      <label for="sync-input">{{t .Lang "preferences.import_code"}}</label>
+      <input id="sync-input" name="code" autocomplete="off">
+      <button class="btn-primary" type="submit">{{t .Lang "preferences.import"}}</button>
+    </form>
+  </main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

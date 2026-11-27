@@ -63,7 +63,7 @@ func openTasksDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("create whois_records: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -78,15 +78,15 @@ func newTasksScheduler(t *testing.T) *Scheduler {
 	return s
 }
 
-// TestRegisterBuiltInTasks verifies all 13 built-in tasks are registered without error.
+// TestRegisterBuiltInTasks verifies all built-in tasks are registered without error.
 func TestRegisterBuiltInTasks(t *testing.T) {
 	s := newTasksScheduler(t)
 	if err := s.RegisterBuiltInTasks(); err != nil {
 		t.Fatalf("RegisterBuiltInTasks: %v", err)
 	}
 	tasks := s.GetTasks()
-	if len(tasks) != 13 {
-		t.Errorf("got %d tasks, want 13", len(tasks))
+	if len(tasks) != 16 {
+		t.Errorf("got %d tasks, want 16", len(tasks))
 	}
 }
 
@@ -98,6 +98,8 @@ func TestRegisterBuiltInTasks_IDs(t *testing.T) {
 	}
 	requiredIDs := []string{
 		"token_cleanup",
+		"security_cleanup",
+		"secret_rotation",
 		"log_rotation",
 		"backup_daily",
 		"backup_hourly",
@@ -107,6 +109,7 @@ func TestRegisterBuiltInTasks_IDs(t *testing.T) {
 		"cve_update",
 		"healthcheck_self",
 		"tor_health",
+		"i2p_health",
 		"whois_records_refresh",
 		"rdap_bootstrap_update",
 		"update_check",
@@ -343,6 +346,18 @@ func TestTaskTorHealth_WithHook(t *testing.T) {
 	}
 }
 
+func TestTaskI2PHealthHook(t *testing.T) {
+	s := newTasksScheduler(t)
+	called := false
+	s.I2PHealthHook = func(context.Context) error { called = true; return nil }
+	if err := s.taskI2PHealth(context.Background()); err != nil {
+		t.Fatalf("taskI2PHealth: %v", err)
+	}
+	if !called {
+		t.Fatal("I2P health hook was not called")
+	}
+}
+
 // TestTaskHealthCheck_Passes verifies taskHealthCheck succeeds on a live DB.
 func TestTaskHealthCheck_Passes(t *testing.T) {
 	s := newTasksScheduler(t)
@@ -367,7 +382,7 @@ func TestTaskHealthCheck_ClosedDB(t *testing.T) {
 		t.Fatalf("create table: %v", err)
 	}
 	s, _ := New(db, "UTC", 5*time.Minute)
-	db.Close()
+	_ = db.Close()
 	if err := s.taskHealthCheck(context.Background()); err == nil {
 		t.Error("taskHealthCheck expected error on closed DB, got nil")
 	}
@@ -411,13 +426,13 @@ func TestTaskTokenCleanup_RemovesRevoked(t *testing.T) {
 	}
 
 	var count int
-	s.db.QueryRow("SELECT COUNT(*) FROM api_tokens").Scan(&count)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM api_tokens").Scan(&count)
 	if count != 1 {
 		t.Errorf("expected 1 token remaining, got %d", count)
 	}
 
 	var id string
-	s.db.QueryRow("SELECT id FROM api_tokens").Scan(&id)
+	_ = s.db.QueryRow("SELECT id FROM api_tokens").Scan(&id)
 	if id != "active_token" {
 		t.Errorf("remaining token id = %q, want active_token", id)
 	}

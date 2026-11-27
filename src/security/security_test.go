@@ -28,6 +28,41 @@ func TestHashPasswordAndVerify(t *testing.T) {
 	}
 }
 
+func TestEncryptAESGCM_RoundTripAndAuthentication(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	plaintext := "own_EXAMPLE_TOKEN_VALUE"
+	encrypted, err := EncryptAESGCM(key, plaintext)
+	if err != nil {
+		t.Fatalf("EncryptAESGCM: %v", err)
+	}
+	if strings.HasPrefix(encrypted, plaintext) {
+		t.Fatal("encrypted output contains plaintext prefix")
+	}
+	decrypted, err := DecryptAESGCM(key, encrypted)
+	if err != nil || decrypted != plaintext {
+		t.Fatalf("DecryptAESGCM() = %q, %v; want original plaintext", decrypted, err)
+	}
+
+	wrongKey := []byte("fedcba9876543210fedcba9876543210")
+	if _, err := DecryptAESGCM(wrongKey, encrypted); err == nil {
+		t.Fatal("DecryptAESGCM accepted a ciphertext with the wrong key")
+	}
+	tampered := []byte(encrypted)
+	tampered[len(encryptedValuePrefix)+20] ^= 1
+	if _, err := DecryptAESGCM(key, string(tampered)); err == nil {
+		t.Fatal("DecryptAESGCM accepted a tampered ciphertext")
+	}
+}
+
+func TestEncryptAESGCM_RejectsInvalidInputs(t *testing.T) {
+	if _, err := EncryptAESGCM([]byte("short"), "value"); err == nil {
+		t.Fatal("EncryptAESGCM accepted a non-32-byte key")
+	}
+	if _, err := DecryptAESGCM(make([]byte, 32), "invalid"); err == nil {
+		t.Fatal("DecryptAESGCM accepted an unsupported format")
+	}
+}
+
 // TestHashPasswordFormat verifies the encoded string conforms to the
 // $argon2id$v=...$m=...,t=...,p=...$<salt>$<hash> format mandated by PART 11.
 func TestHashPasswordFormat(t *testing.T) {
@@ -264,7 +299,7 @@ func TestVerifyPasswordSpecialCharacters(t *testing.T) {
 	}
 }
 
-// TestGenerateToken verifies format, body length, hex encoding, and uniqueness.
+// TestGenerateToken verifies format, base62 body length, and uniqueness.
 func TestGenerateToken(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -290,14 +325,13 @@ func TestGenerateToken(t *testing.T) {
 			}
 
 			body := token[len(expectedPrefix):]
-			// hex-encoded 32 random bytes = 64 chars
-			if len(body) != 64 {
-				t.Errorf("token body length = %d, want 64 (hex of 32 bytes)", len(body))
+			if len(body) != 32 {
+				t.Errorf("token body length = %d, want 32", len(body))
 			}
 
 			for i, c := range body {
-				if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-					t.Errorf("token body[%d] = %q is not lowercase hex", i, c)
+				if (c < '0' || c > '9') && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+					t.Errorf("token body[%d] = %q is not base62", i, c)
 					break
 				}
 			}
@@ -345,7 +379,7 @@ func TestHashToken(t *testing.T) {
 	}
 
 	for i, c := range h1 {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("HashToken output[%d] = %q is not lowercase hex", i, c)
 			break
 		}

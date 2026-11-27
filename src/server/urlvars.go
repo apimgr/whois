@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -93,14 +94,25 @@ func (s *Server) GetURLVars(r *http.Request) (proto, fqdn, port string) {
 	trusted := isTrustedPeer(peerHost, s.config.TrustedProxies.Additional)
 
 	// Priority 0: Tor detection bypasses the proxy header gate entirely.
-	if onionAddr := s.config.Tor.OnionAddress; onionAddr != "" {
+	if torService := s.currentTor(); torService != nil {
+		onionAddr := torService.OnionAddress()
 		host := r.Host
 		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h
 		}
-		if host == onionAddr {
+		if onionAddr != "" && strings.EqualFold(host, onionAddr) {
 			return "http", onionAddr, ""
 		}
+	}
+	if isI2PRequest, _ := r.Context().Value(i2pRequestContextKey{}).(bool); isI2PRequest {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		if svc := s.currentI2P(); svc != nil && svc.Address() != "" {
+			host = svc.Address()
+		}
+		return "http", strings.ToLower(host), ""
 	}
 
 	// Resolve FQDN from proxy headers (trusted peers only) or r.Host.
@@ -162,8 +174,68 @@ func (s *Server) GetURLVars(r *http.Request) (proto, fqdn, port string) {
 // :80 and :443 are never included per AI.md PART 12.
 func (s *Server) BuildURL(r *http.Request, urlPath string) string {
 	proto, fqdn, port := s.GetURLVars(r)
+	urlPath = s.withBaseURL(r, urlPath)
 	if port == "" {
 		return fmt.Sprintf("%s://%s%s", proto, fqdn, urlPath)
 	}
 	return fmt.Sprintf("%s://%s:%s%s", proto, fqdn, port, urlPath)
+}
+
+// GetBaseURL resolves the request's trusted reverse-proxy prefix before the
+// configured prefix, following AI.md PART 12.
+func (s *Server) GetBaseURL(r *http.Request) string {
+	peerHost, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if isTrustedPeer(peerHost, s.config.TrustedProxies.Additional) {
+		for _, header := range []string{"X-Forwarded-Prefix", "X-Forwarded-Path", "X-Script-Name"} {
+			if value := strings.TrimSpace(strings.SplitN(r.Header.Get(header), ",", 2)[0]); value != "" {
+				return normalizeBaseURL(value)
+			}
+		}
+	}
+	return normalizeBaseURL(s.config.BaseURL)
+}
+
+func normalizeBaseURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "/") || strings.ContainsAny(value, "?#\\") {
+		return ""
+	}
+	clean := path.Clean(value)
+	if clean == "." || clean == "/" {
+		return ""
+	}
+	return "/" + strings.Trim(clean, "/")
+}
+
+func (s *Server) withBaseURL(r *http.Request, urlPath string) string {
+	base := s.GetBaseURL(r)
+	if base == "" {
+		return "/" + strings.TrimLeft(urlPath, "/")
+	}
+	return base + "/" + strings.TrimLeft(urlPath, "/")
+}
+
+func (s *Server) baseURLRouter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		base := s.GetBaseURL(r)
+		if base != "" && (r.URL.Path == base || strings.HasPrefix(r.URL.Path, base+"/")) {
+			request := r.Clone(r.Context())
+			urlCopy := *r.URL
+			urlCopy.Path = strings.TrimPrefix(urlCopy.Path, base)
+			if urlCopy.Path == "" {
+				urlCopy.Path = "/"
+			}
+			request.URL = &urlCopy
+			next.ServeHTTP(w, request)
+			return
+		}
+		if base != "" && s.config.BaseURL != "" && s.config.BaseURL != "/" && r.URL.Path != base && !strings.HasPrefix(r.URL.Path, base+"/") {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

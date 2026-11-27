@@ -17,6 +17,8 @@ import (
 // stillActive is the Windows STILL_ACTIVE exit code (259 / 0x103).
 const stillActive = 259
 
+func pidFileSupported() bool { return false }
+
 // CheckPIDFile checks if PID file exists and if the process is still running
 // Returns: (isRunning bool, pid int, err error)
 func CheckPIDFile(pidPath string) (bool, int, error) {
@@ -111,7 +113,7 @@ func WritePIDFile(pidPath string, port int) error {
 	// Write our PID with port (format: PID:PORT)
 	pid := os.Getpid()
 	content := fmt.Sprintf("%d:%d\r\n", pid, port)
-	if err := os.WriteFile(pidPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(pidPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write pid file: %w", err)
 	}
 

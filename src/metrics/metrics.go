@@ -31,6 +31,8 @@ type Collector struct {
 	DBConnectionsOpen  prometheus.Gauge
 	DBConnectionsInUse prometheus.Gauge
 	DBErrorsTotal      *prometheus.CounterVec
+	DBBusyTotal        prometheus.Counter
+	DBWriteWait        prometheus.Histogram
 
 	// Cache metrics
 	CacheHitsTotal      *prometheus.CounterVec
@@ -46,8 +48,11 @@ type Collector struct {
 	SchedulerTaskFailures     *prometheus.CounterVec
 
 	// Authentication metrics
-	AuthAttemptsTotal  *prometheus.CounterVec
-	AuthSessionsActive prometheus.Gauge
+	AuthAttemptsTotal   *prometheus.CounterVec
+	AuthSessionsActive  prometheus.Gauge
+	RateLimitRequests   *prometheus.CounterVec
+	RateLimitBlocked    *prometheus.CounterVec
+	ContactBlockedTotal *prometheus.CounterVec
 
 	// System metrics (optional)
 	SystemCPU        prometheus.Gauge
@@ -66,6 +71,20 @@ type MetricsConfig struct {
 	Token           string
 	DurationBuckets []float64
 	SizeBuckets     []float64
+}
+
+// IncDBBusy records one SQLite lock contention event.
+func (c *Collector) IncDBBusy() {
+	if c != nil && c.DBBusyTotal != nil {
+		c.DBBusyTotal.Inc()
+	}
+}
+
+// ObserveDBWriteWait records elapsed time spent acquiring the SQLite writer.
+func (c *Collector) ObserveDBWriteWait(seconds float64) {
+	if c != nil && c.DBWriteWait != nil {
+		c.DBWriteWait.Observe(seconds)
+	}
 }
 
 // New creates a new metrics collector
@@ -215,6 +234,18 @@ func New(namespace string, cfg MetricsConfig) *Collector {
 		[]string{"operation", "error_type"},
 	)
 
+	c.DBBusyTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "db_busy_total",
+		Help:      "SQLite writes that encountered a busy or locked error and were retried",
+	})
+	c.DBWriteWait = promauto.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "db_write_wait_seconds",
+		Help:      "Time writes waited for the SQLite writer handle and file lock",
+		Buckets:   []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	})
+
 	// Cache metrics
 	c.CacheHitsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -317,6 +348,28 @@ func New(namespace string, cfg MetricsConfig) *Collector {
 		},
 	)
 
+	c.RateLimitRequests = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "ratelimit_requests_total",
+			Help:      "Total requests evaluated by rate limiters",
+		},
+		[]string{"limit", "status"},
+	)
+	c.RateLimitBlocked = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "ratelimit_blocked_total",
+			Help:      "Total requests blocked by rate limiters",
+		},
+		[]string{"limit"},
+	)
+	c.ContactBlockedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "contact_blocked_total",
+		Help:      "Contact submissions blocked or silently dropped by antispam rules",
+	}, []string{"reason"})
+
 	// System metrics (optional)
 	if cfg.IncludeSystem {
 		c.SystemCPU = promauto.NewGauge(
@@ -348,6 +401,26 @@ func New(namespace string, cfg MetricsConfig) *Collector {
 	c.AppStartTime.Set(float64(c.startTime.Unix()))
 
 	return c
+}
+
+// RecordRateLimit records a rate-limit decision without exposing client identifiers.
+func (c *Collector) RecordRateLimit(limit string, allowed bool) {
+	if c == nil || c.RateLimitRequests == nil || c.RateLimitBlocked == nil {
+		return
+	}
+	label := "per_endpoint"
+	switch limit {
+	case "global":
+		label = "global"
+	case "strict", "auth_failure":
+		label = "per_ip"
+	}
+	status := "allowed"
+	if !allowed {
+		status = "limited"
+		c.RateLimitBlocked.WithLabelValues(label).Inc()
+	}
+	c.RateLimitRequests.WithLabelValues(label, status).Inc()
 }
 
 // SetAppInfo sets the application info metric
@@ -385,11 +458,11 @@ func (c *Collector) UpdateSystemMetrics() {
 // Compiled regexps for NormalizePath — package-level to avoid repeated compilation.
 var (
 	reUUID          = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
-	reWhoisIP       = regexp.MustCompile(`^(/api/v1/whois/ip/)([^/]+)(.*)$`)
-	reWhoisDomain   = regexp.MustCompile(`^(/api/v1/whois/domain/)([^/]+)(.*)$`)
-	reWhoisASN      = regexp.MustCompile(`^(/api/v1/whois/asn/)([^/]+)(.*)$`)
-	reWhoisValidate = regexp.MustCompile(`^(/api/v1/whois/validate/)([^/]+)(.*)$`)
-	reWhoisGeneric  = regexp.MustCompile(`^(/api/v1/whois/)([^/]+)(.*)$`)
+	reWhoisIP       = regexp.MustCompile(`^(/api/v[0-9]+/whois/ip/)([^/]+)(.*)$`)
+	reWhoisDomain   = regexp.MustCompile(`^(/api/v[0-9]+/whois/domain/)([^/]+)(.*)$`)
+	reWhoisASN      = regexp.MustCompile(`^(/api/v[0-9]+/whois/asn/)([^/]+)(.*)$`)
+	reWhoisValidate = regexp.MustCompile(`^(/api/v[0-9]+/whois/validate/)([^/]+)(.*)$`)
+	reWhoisGeneric  = regexp.MustCompile(`^(/api/v[0-9]+/whois/)([^/]+)(.*)$`)
 )
 
 // NormalizePath normalizes URL path for metrics by replacing high-cardinality

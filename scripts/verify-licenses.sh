@@ -21,14 +21,14 @@ fi
 
 echo "✓ All licenses are compatible"
 
-# Generate license report
-echo "Generating license report..."
-go-licenses csv ./... > licenses.csv
-go-licenses save ./... --save_path=third_party_licenses
+# Reports are working files and must never be written into the repository.
+TEMP_PARENT="${TMPDIR:-/tmp}/apimgr"
+mkdir -p "$TEMP_PARENT"
+LICDIR=$(mktemp -d "$TEMP_PARENT/whois-XXXXXX")
+chmod 0700 "$LICDIR"
+trap 'rm -rf -- "$LICDIR"' EXIT
+echo "Generating license report in a private temporary directory..."
+go-licenses csv ./... > "$LICDIR/licenses.csv"
+go-licenses save ./... --save_path="$LICDIR/third_party_licenses"
 
-echo "✓ License report saved to licenses.csv and third_party_licenses/"
-echo ""
-echo "Next steps:"
-echo "1. Review licenses.csv"
-echo "2. Update LICENSE.md with any new dependencies"
-echo "3. Commit the changes"
+echo "✓ License report generated and removed after verification"

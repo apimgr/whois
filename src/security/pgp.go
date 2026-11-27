@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -59,7 +60,7 @@ func GeneratePGPKeypair(configDir, appName, contactEmail, installationSecret str
 	identity := appName + " Security"
 
 	cfg := &packet.Config{
-		DefaultHash:            8,
+		DefaultHash:            crypto.SHA256,
 		DefaultCipher:          packet.CipherAES256,
 		DefaultCompressionAlgo: packet.CompressionZLIB,
 		KeyLifetimeSecs:        pgpKeyExpirySecs,
@@ -127,7 +128,7 @@ func PublishPGPKey(configDir string, keyservers []string) error {
 			errs = append(errs, fmt.Errorf("POST %s: %w", ks, err))
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 400 {
 			errs = append(errs, fmt.Errorf("POST %s: HTTP %d", ks, resp.StatusCode))
 		}
@@ -257,6 +258,62 @@ func PGPPublicKeyFingerprint(configDir string) string {
 	return hex.EncodeToString(fp[:])
 }
 
+// ValidatePGPPublicKey parses an ASCII-armored public key and rejects empty or
+// private key rings before they can be used for report encryption.
+func ValidatePGPPublicKey(data []byte) error {
+	entities, err := pgpcrypto.ReadArmoredKeyRing(bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("parse PGP public key: %w", err)
+	}
+	if len(entities) == 0 {
+		return errors.New("PGP key is not a public key")
+	}
+	for _, entity := range entities {
+		if entity == nil || entity.PrimaryKey == nil || entity.PrivateKey != nil {
+			return errors.New("PGP key is not a public key")
+		}
+	}
+	return nil
+}
+
+// EncryptPGP encrypts plaintext for an ASCII-armored public key and returns an
+// ASCII-armored PGP message suitable for a secure email attachment or export.
+func EncryptPGP(publicKey, plaintext []byte) ([]byte, error) {
+	if err := ValidatePGPPublicKey(publicKey); err != nil {
+		return nil, err
+	}
+	entities, err := pgpcrypto.ReadArmoredKeyRing(bytes.NewReader(publicKey))
+	if err != nil {
+		return nil, fmt.Errorf("parse PGP public key: %w", err)
+	}
+	if len(entities) == 0 {
+		return nil, errors.New("PGP key is not a public key")
+	}
+	var message bytes.Buffer
+	writer, err := armor.Encode(&message, "PGP MESSAGE", nil)
+	if err != nil {
+		return nil, err
+	}
+	cipher, err := pgpcrypto.Encrypt(writer, entities, nil, nil, nil)
+	if err != nil {
+		_ = writer.Close()
+		return nil, fmt.Errorf("initialize PGP encryption: %w", err)
+	}
+	if _, err := cipher.Write(plaintext); err != nil {
+		_ = cipher.Close()
+		_ = writer.Close()
+		return nil, err
+	}
+	if err := cipher.Close(); err != nil {
+		_ = writer.Close()
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return message.Bytes(), nil
+}
+
 // writePublicKey serializes the entity's public key as ASCII-armored PGP to path.
 func writePublicKey(entity *pgpcrypto.Entity, path string) error {
 	var buf bytes.Buffer
@@ -265,10 +322,10 @@ func writePublicKey(entity *pgpcrypto.Entity, path string) error {
 		return fmt.Errorf("armor encode: %w", err)
 	}
 	if err := entity.Serialize(w); err != nil {
-		w.Close()
+		_ = w.Close()
 		return fmt.Errorf("serialize public key: %w", err)
 	}
-	w.Close()
+	_ = w.Close()
 
 	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write file: %w", err)
@@ -285,10 +342,10 @@ func writeEncryptedPrivateKey(entity *pgpcrypto.Entity, path, installationSecret
 		return fmt.Errorf("armor encode: %w", err)
 	}
 	if err := entity.SerializePrivate(w, nil); err != nil {
-		w.Close()
+		_ = w.Close()
 		return fmt.Errorf("serialize private key: %w", err)
 	}
-	w.Close()
+	_ = w.Close()
 
 	encrypted, err := aesEncrypt(buf.Bytes(), installationSecret)
 	if err != nil {
@@ -308,6 +365,52 @@ func decryptPrivateKey(path, installationSecret string) ([]byte, error) {
 		return nil, fmt.Errorf("read file: %w", err)
 	}
 	return aesDecrypt(encrypted, installationSecret)
+}
+
+// PGPPrivateKeyReadable reports whether installationSecret decrypts the
+// stored private key without changing it.
+func PGPPrivateKeyReadable(configDir string, installationSecret []byte) bool {
+	_, err := decryptPrivateKey(filepath.Join(pgpSecDir(configDir), PGPPrivateKeyFile), string(installationSecret))
+	return err == nil
+}
+
+// ReencryptPGPPrivateKey changes the installation secret protecting the
+// existing private key without changing the public key or fingerprint.
+func ReencryptPGPPrivateKey(configDir, oldSecret, newSecret string) error {
+	path := filepath.Join(pgpSecDir(configDir), PGPPrivateKeyFile)
+	plain, err := decryptPrivateKey(path, oldSecret)
+	if err != nil {
+		return fmt.Errorf("decrypt existing PGP private key: %w", err)
+	}
+	encrypted, err := aesEncrypt(plain, newSecret)
+	if err != nil {
+		return fmt.Errorf("encrypt PGP private key: %w", err)
+	}
+	tmp, err := os.CreateTemp(pgpSecDir(configDir), ".pgp-private-*")
+	if err != nil {
+		return fmt.Errorf("create temporary private-key file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(encrypted); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace encrypted private key: %w", err)
+	}
+	return nil
 }
 
 // aesEncrypt encrypts plaintext with AES-256-GCM.

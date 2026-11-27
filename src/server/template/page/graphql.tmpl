@@ -1,0 +1,83 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "graphql.subtitle"}}">
+<title>{{t .Lang "graphql.title"}} — {{.Name}}</title>
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <div class="container section-pad container-md">
+    <header class="page-header">
+      <h1 class="page-title">{{t .Lang "graphql.title"}}</h1>
+      <p class="page-lead">{{t .Lang "graphql.subtitle"}}</p>
+    </header>
+    <section class="section-card" aria-labelledby="graphql-query-heading">
+      <h2 id="graphql-query-heading">{{t .Lang "graphql.query_label"}}</h2>
+    <p class="gql-meta">
+      {{t .Lang "graphql.endpoint_label"}}:
+      <code>{{.EndpointURL}}</code>
+    </p>
+
+    <form id="gql-form" action="{{path "/server/docs/graphql"}}" method="POST"
+      data-endpoint="{{.EndpointURL}}"
+      data-invalid-json="{{t .Lang "graphql.error_invalid_json"}}"
+      data-loading="{{t .Lang "common.loading"}}"
+      data-network-error="{{t .Lang "whois.error_network"}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="gql-layout">
+        <div class="gql-pane">
+          <label for="gql-query"><strong>{{t .Lang "graphql.query_label"}}</strong></label>
+          <textarea
+            id="gql-query" name="query"
+            class="gql-textarea"
+            aria-label="{{t .Lang "graphql.query_label"}}"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="none"
+          >{{.Query}}</textarea>
+
+          <label for="gql-vars"><strong>{{t .Lang "graphql.variables_label"}}</strong></label>
+          <textarea
+            id="gql-vars" name="variables"
+            class="gql-textarea gql-textarea-vars"
+            aria-label="{{t .Lang "graphql.variables_label"}}"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="none"
+          >{{.Variables}}</textarea>
+
+          <label for="gql-op"><strong>{{t .Lang "graphql.operation_label"}}</strong></label>
+          <input
+            id="gql-op" name="operationName" type="text"
+            class="search-input"
+            aria-label="{{t .Lang "graphql.operation_label"}}"
+            value="{{.OperationName}}"
+            autocorrect="off" autocapitalize="none"
+            spellcheck="false"
+          >
+
+          <div class="gql-run">
+            <button type="submit" class="btn-primary">{{t .Lang "graphql.submit"}}</button>
+          </div>
+        </div>
+
+        <div class="gql-pane">
+          <label><strong>{{t .Lang "graphql.response_label"}}</strong></label>
+          {{if .ErrorMsg}}
+          <div class="state-box state-error" role="alert">{{.ErrorMsg}}</div>
+          {{end}}
+          <pre id="gql-response" class="gql-response" aria-label="{{t .Lang "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
+        </div>
+      </div>
+    </form>
+    </section>
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

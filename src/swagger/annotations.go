@@ -4,6 +4,21 @@ package swagger
 // (AI.md PART 13, PART 14).
 func buildPaths() map[string]PathItem {
 	return map[string]PathItem{
+		"/api/v1/server/mcp": {
+			Post: &Operation{
+				Summary:     "Model Context Protocol endpoint",
+				Description: "Provides WHOIS API operations as MCP tools. Requires a valid owner or operator Bearer token.",
+				OperationID: "mcpEndpoint",
+				Tags:        []string{"Server"},
+				Security:    []SecurityReq{{"bearerAuth": {}}},
+				Responses: map[string]Response{
+					"200": {Description: "MCP JSON-RPC response"},
+					"400": {Description: "Malformed MCP request or unsupported protocol version"},
+					"401": {Description: "Missing or invalid bearer token"},
+					"403": {Description: "Origin rejected"},
+				},
+			},
+		},
 		"/api/v1/server/healthz": {
 			Get: &Operation{
 				Summary:     "Health check",
@@ -257,7 +272,8 @@ func buildComponents() Components {
 				},
 			},
 			"BulkRequest": {
-				Type: "object",
+				Type:     "object",
+				Required: []string{"queries"},
 				Properties: map[string]Schema{
 					"queries": {Type: "array", Items: &Schema{Type: "string"}},
 				},

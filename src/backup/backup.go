@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/crypto/argon2"
@@ -228,7 +227,9 @@ func buildFinalArchive(opts *BackupOptions, manifest *Manifest, contentBuf []byt
 			return nil, fmt.Errorf("copy re-stream entry: %w", err)
 		}
 	}
-	gzr.Close()
+	if err := gzr.Close(); err != nil {
+		return nil, fmt.Errorf("close source gzip reader: %w", err)
+	}
 
 	if err := tw.Close(); err != nil {
 		return nil, fmt.Errorf("close final tar writer: %w", err)
@@ -312,7 +313,7 @@ func addPathToTar(tw *tar.Writer, baseDir, relPath string, contents *[]string) e
 	if err != nil {
 		return fmt.Errorf("open %s: %w", relPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
@@ -369,7 +370,7 @@ func addDirToTar(tw *tar.Writer, srcDir, tarPath string, contents *[]string) err
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			if _, err := io.Copy(tw, f); err != nil {
 				return err
@@ -443,7 +444,7 @@ func VerifyBackup(backupFile string, password string) error {
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Extract archive
 	if err := extractTarGz(archiveData, tempDir); err != nil {
@@ -502,7 +503,7 @@ func extractTarGz(data []byte, dest string) error {
 	if err != nil {
 		return fmt.Errorf("create gzip reader: %w", err)
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	tr := tar.NewReader(gzr)
 	for {
@@ -538,10 +539,10 @@ func extractTarGz(data []byte, dest string) error {
 			}
 
 			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
+				_ = f.Close()
 				return fmt.Errorf("write file %s: %w", target, err)
 			}
-			f.Close()
+			_ = f.Close()
 		}
 	}
 
@@ -572,7 +573,7 @@ func rebuildContentArchive(archiveData []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open archive: %w", err)
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	var buf []byte
 	w := &memoryWriter{data: &buf}
@@ -619,7 +620,7 @@ func verifyDatabaseIntegrity(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("cannot open database: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Check SQLite header (first 16 bytes should be "SQLite format 3\000")
 	header := make([]byte, 16)
@@ -876,11 +877,10 @@ func parseSizeCap(backupDir, cap string) (int64, error) {
 			return 0, fmt.Errorf("invalid percent size cap %q", cap)
 		}
 
-		var st syscall.Statfs_t
-		if err := syscall.Statfs(backupDir, &st); err != nil {
+		totalBytes, err := filesystemTotalBytes(backupDir)
+		if err != nil {
 			return 0, fmt.Errorf("statfs %s: %w", backupDir, err)
 		}
-		totalBytes := int64(st.Blocks) * int64(st.Bsize)
 		return int64(float64(totalBytes) * pct / 100.0), nil
 	}
 

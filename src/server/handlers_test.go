@@ -30,18 +30,55 @@ func newTestServer(t *testing.T) *Server {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	sched, schedErr := scheduler.New(database.Server, "America/New_York", 0)
+	sched, schedErr := scheduler.New(database.Read(), "America/New_York", 0)
 	if schedErr != nil {
 		t.Fatalf("newTestServer: create scheduler: %v", schedErr)
 	}
 
+	cfg := config.Default()
+	readLimit := ratelimit.New(cfg.RateLimit.Read.Requests, time.Duration(cfg.RateLimit.Read.Window)*time.Second)
+	writeLimit := ratelimit.New(cfg.RateLimit.Write.Requests, time.Duration(cfg.RateLimit.Write.Window)*time.Second)
+	healthLimit := ratelimit.New(cfg.RateLimit.Health.Requests, time.Duration(cfg.RateLimit.Health.Window)*time.Second)
+	globalLimit := ratelimit.New(cfg.RateLimit.GlobalBurst, time.Minute)
+	strictLimit := ratelimit.New(cfg.RateLimit.Strict.Requests, time.Duration(cfg.RateLimit.Strict.Window)*time.Second)
+	authLimit := ratelimit.New(cfg.RateLimit.AuthFailures.Requests, time.Duration(cfg.RateLimit.AuthFailures.Window)*time.Second)
+	t.Cleanup(func() {
+		readLimit.Close()
+		writeLimit.Close()
+		healthLimit.Close()
+		globalLimit.Close()
+		strictLimit.Close()
+		authLimit.Close()
+	})
 	return &Server{
-		config:    config.Default(),
-		cache:     cache.NewMemoryCache(1*1024*1024, 5*time.Minute),
-		ratelimit: ratelimit.New(60, time.Minute),
-		database:  database,
-		scheduler: sched,
-		startTime: time.Now(),
+		config:             cfg,
+		cache:              cache.NewMemoryCache(1*1024*1024, 5*time.Minute),
+		ratelimit:          readLimit,
+		writeLimiter:       writeLimit,
+		healthLimiter:      healthLimit,
+		globalBurstLimiter: globalLimit,
+		strictLimiter:      strictLimit,
+		authFailureLimiter: authLimit,
+		database:           database,
+		scheduler:          sched,
+		startTime:          time.Now(),
+	}
+}
+
+func TestAPITextExtension(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz.txt", nil)
+	req.Header.Set("Accept", "application/json")
+	rr := httptest.NewRecorder()
+	s.setupRoutes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if got := rr.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
+		t.Fatalf("Content-Type = %q, want text/plain", got)
+	}
+	if !strings.Contains(rr.Body.String(), "status: healthy") {
+		t.Fatalf("plain text health response missing status: %s", rr.Body.String())
 	}
 }
 
@@ -475,6 +512,16 @@ func TestSendErrorUnknownCode(t *testing.T) {
 	SendError(rr, "TOTALLY_UNKNOWN", "unknown error")
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rr.Code)
+	}
+}
+
+func TestSendErrorUsesResolvedLocale(t *testing.T) {
+	rr := httptest.NewRecorder()
+	rr.Header().Set("Content-Language", "de")
+	SendError(rr, ErrNotFound, "untranslated caller message")
+	response := decodeAPIResponse(t, rr.Body.String())
+	if response.Message != "Nicht gefunden" {
+		t.Fatalf("localized message = %q, want German not-found message", response.Message)
 	}
 }
 

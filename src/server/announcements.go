@@ -48,7 +48,7 @@ type announcementView struct {
 
 // siteBannerTmpl is the embedded site-banner partial (AI.md PART 16 —
 // Site Banner, HTML Structure + CSS).
-var siteBannerTmpl = mustParseTemplate("site_banner", "site_banner.html")
+var siteBannerTmpl = mustParsePartial("site_banner", "partial/site_banner.tmpl")
 
 // dismissedAnnouncementIDs reads the dismissed_announcements cookie and
 // returns the set of ids already dismissed by this visitor.

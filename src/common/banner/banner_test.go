@@ -10,8 +10,8 @@ import (
 func TestBanner_Fprint_Plain(t *testing.T) {
 	// Force dumb terminal
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "dumb")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "dumb")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	b := &Banner{
 		Title:    "Test Banner",
@@ -36,8 +36,8 @@ func TestBanner_Fprint_Plain(t *testing.T) {
 
 func TestBanner_Fprint_Styled(t *testing.T) {
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "xterm-256color")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "xterm-256color")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	b := &Banner{
 		Title:   "Test Banner",
@@ -59,8 +59,8 @@ func TestBanner_Fprint_Styled(t *testing.T) {
 
 func TestBanner_NoSubtitle(t *testing.T) {
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "dumb")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "dumb")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	b := &Banner{
 		Title: "Only Title",
@@ -99,8 +99,8 @@ func TestCenterText(t *testing.T) {
 
 func TestPrintStatus_Dumb(t *testing.T) {
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "dumb")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "dumb")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	// Capture output - just verify no panic
 	PrintStatus("ok", "test message")
@@ -112,8 +112,8 @@ func TestPrintStatus_Dumb(t *testing.T) {
 
 func TestPrintStatus_Styled(t *testing.T) {
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "xterm")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "xterm")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	// Just verify no panic
 	PrintStatus("success", "success message")
@@ -123,8 +123,8 @@ func TestPrintStatus_Styled(t *testing.T) {
 
 func TestPrintHelpers(t *testing.T) {
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "dumb")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "dumb")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	// Just verify no panic
 	PrintError("error")
@@ -136,8 +136,8 @@ func TestPrintHelpers(t *testing.T) {
 
 func TestPrintSimple_Styled(t *testing.T) {
 	old := os.Getenv("TERM")
-	os.Setenv("TERM", "xterm")
-	defer os.Setenv("TERM", old)
+	_ = os.Setenv("TERM", "xterm")
+	defer func() { _ = os.Setenv("TERM", old) }()
 
 	// Just verify no panic - should use arrow
 	PrintSimple("styled simple")

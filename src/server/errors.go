@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/i18n"
 )
 
 // APIResponse represents the unified API response structure (AI.md PART 14)
@@ -49,8 +51,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		return
 	}
 	w.WriteHeader(status)
-	w.Write(body)
-	w.Write([]byte("\n"))
+	_, _ = w.Write(body)
+	_, _ = w.Write([]byte("\n"))
 }
 
 // SendSuccess sends a successful API response
@@ -62,17 +64,104 @@ func SendSuccess(w http.ResponseWriter, data any) {
 }
 
 // SendError sends an error API response
-func SendError(w http.ResponseWriter, code string, message string) {
+func SendError(w http.ResponseWriter, code string, _ string) {
 	status := mapErrorCodeToStatus(code)
+	lang := w.Header().Get("Content-Language")
+	if lang == "" {
+		lang = "en"
+	}
+	writeLocalizedAPIError(w, status, code, lang)
+}
+
+func writeLocalizedAPIError(w http.ResponseWriter, status int, code, lang string) {
 	// Rate-limited responses must advertise a Retry-After header (AI.md PART 14).
 	if status == http.StatusTooManyRequests {
 		w.Header().Set("Retry-After", "60")
 	}
+	if lang == "" {
+		lang = "en"
+	}
+	messageKey := errorTranslationKey(code)
+	if status == http.StatusBadGateway || status == http.StatusGatewayTimeout {
+		messageKey = "errors.bad_gateway_message"
+	}
+	w.Header().Set("Content-Language", lang)
+	addVaryHeader(w.Header(), "Accept-Language")
 	writeJSON(w, status, APIResponse{
 		OK:      false,
 		Error:   code,
-		Message: message,
+		Message: translateKey(lang, messageKey),
 	})
+}
+
+func writeRequestAPIError(w http.ResponseWriter, r *http.Request, status int) {
+	lang := requestErrorLanguage(r)
+	writeLocalizedAPIError(w, status, statusToErrorCode(status), lang)
+}
+
+func errorTranslationKey(code string) string {
+	switch code {
+	case ErrBadRequest:
+		return "errors.bad_request"
+	case ErrValidationFailed:
+		return "errors.validation_failed"
+	case ErrUnauthorized, ErrTokenExpired, ErrTokenInvalid:
+		return "errors.unauthorized"
+	case ErrForbidden, ErrCSRFFailed:
+		return "errors.forbidden"
+	case ErrNotFound:
+		return "errors.not_found"
+	case ErrMethodNotAllowed:
+		return "errors.method_not_allowed"
+	case ErrConflict:
+		return "errors.conflict"
+	case ErrRateLimited:
+		return "errors.rate_limited"
+	case ErrMaintenance:
+		return "errors.maintenance"
+	default:
+		return "errors.server_error"
+	}
+}
+
+func writeRequestError(w http.ResponseWriter, r *http.Request, status int) {
+	lang := requestErrorLanguage(r)
+	w.Header().Set("Content-Language", lang)
+	addVaryHeader(w.Header(), "Accept-Language")
+	server := serverFromContext(r.Context())
+	if (server != nil && isAPIRoute(server, r.URL.Path)) || strings.HasPrefix(r.URL.Path, "/api/") {
+		writeRequestAPIError(w, r, status)
+		return
+	}
+	key := errorTranslationKey(statusToErrorCode(status))
+	http.Error(w, translateKey(lang, key), status)
+}
+
+func addVaryHeader(header http.Header, value string) {
+	for _, line := range header.Values("Vary") {
+		for _, existing := range strings.Split(line, ",") {
+			if strings.EqualFold(strings.TrimSpace(existing), value) {
+				return
+			}
+		}
+	}
+	header.Add("Vary", value)
+}
+
+func requestErrorLanguage(r *http.Request) string {
+	if lang, ok := r.Context().Value(langContextKey).(string); ok && i18n.IsSupported(lang) {
+		return lang
+	}
+	if lang, ok := r.URL.Query()["lang"]; ok {
+		if len(lang) > 0 && i18n.IsSupported(lang[0]) {
+			return lang[0]
+		}
+		return "en"
+	}
+	if cookie, err := r.Cookie("lang"); err == nil && i18n.IsSupported(cookie.Value) {
+		return cookie.Value
+	}
+	return i18n.ParseAcceptLanguage(r.Header.Get("Accept-Language"))
 }
 
 // mapErrorCodeToStatus maps error codes to HTTP status codes (AI.md PART 9)
@@ -129,13 +218,11 @@ func statusToErrorCode(status int) string {
 // handleNotFound is the catch-all 404 handler.
 // Returns JSON for /api/* paths; HTML 404 page for all others.
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/api") {
+	if isAPIRoute(s, r.URL.Path) {
 		SendError(w, ErrNotFound, "not found")
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	htmlResponseTmpl.Execute(w, "404 — page not found")
+	s.renderStatusError(w, r, http.StatusNotFound)
 }
 
 // Common error messages

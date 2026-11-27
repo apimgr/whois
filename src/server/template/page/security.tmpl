@@ -1,0 +1,36 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "security.description"}}">
+<title>{{t .Lang "security.title"}} — {{.AppName}}</title>
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <div class="container container-md">
+    <header class="page-header"><h1 class="page-title">{{t .Lang "security.title"}}</h1><p class="page-lead">{{t .Lang "security.description"}}</p></header>
+    <section class="card section-card" aria-labelledby="reporting">
+      <h2 id="reporting">{{t .Lang "security.report_heading"}}</h2>
+      <p>{{t .Lang "security.policy_intro"}} <a href="{{path "/server/security/policy"}}">{{t .Lang "security.policy_heading"}}</a>.</p>
+      <ol>
+        <li><a href="{{.ReportURL}}">{{t .Lang "security.github_report"}}</a>.</li>
+        {{if .SecurityReportURL}}<li><a href="{{.SecurityReportURL}}">{{t .Lang "security.instance_report"}}</a>.</li>{{end}}
+        {{if .Email}}<li>{{t .Lang "security.email_report"}} <a href="mailto:{{.Email}}">{{.Email}}</a>.</li>{{end}}
+      </ol>
+      <p><a href="{{.SecurityTxt}}">{{t .Lang "security.security_txt"}}</a> ({{t .Lang "security.expires"}} {{.Expires}}).</p>
+      <p><a href="{{path "/server/security/thanks"}}">{{t .Lang "security.thanks_link"}}</a></p>
+    </section>
+    <section class="card section-card" aria-labelledby="policy">
+      <h2 id="policy">{{t .Lang "security.policy_heading"}}</h2>
+      <p><a href="{{.PolicyURL}}">{{t .Lang "security.policy_url"}}</a></p>
+      {{.Policy | markdownToHTMLSection}}
+    </section>
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

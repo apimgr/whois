@@ -57,7 +57,7 @@ func TestCategorizeChanges(t *testing.T) {
 	for _, r := range restart {
 		restartSet[r] = true
 	}
-	for _, want := range []string{"address", "port", "ssl.enabled", "database.driver", "tor.enabled"} {
+	for _, want := range []string{"address", "port", "ssl.enabled", "database.driver"} {
 		if !restartSet[want] {
 			t.Errorf("categorizeChanges() did not classify %q as restart-required", want)
 		}
@@ -67,10 +67,54 @@ func TestCategorizeChanges(t *testing.T) {
 	for _, h := range hot {
 		hotSet[h] = true
 	}
-	for _, want := range []string{"rate_limit.global_burst", "branding.name"} {
+	for _, want := range []string{"rate_limit.global_burst", "branding.name", "tor.enabled"} {
 		if !hotSet[want] {
 			t.Errorf("categorizeChanges() did not classify %q as hot-reloadable", want)
 		}
+	}
+}
+
+func TestTorSettingsRestartChildAndNotifyRuntime(t *testing.T) {
+	hot, restart := categorizeChanges([]string{"tor.use_network", "tor.virtual_port"})
+	if len(restart) != 0 || !hasTorChange(hot) {
+		t.Fatalf("Tor changes should restart only the child: hot=%v restart=%v", hot, restart)
+	}
+	current := Default()
+	incoming := Default()
+	incoming.Tor.UseNetwork = true
+	incoming.Tor.VirtualPort = 8080
+	called := false
+	m := &ConfigManager{current: current, TorConfigHook: func(got TorConfig) {
+		called = true
+		if got != incoming.Tor {
+			t.Errorf("Tor hook config=%+v want %+v", got, incoming.Tor)
+		}
+	}}
+	m.applyConfigChanges(incoming)
+	if !called || !current.Tor.UseNetwork || current.Tor.VirtualPort != 8080 || m.PendingRestart() {
+		t.Fatal("Tor settings did not hot-apply and notify the child runtime")
+	}
+}
+
+func TestI2PSettingsAreHotReloaded(t *testing.T) {
+	hot, restart := categorizeChanges([]string{"i2p.enabled", "i2p.sam_address"})
+	if len(restart) != 0 || !hasI2PChange(hot) {
+		t.Fatalf("I2P settings should hot reload: hot=%v restart=%v", hot, restart)
+	}
+	current := Default()
+	incoming := Default()
+	incoming.I2P.Enabled = true
+	incoming.I2P.SAMAddress = "127.0.0.1:7657"
+	called := false
+	m := &ConfigManager{current: current, I2PConfigHook: func(got I2PConfig) {
+		called = true
+		if got != incoming.I2P {
+			t.Errorf("I2P hook config=%+v want %+v", got, incoming.I2P)
+		}
+	}}
+	m.applyConfigChanges(incoming)
+	if !called || !current.I2P.Enabled || current.I2P.SAMAddress != "127.0.0.1:7657" {
+		t.Fatal("I2P config changes did not apply and notify the runtime hook")
 	}
 }
 

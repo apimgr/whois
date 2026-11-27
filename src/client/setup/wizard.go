@@ -51,7 +51,7 @@ func New(cfg *config.CLIConfig) WizardModel {
 	urlIn.Width = 50
 
 	tokenIn := textinput.New()
-	tokenIn.Placeholder = "tok_… (leave blank to skip)"
+	tokenIn.Placeholder = "own_… or adm_… (leave blank to skip)"
 	tokenIn.CharLimit = 80
 	tokenIn.Width = 50
 
@@ -154,7 +154,7 @@ func (m WizardModel) View() string {
 		sb.WriteString(styleHint.Render("[enter] continue  [ctrl+c] quit"))
 
 	case stepTest:
-		sb.WriteString(fmt.Sprintf("Testing connection to %s…\n", m.cfg.Server))
+		fmt.Fprintf(&sb, "Testing connection to %s…\n", m.cfg.Server)
 
 	case stepToken:
 		sb.WriteString(styleOK.Render("Connected successfully!") + "\n\n")

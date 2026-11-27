@@ -48,9 +48,14 @@ func TestRegisterDebugRoutesDisabled(t *testing.T) {
 func TestRegisterDebugRoutesEnabled(t *testing.T) {
 	s := newTestServer(t)
 	s.config.Debug = true
+	s.config.ServerToken = "adm_debug_test_token"
 
-	r := chi.NewRouter()
-	s.registerDebugRoutes(r)
+	handler := s.setupMiddleware(s.setupRoutes())
+	unauthorized := httptest.NewRecorder()
+	handler.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/debug/config", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("debug route without operator token = %d, want 401", unauthorized.Code)
+	}
 
 	debugRoutes := []string{
 		"/debug/config",
@@ -65,12 +70,21 @@ func TestRegisterDebugRoutesEnabled(t *testing.T) {
 	for _, route := range debugRoutes {
 		t.Run(route, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, route, nil)
+			req.Header.Set("Authorization", "Bearer "+s.config.ServerToken)
 			rr := httptest.NewRecorder()
-			r.ServeHTTP(rr, req)
+			handler.ServeHTTP(rr, req)
 			if rr.Code != http.StatusOK {
 				t.Errorf("debug route %q: status = %d, want 200", route, rr.Code)
 			}
 		})
+	}
+	errorRequest := httptest.NewRequest(http.MethodGet, "/debug/error500", nil)
+	errorRequest.Header.Set("Authorization", "Bearer "+s.config.ServerToken)
+	errorRequest.Header.Set("Accept", "text/html")
+	errorResponse := httptest.NewRecorder()
+	handler.ServeHTTP(errorResponse, errorRequest)
+	if errorResponse.Code != http.StatusInternalServerError || !strings.Contains(errorResponse.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("debug error page response = %d %q, want themed 500 HTML", errorResponse.Code, errorResponse.Header().Get("Content-Type"))
 	}
 }
 
@@ -410,6 +424,12 @@ func TestGetPIDFilePathContainsProjectName(t *testing.T) {
 	}
 	if !strings.Contains(path, "apimgr") {
 		t.Errorf("getPIDFilePath() = %q, expected to contain 'apimgr'", path)
+	}
+	if os.Geteuid() == 0 {
+		want := filepath.Join("/var/run", "apimgr", "caswhois", "caswhois.pid")
+		if path != want {
+			t.Errorf("getPIDFilePath() = %q, want %q", path, want)
+		}
 	}
 }
 
@@ -891,7 +911,7 @@ func TestRemovePIDFilePermissionError(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dir, 0755) })
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
 
 	err := RemovePIDFile(path)
 	if err == nil {
@@ -1037,7 +1057,7 @@ func TestWritePIDFileCreatesFile(t *testing.T) {
 	if err := WritePIDFile(path, 8080); err != nil {
 		t.Fatalf("WritePIDFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(path) })
+	t.Cleanup(func() { _ = os.Remove(path) })
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1111,6 +1131,27 @@ func TestBuildTorInfoWithNonNilService(t *testing.T) {
 	}
 	if info.Status != "starting" {
 		t.Errorf("buildTorInfo(non-nil service, empty serviceID): Status = %q, want 'starting'", info.Status)
+	}
+}
+
+func TestBuildTorInfoLifecycleStatus(t *testing.T) {
+	for _, status := range []string{"starting", "unavailable"} {
+		t.Run(status, func(t *testing.T) {
+			s := newTestServer(t)
+			s.torStatus = status
+			info := s.buildTorInfo()
+			if !info.Enabled || info.Running || info.Status != status || info.Hostname != "" {
+				t.Fatalf("buildTorInfo() = %+v, want enabled, not running, %s, empty hostname", info, status)
+			}
+			response := s.buildHealthResponse()
+			wantCheck := "ok"
+			if status == "unavailable" {
+				wantCheck = "degraded"
+			}
+			if response.Checks.Tor != wantCheck {
+				t.Errorf("checks.tor = %q, want %q", response.Checks.Tor, wantCheck)
+			}
+		})
 	}
 }
 
@@ -1219,7 +1260,7 @@ func TestMustParseTemplatePanicsOnMissingFile(t *testing.T) {
 			t.Error("mustParseTemplate(nonexistent file): expected panic, got none")
 		}
 	}()
-	mustParseTemplate("test", "nonexistent-file-that-does-not-exist.html")
+	mustParseTemplate("test", "nonexistent-file-that-does-not-exist.tmpl")
 }
 
 // --- server.go: handleWHOIS valid query (covers network-failure path) ---
@@ -1250,7 +1291,7 @@ func TestRunBackupMkdirAllError(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dir, 0755) })
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
 	s.config.Backup.Dir = filepath.Join(dir, "subdir", "nested")
 
 	_, err := s.runBackup("test")
@@ -1271,7 +1312,7 @@ func TestWritePIDFileDirCreationFails(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dir, 0755) })
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
 	pidPath := filepath.Join(dir, "newsubdir", "test.pid")
 	err := WritePIDFile(pidPath, 8080)
 	if err == nil {
@@ -1363,7 +1404,7 @@ func TestHandleWHOISOwnerSearchWithLocalRecords(t *testing.T) {
 		Organization: "Test Corp",
 		Email:        "admin@testcorp.com",
 	}
-	if err := records.UpsertRecord(context.Background(), s.database.Server, "testcorp.com", "domain", domain); err != nil {
+	if err := records.UpsertRecordInStore(context.Background(), s.database, "testcorp.com", "domain", domain); err != nil {
 		t.Fatalf("UpsertRecord: %v", err)
 	}
 
@@ -1779,24 +1820,6 @@ func TestHandleServiceWorkerEmptyBranding(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "caswhois") {
 		t.Errorf("handleServiceWorker(empty title): expected fallback name 'caswhois' in body")
-	}
-}
-
-// --- pwa.go: handleOfflinePage empty-title fallback (line 128) ---
-
-// TestHandleOfflinePageEmptyBranding verifies that an empty Branding.Title
-// falls back to "caswhois" in the offline page output (line 128).
-func TestHandleOfflinePageEmptyBranding(t *testing.T) {
-	s := newTestServer(t)
-	s.config.Branding.Title = ""
-	req := httptest.NewRequest(http.MethodGet, "/offline.html", nil)
-	rr := httptest.NewRecorder()
-	s.handleOfflinePage(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("handleOfflinePage(empty title): status = %d, want 200", rr.Code)
-	}
-	if !strings.Contains(rr.Body.String(), "caswhois") {
-		t.Errorf("handleOfflinePage(empty title): expected fallback name 'caswhois' in body")
 	}
 }
 

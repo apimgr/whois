@@ -4,9 +4,11 @@
 package server
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/apimgr/whois/src/config"
@@ -14,41 +16,65 @@ import (
 
 // setupExtraSignals registers SIGUSR1 (log rotation) and SIGHUP (config reload)
 // on Unix platforms. These signals are not available on Windows.
-func setupExtraSignals(s *Server) {
+func setupExtraSignals(ctx context.Context, s *Server) <-chan struct{} {
 	rotateSig := make(chan os.Signal, 1)
 	signal.Notify(rotateSig, syscall.SIGUSR1)
+	reloadSig := make(chan os.Signal, 1)
+	signal.Notify(reloadSig, syscall.SIGHUP)
+	done := make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(2)
 	go func() {
-		for range rotateSig {
-			if s.logger != nil {
-				if err := s.logger.Rotate(); err != nil {
-					log.Printf("ERROR: log rotation failed: %v", err)
-				} else {
-					log.Printf("Log files reopened (SIGUSR1)")
+		defer workers.Done()
+		defer signal.Stop(rotateSig)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case _, ok := <-rotateSig:
+				if !ok {
+					return
+				}
+				if s.logger != nil {
+					if err := s.logger.Rotate(); err != nil {
+						log.Printf("ERROR: log rotation failed: %v", err)
+					} else {
+						log.Printf("Log files reopened (SIGUSR1)")
+					}
 				}
 			}
 		}
 	}()
 
-	reloadSig := make(chan os.Signal, 1)
-	signal.Notify(reloadSig, syscall.SIGHUP)
 	go func() {
-		for range reloadSig {
-			log.Printf("Received SIGHUP, reloading configuration...")
-			newCfg, err := config.LoadServerConfig(s.config.ConfigDir)
-			if err != nil {
-				log.Printf("ERROR: config reload failed: %v", err)
-				continue
+		defer workers.Done()
+		defer signal.Stop(reloadSig)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case _, ok := <-reloadSig:
+				if !ok {
+					return
+				}
+				log.Printf("Received SIGHUP, reloading configuration...")
+				newCfg, err := config.LoadServerConfig(s.config.ConfigDir)
+				if err != nil {
+					log.Printf("ERROR: config reload failed: %v", err)
+					continue
+				}
+				if s.configManager != nil {
+					s.configManager.ApplyExternalConfig(newCfg)
+				} else {
+					s.config = newCfg
+				}
+				log.Printf("Configuration reloaded successfully")
 			}
-			if s.configManager != nil {
-				// Route through the same hot-reload/restart-required
-				// categorization the polling watcher uses, so a manual
-				// SIGHUP never mutates a restart-required setting
-				// (address/port/ssl/database/tor) on a running process.
-				s.configManager.ApplyExternalConfig(newCfg)
-			} else {
-				s.config = newCfg
-			}
-			log.Printf("Configuration reloaded successfully")
 		}
 	}()
+	go func() {
+		workers.Wait()
+		close(done)
+	}()
+	return done
 }

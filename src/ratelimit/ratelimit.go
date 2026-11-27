@@ -21,6 +21,7 @@ type Limiter struct {
 type window struct {
 	requests   int
 	windowTime time.Time
+	duration   time.Duration
 }
 
 // New creates a new rate limiter
@@ -47,6 +48,18 @@ func New(requests int, duration time.Duration) *Limiter {
 
 // Allow checks if a request is allowed for the given key
 func (l *Limiter) Allow(key string) bool {
+	return l.AllowWithLimit(key, l.requests, l.duration)
+}
+
+// AllowWithLimit applies the supplied window so hot-reloaded configuration is
+// honored without replacing the in-memory limiter.
+func (l *Limiter) AllowWithLimit(key string, requests int, duration time.Duration) bool {
+	if requests <= 0 {
+		requests = l.requests
+	}
+	if duration <= 0 {
+		duration = l.duration
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -57,25 +70,58 @@ func (l *Limiter) Allow(key string) bool {
 		l.windows[key] = &window{
 			requests:   1,
 			windowTime: now,
+			duration:   duration,
 		}
 		return true
 	}
 
 	elapsed := now.Sub(w.windowTime)
-	if elapsed >= l.duration {
+	if elapsed >= duration {
 		l.windows[key] = &window{
 			requests:   1,
 			windowTime: now,
+			duration:   duration,
 		}
 		return true
 	}
 
-	if w.requests >= l.requests {
+	w.duration = duration
+	if w.requests >= requests {
 		return false
 	}
 
 	w.requests++
 	return true
+}
+
+// IsLimited reports whether a key has exhausted its current window without
+// consuming another request.
+func (l *Limiter) IsLimited(key string) bool {
+	if l == nil {
+		return false
+	}
+	return l.IsLimitedWithLimit(key, l.requests, l.duration)
+}
+
+// IsLimitedWithLimit checks the current bucket using live configuration.
+func (l *Limiter) IsLimitedWithLimit(key string, requests int, duration time.Duration) bool {
+	if l == nil {
+		return false
+	}
+	if requests <= 0 {
+		requests = l.requests
+	}
+	if duration <= 0 {
+		duration = l.duration
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	w, exists := l.windows[key]
+	if !exists {
+		return false
+	}
+	w.duration = duration
+	return time.Since(w.windowTime) < duration && w.requests >= requests
 }
 
 // GetKey extracts rate limit key from request
@@ -110,7 +156,7 @@ func (l *Limiter) cleanupExpired() {
 
 	now := time.Now()
 	for key, w := range l.windows {
-		if now.Sub(w.windowTime) > l.duration*2 {
+		if now.Sub(w.windowTime) > w.duration*2 {
 			delete(l.windows, key)
 		}
 	}

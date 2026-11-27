@@ -1,14 +1,20 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/apimgr/whois/src/common/constants"
+	"github.com/apimgr/whois/src/common/i18n"
+	"github.com/apimgr/whois/src/service"
 	"gopkg.in/yaml.v3"
 )
+
+const DefaultAPIVersion = "v1"
 
 // LogFileConfig holds per-log-file settings from server.yml (AI.md PART 11).
 type LogFileConfig struct {
@@ -114,15 +120,25 @@ type RateLimitEndpointConfig struct {
 
 // RateLimitConfig holds rate-limiting settings for each endpoint class (AI.md PART 12).
 type RateLimitConfig struct {
-	Enabled bool `yaml:"enabled"`
 	// Read covers GET/HEAD endpoints.
 	Read RateLimitEndpointConfig `yaml:"read"`
 	// Write covers POST/PUT/PATCH/DELETE endpoints.
 	Write RateLimitEndpointConfig `yaml:"write"`
 	// Health covers /healthz, /readyz, /livez.
 	Health RateLimitEndpointConfig `yaml:"health"`
+	// Strict limits sensitive actions such as token reveal, rotation, restore and revoke.
+	Strict RateLimitEndpointConfig `yaml:"strict"`
+	// AuthFailures limits invalid or expired credential attempts per IP.
+	AuthFailures RateLimitEndpointConfig `yaml:"auth_failures"`
 	// GlobalBurst is the absolute per-IP ceiling across all endpoint types per minute.
 	GlobalBurst int `yaml:"global_burst"`
+}
+
+// TokensConfig controls anonymous owner token lifecycle (AI.md PART 12).
+type TokensConfig struct {
+	MaxLinked     int    `yaml:"max_linked"`
+	CookieMaxAge  string `yaml:"cookie_max_age"`
+	IdlePurgeDays int    `yaml:"idle_purge_days"`
 }
 
 // ContactWebhooksConfig holds webhook delivery URLs for a contact role (AI.md PART 12).
@@ -158,7 +174,14 @@ type ContactConfig struct {
 	Admin    ContactRoleConfig `yaml:"admin"`
 	Security ContactRoleConfig `yaml:"security"`
 	Abuse    ContactRoleConfig `yaml:"abuse"`
+	DPO      DPOContactConfig  `yaml:"dpo"`
 	General  ContactRoleConfig `yaml:"general"`
+}
+
+// DPOContactConfig contains the public data protection officer contact.
+type DPOContactConfig struct {
+	Name  string `yaml:"name"`
+	Email string `yaml:"email"`
 }
 
 // LimitsConfig holds request size and timeout settings (AI.md PART 12).
@@ -176,10 +199,25 @@ type LimitsConfig struct {
 // WebConfig holds top-level web-layer settings (AI.md PART 16).
 // In server.yml this lives under the top-level web: key (sibling to server:).
 type WebConfig struct {
+	UI UIConfig `yaml:"ui"`
+	// Security holds public coordinated-disclosure settings (AI.md PART 11).
+	Security WebSecurityConfig `yaml:"security"`
 	// Footer holds footer customization settings (AI.md PART 16 — web.footer.*).
 	Footer FooterConfig `yaml:"footer"`
 	// Announcements holds site-wide announcement banner settings (AI.md PART 16 — web.announcements.*).
 	Announcements AnnouncementConfig `yaml:"announcements"`
+}
+
+type UIConfig struct {
+	Theme  string `yaml:"theme"`
+	Accent string `yaml:"accent"`
+}
+
+// WebSecurityConfig controls the public vulnerability reporting channels.
+type WebSecurityConfig struct {
+	ReportURL string `yaml:"report_url"`
+	Expires   string `yaml:"expires"`
+	Policy    string `yaml:"policy"`
 }
 
 // CORSConfig holds cross-origin resource sharing settings
@@ -249,6 +287,33 @@ type TrustedProxiesConfig struct {
 type I18nConfig struct {
 	DefaultLanguage string   `yaml:"default_language"`
 	Supported       []string `yaml:"supported"`
+}
+
+var requiredI18nLanguages = []string{"en", "es", "fr", "ar", "de", "it"}
+
+func normalizeI18nConfig(cfg *I18nConfig) error {
+	if len(cfg.Supported) == 1 && cfg.Supported[0] == "en" {
+		cfg.Supported = i18n.SupportedLanguages()
+	}
+	seen := make(map[string]bool, len(cfg.Supported))
+	for _, code := range cfg.Supported {
+		if !i18n.IsSupported(code) {
+			return fmt.Errorf("unsupported language %q", code)
+		}
+		if seen[code] {
+			return fmt.Errorf("language %q is listed more than once", code)
+		}
+		seen[code] = true
+	}
+	for _, code := range requiredI18nLanguages {
+		if !seen[code] {
+			return fmt.Errorf("supported languages must include required language %q", code)
+		}
+	}
+	if !i18n.IsSupported(cfg.DefaultLanguage) || !seen[cfg.DefaultLanguage] {
+		return fmt.Errorf("default language %q must be a registered enabled language", cfg.DefaultLanguage)
+	}
+	return nil
 }
 
 // BackupEncryptionConfig holds backup encryption settings (AI.md PART 21).
@@ -348,6 +413,7 @@ type TorConfig struct {
 	// own traffic through Tor even when server UseNetwork is false (AI.md PART 31).
 	AllowUserPreference       bool   `yaml:"allow_user_preference"`
 	MaxCircuits               int    `yaml:"max_circuits"`
+	StartupTimeout            int    `yaml:"startup_timeout"`
 	CircuitTimeout            int    `yaml:"circuit_timeout"`
 	BootstrapTimeout          int    `yaml:"bootstrap_timeout"`
 	SafeLogging               bool   `yaml:"safe_logging"`
@@ -358,14 +424,25 @@ type TorConfig struct {
 	MaxMonthlyBandwidth       string `yaml:"max_monthly_bandwidth"`
 	NumIntroPoints            int    `yaml:"num_intro_points"`
 	VirtualPort               int    `yaml:"virtual_port"`
-	// OnionAddress is the .onion hostname for this service (without http:// prefix).
-	// Set by the operator after first run; used by BuildURL and privacy rules (AI.md PART 12).
-	// When set, requests whose Host matches this value are treated as Tor requests.
-	OnionAddress string `yaml:"onion_address"`
 	// ContactEmail is the contact address shown exclusively in Tor responses (security.txt,
 	// contact pages). When unset, no email appears in Tor responses — never falls back to
 	// the clearnet contact email (AI.md PART 12 — Tor privacy rules).
 	ContactEmail string `yaml:"contact_email"`
+}
+
+// I2PConfig controls the optional SAMv3 eepsite listener (AI.md PART 31.2).
+type I2PConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	Expose           bool   `yaml:"expose"`
+	Binary           string `yaml:"binary"`
+	SAMAddress       string `yaml:"sam_address"`
+	VirtualPort      int    `yaml:"virtual_port"`
+	InboundLength    int    `yaml:"inbound_length"`
+	OutboundLength   int    `yaml:"outbound_length"`
+	InboundQuantity  int    `yaml:"inbound_quantity"`
+	OutboundQuantity int    `yaml:"outbound_quantity"`
+	SignatureType    int    `yaml:"signature_type"`
+	BootstrapTimeout int    `yaml:"bootstrap_timeout"`
 }
 
 // PrivacyConfig holds privacy/consent settings for GDPR/CCPA compliance,
@@ -541,14 +618,32 @@ type PrivacyPageConfig struct {
 type ContactPageConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// Captcha selects the spam-prevention method: recaptcha, hcaptcha, simple.
-	Captcha string `yaml:"captcha"`
+	Captcha          string         `yaml:"captcha"`
+	Antispam         AntispamConfig `yaml:"antispam"`
+	CaptchaSiteKey   string         `yaml:"captcha_site_key"`
+	CaptchaSecretKey string         `yaml:"captcha_secret_key"`
 	// SuccessMessage is shown after a successful form submission.
 	SuccessMessage string `yaml:"success_message"`
+}
+
+type AntispamConfig struct {
+	Honeypot            bool     `yaml:"honeypot"`
+	MinFillSeconds      int      `yaml:"min_fill_seconds"`
+	MaxAgeSeconds       int      `yaml:"max_age_seconds"`
+	PerIP               int      `yaml:"per_ip"`
+	PerEmail            int      `yaml:"per_email"`
+	Global              int      `yaml:"global"`
+	Window              string   `yaml:"window"`
+	MaxLinks            int      `yaml:"max_links"`
+	RejectMarkup        bool     `yaml:"reject_markup"`
+	BlockedWords        []string `yaml:"blocked_words"`
+	BlockedEmailDomains []string `yaml:"blocked_email_domains"`
 }
 
 // HelpPageConfig holds project-specific Markdown content for the help page.
 type HelpPageConfig struct {
 	Content string `yaml:"content"`
+	MCP     string `yaml:"mcp"`
 }
 
 // TermsPageConfig holds a full Markdown override for the terms of service page.
@@ -613,11 +708,39 @@ type DatabaseConfig struct {
 
 // BrandingConfig holds branding and SEO settings (AI.md PART 16 — server.branding.*).
 type BrandingConfig struct {
-	Title       string `yaml:"title"`
-	Tagline     string `yaml:"tagline"`
-	Description string `yaml:"description"`
-	Theme       string `yaml:"theme"`
-	AccentColor string `yaml:"accent_color"`
+	Title       string          `yaml:"title"`
+	Tagline     string          `yaml:"tagline"`
+	Description string          `yaml:"description"`
+	Theme       string          `yaml:"theme"`
+	AccentColor string          `yaml:"accent_color"`
+	Logo        string          `yaml:"logo"`
+	Favicon     string          `yaml:"favicon"`
+	Content     BrandingContent `yaml:"content"`
+}
+
+// BrandingContent contains safe operator-authored fragments for shared pages.
+type BrandingContent struct {
+	Header  string          `yaml:"header"`
+	About   ContentOverride `yaml:"about"`
+	Privacy ContentOverride `yaml:"privacy"`
+	Terms   ContentOverride `yaml:"terms"`
+	Footer  ContentOverride `yaml:"footer"`
+}
+
+type ContentOverride struct {
+	Format string `yaml:"format"`
+	Body   any    `yaml:"body"`
+}
+
+type SEOConfig struct {
+	Keywords       []string          `yaml:"keywords"`
+	Author         string            `yaml:"author"`
+	OGImage        string            `yaml:"og_image"`
+	TwitterHandle  string            `yaml:"twitter_handle"`
+	TitleSeparator string            `yaml:"title_separator"`
+	MetaTags       map[string]string `yaml:"meta_tags"`
+	Canonical      string            `yaml:"canonical"`
+	Noindex        bool              `yaml:"noindex"`
 }
 
 // GeoIPDatabasesConfig holds which MMDB databases to enable (AI.md PART 19).
@@ -795,6 +918,17 @@ type HealthzConfig struct {
 	Root HealthzRootConfig `yaml:"root"`
 }
 
+// SecurityConfig holds secret-backed security settings (AI.md PART 11).
+type SecurityConfig struct {
+	EncryptionKey        string                `yaml:"encryption_key,omitempty"`
+	EncryptionKeyVersion int                   `yaml:"encryption_key_version,omitempty"`
+	Reports              SecurityReportsConfig `yaml:"reports"`
+}
+
+type SecurityReportsConfig struct {
+	RetentionDays int `yaml:"retention_days"`
+}
+
 // ServerConfig holds all server configuration
 // ReverseWHOISConfig holds settings for the owner-search / reverse WHOIS feature (AI.md PART 14).
 // Local history is always searched first; an external provider is queried only when configured
@@ -811,12 +945,15 @@ type ReverseWHOISConfig struct {
 
 type ServerConfig struct {
 	// Server settings
-	Port      int    `yaml:"port"`
-	Address   string `yaml:"address"`
-	Mode      string `yaml:"mode"`
-	FQDN      string `yaml:"fqdn"`
-	Daemonize bool   `yaml:"daemonize"`
-	PIDFile   bool   `yaml:"pidfile"`
+	Port        int    `yaml:"port"`
+	HTTPPort    int    `yaml:"-"`
+	HTTPSPort   int    `yaml:"-"`
+	Address     string `yaml:"address"`
+	Mode        string `yaml:"mode"`
+	FQDN        string `yaml:"fqdn"`
+	Daemonize   bool   `yaml:"daemonize"`
+	PIDFile     bool   `yaml:"pidfile"`
+	PIDFilePath string `yaml:"-"`
 	// APIVersion is the API version prefix (default "v1"). Used in route registration.
 	APIVersion string `yaml:"api_version"`
 	// User and Group are the unprivileged service account the server drops to
@@ -835,9 +972,12 @@ type ServerConfig struct {
 	CacheDir  string `yaml:"cache_dir"`
 	// Database settings (AI.md PART 10 — server.database.*)
 	Database DatabaseConfig `yaml:"database"`
+	// Security secrets are loaded from secrets.yml and never written to server.yml.
+	Security SecurityConfig `yaml:"security"`
 
 	// Branding settings (AI.md PART 16 — server.branding.*)
 	Branding BrandingConfig `yaml:"branding"`
+	SEO      SEOConfig      `yaml:"seo"`
 
 	// TLS / Let's Encrypt settings (AI.md PART 15 — server.ssl.*)
 	TLS TLSConfig `yaml:"ssl"`
@@ -866,6 +1006,7 @@ type ServerConfig struct {
 
 	// Rate limiting settings (AI.md PART 12 — nested per endpoint class)
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
+	Tokens    TokensConfig    `yaml:"tokens"`
 
 	// GeoIP settings (AI.md PART 19 — server.geoip.*)
 	GeoIP GeoIPConfig `yaml:"geoip"`
@@ -884,6 +1025,8 @@ type ServerConfig struct {
 
 	// Tor hidden service settings (AI.md PART 31 — server.tor.*)
 	Tor TorConfig `yaml:"tor"`
+	// I2P eepsite settings (AI.md PART 31.2).
+	I2P I2PConfig `yaml:"i2p"`
 
 	// Maintenance-mode settings — self-healing, cleanup, notify (AI.md PART 5 — server.maintenance.*)
 	Maintenance MaintenanceConfig `yaml:"maintenance"`
@@ -922,16 +1065,12 @@ type ServerConfig struct {
 	Debug bool `yaml:"debug"`
 
 	// ServerToken is the global operator token (AI.md PART 12).
-	// Auto-generated on first run (tok_ + 32 base62 chars); stored in server.yml as "token:".
+	// Auto-generated on first run (adm_ + 32 base62 chars); stored in secrets.yml.
 	// Validated by SHA-256-hashing the inbound bearer and using subtle.ConstantTimeCompare.
 	// NEVER written to the DB. Config yaml key is "token" (server.token per spec).
-	ServerToken string `yaml:"token"`
-
-	// InstallationSecret is the root secret from which all derived material hangs (AI.md PART 11).
-	// Auto-generated on first run as 64 random hex chars; stored in server.yml as "installation_secret:".
-	// Used as the KDF input for PGP private-key encryption and future derived material.
-	// Loss of this field makes encrypted PGP private keys unrecoverable.
-	InstallationSecret string `yaml:"installation_secret"`
+	ServerToken string `yaml:"token,omitempty"`
+	// InstallationSecret is loaded from server.db for legacy maintenance callers.
+	InstallationSecret string `yaml:"-"`
 }
 
 // Default returns a ServerConfig with sane defaults
@@ -948,14 +1087,15 @@ func Default() *ServerConfig {
 		tagline = envTagline
 	}
 	return &ServerConfig{
+		Security: SecurityConfig{EncryptionKeyVersion: 1, Reports: SecurityReportsConfig{RetentionDays: 365}},
 		// Port 0 triggers random selection in range 64000-64999 on first run
 		Port:       0,
-		Address:    "0.0.0.0",
+		Address:    "[::]",
 		Mode:       "production",
 		FQDN:       "",
 		Daemonize:  false,
 		PIDFile:    true,
-		APIVersion: "v1",
+		APIVersion: DefaultAPIVersion,
 		User:       constants.InternalName,
 		Group:      constants.InternalName,
 		// ConfigDir, DataDir, LogDir are resolved to OS-appropriate paths at runtime
@@ -1010,15 +1150,17 @@ func Default() *ServerConfig {
 		},
 		I18n: I18nConfig{
 			DefaultLanguage: "en",
-			Supported:       []string{"en"},
+			Supported:       i18n.SupportedLanguages(),
 		},
 		RateLimit: RateLimitConfig{
-			Enabled:     true,
-			Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},
-			Write:       RateLimitEndpointConfig{Requests: 10, Window: 60},
-			Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
-			GlobalBurst: 240,
+			Read:         RateLimitEndpointConfig{Requests: 120, Window: 60},
+			Write:        RateLimitEndpointConfig{Requests: 10, Window: 60},
+			Health:       RateLimitEndpointConfig{Requests: 120, Window: 60},
+			Strict:       RateLimitEndpointConfig{Requests: 10, Window: 900},
+			AuthFailures: RateLimitEndpointConfig{Requests: 5, Window: 900},
+			GlobalBurst:  240,
 		},
+		Tokens: TokensConfig{MaxLinked: 25, CookieMaxAge: "8760h", IdlePurgeDays: 0},
 		GeoIP: GeoIPConfig{
 			Enabled: true,
 			// Applied at runtime: {data_dir}/security/geoip (AI.md PART 4)
@@ -1093,6 +1235,7 @@ func Default() *ServerConfig {
 			UseNetwork:                false,
 			AllowUserPreference:       true,
 			MaxCircuits:               32,
+			StartupTimeout:            60,
 			CircuitTimeout:            60,
 			BootstrapTimeout:          180,
 			SafeLogging:               true,
@@ -1103,9 +1246,9 @@ func Default() *ServerConfig {
 			MaxMonthlyBandwidth:       "100 GB",
 			NumIntroPoints:            3,
 			VirtualPort:               80,
-			OnionAddress:              "",
 			ContactEmail:              "",
 		},
+		I2P: I2PConfig{Enabled: false, Expose: false, SAMAddress: "127.0.0.1:7656", VirtualPort: 80, InboundLength: 3, OutboundLength: 3, InboundQuantity: 5, OutboundQuantity: 5, SignatureType: 7, BootstrapTimeout: 300},
 		Privacy: PrivacyConfig{
 			Data: DataPolicy{
 				// We do NOT sell data by default (MIT users can enable).
@@ -1226,6 +1369,7 @@ func Default() *ServerConfig {
 			Admin:    ContactRoleConfig{Email: ""},
 			Security: ContactRoleConfig{Email: ""},
 			Abuse:    ContactRoleConfig{Email: ""},
+			DPO:      DPOContactConfig{},
 			General:  ContactRoleConfig{Email: ""},
 		},
 		Tracking: TrackingConfig{
@@ -1239,6 +1383,7 @@ func Default() *ServerConfig {
 			Contact: ContactPageConfig{
 				Enabled:        true,
 				Captcha:        "simple",
+				Antispam:       AntispamConfig{Honeypot: true, MinFillSeconds: 3, MaxAgeSeconds: 43200, PerIP: 5, PerEmail: 3, Global: 60, Window: "1h", MaxLinks: 10, RejectMarkup: true, BlockedWords: []string{}, BlockedEmailDomains: []string{}},
 				SuccessMessage: "Thank you for your message. We'll respond soon.",
 			},
 			Help:  HelpPageConfig{Content: ""},
@@ -1274,6 +1419,7 @@ func Default() *ServerConfig {
 				"backup_hourly":    {Schedule: "@hourly", Enabled: false},
 				"healthcheck_self": {Schedule: "@every 5m", Enabled: true},
 				"tor_health":       {Schedule: "@every 10m", Enabled: true, RestartOnFail: true},
+				"i2p_health":       {Schedule: "@every 10m", Enabled: false},
 			},
 		},
 		Debug: false,
@@ -1286,6 +1432,15 @@ func Default() *ServerConfig {
 func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	if configDir == "" {
 		return nil, fmt.Errorf("config directory not specified")
+	}
+	if err := secureConfigDir(configDir); err != nil {
+		return nil, err
+	}
+	secretsPath := filepath.Join(configDir, "secrets.yml")
+	if info, err := os.Stat(secretsPath); err == nil && info.Mode().Perm() != 0600 {
+		if chmodErr := os.Chmod(secretsPath, 0600); chmodErr != nil {
+			fmt.Printf("WARNING: cannot secure secrets.yml permissions: %v\n", chmodErr)
+		}
 	}
 
 	configPath := filepath.Join(configDir, "server.yml")
@@ -1312,22 +1467,64 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 		}
 	}
 
-	// Read config file
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
+	if err := os.MkdirAll(filepath.Join(configDir, "yaml.d"), 0700); err != nil {
+		return nil, fmt.Errorf("create config drop-in directory: %w", err)
 	}
+	_ = os.Chmod(filepath.Join(configDir, "yaml.d"), 0700)
+	data, err := mergedConfigYAML(configDir, Default(), true)
+	if err != nil {
+		return nil, err
+	}
+	var httpPort, httpsPort int
+	data, httpPort, httpsPort = normalizeServerPort(data)
 
 	// Parse YAML — server.yml uses a top-level server: wrapper (AI.md PART 5).
 	// The web: sibling section is merged into cfg.Web after unmarshaling.
 	cfgDefault := Default()
 	cf := ConfigFile{Server: *cfgDefault}
-	if err := yaml.Unmarshal(data, &cf); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&cf); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 	cfg := &cf.Server
+	if err := normalizeI18nConfig(&cfg.I18n); err != nil {
+		return nil, fmt.Errorf("invalid server.i18n configuration: %w", err)
+	}
+	cfg.HTTPPort, cfg.HTTPSPort = httpPort, httpsPort
+	if cfg.HTTPPort == 0 && cfg.HTTPSPort == 0 && cfg.Port > 0 {
+		cfg.HTTPPort, cfg.HTTPSPort = classifySinglePort(cfg.Port)
+	}
+	if env := strings.TrimSpace(os.Getenv("I2P_ENABLED")); env != "" {
+		cfg.I2P.Enabled = env == "1" || strings.EqualFold(env, "true") || strings.EqualFold(env, "yes") || strings.EqualFold(env, "on")
+	} else if !yamlHasI2PEnabled(data) && isApplicationContainer() {
+		cfg.I2P.Enabled = true
+	}
 	// Propagate web: section into ServerConfig so handlers can access cfg.Web.
 	cfg.Web = cf.Web
+	if migrationErr := migrateConfigLayout(configDir); migrationErr != nil {
+		fmt.Printf("WARNING: config area migration skipped: %v\n", migrationErr)
+	}
+	serverToken := cfg.ServerToken
+	serverEncryptionKey := cfg.Security.EncryptionKey
+	secretToken, secretErr := readOperatorToken(secretsPath)
+	if secretErr != nil {
+		fmt.Printf("WARNING: ignoring invalid secrets.yml operator token: %v\n", secretErr)
+	}
+	if secretToken != "" {
+		cfg.ServerToken = secretToken
+	}
+	secretEncryptionKey, secretErr := readEncryptionKey(secretsPath)
+	if secretErr != nil {
+		fmt.Printf("WARNING: ignoring invalid secrets.yml encryption key: %v\n", secretErr)
+	}
+	if secretEncryptionKey != "" {
+		cfg.Security.EncryptionKey = secretEncryptionKey
+	}
+	if serverToken != "" || serverEncryptionKey != "" {
+		if saveErr := cfg.SaveSecrets(configDir); saveErr != nil {
+			return nil, fmt.Errorf("migrate secrets to secrets.yml: %w", saveErr)
+		}
+	}
 
 	// Allow MODE env var to override server.mode (AI.md PART 6).
 	if m := os.Getenv("MODE"); m != "" {
@@ -1350,22 +1547,23 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 			return nil, fmt.Errorf("generate server token: %w", err)
 		}
 		cfg.ServerToken = tok
-		// Persist token back to server.yml so it survives restarts
-		if saveErr := cfg.Save(configDir); saveErr != nil {
+		fmt.Printf("Generated operator token: %s\n", tok)
+		// Persist the token to secrets.yml; Save also removes a legacy server.yml copy.
+		if saveErr := cfg.SaveSecrets(configDir); saveErr != nil {
 			// Non-fatal: token still works this session but won't persist
 			fmt.Printf("WARNING: could not persist server token: %v\n", saveErr)
 		}
 	}
 
-	// Auto-generate installation secret on first run if absent (AI.md PART 11)
-	if cfg.InstallationSecret == "" {
-		secret, err := GenerateInstallationSecret()
+	// Generate the AES-256-GCM key into secrets.yml before serving requests.
+	if cfg.Security.EncryptionKey == "" {
+		secret, err := GenerateEncryptionKey()
 		if err != nil {
-			return nil, fmt.Errorf("generate installation secret: %w", err)
+			return nil, fmt.Errorf("generate encryption key: %w", err)
 		}
-		cfg.InstallationSecret = secret
-		if saveErr := cfg.Save(configDir); saveErr != nil {
-			fmt.Printf("WARNING: could not persist installation secret: %v\n", saveErr)
+		cfg.Security.EncryptionKey = secret
+		if saveErr := cfg.SaveSecrets(configDir); saveErr != nil {
+			return nil, fmt.Errorf("persist encryption key: %w", saveErr)
 		}
 	}
 
@@ -1375,6 +1573,41 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func yamlHasI2PEnabled(data []byte) bool {
+	var root yaml.Node
+	if yaml.Unmarshal(data, &root) != nil || len(root.Content) == 0 {
+		return false
+	}
+	nodeValue := func(n *yaml.Node, key string) *yaml.Node {
+		if n == nil || n.Kind != yaml.MappingNode {
+			return nil
+		}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if n.Content[i].Value == key {
+				return n.Content[i+1]
+			}
+		}
+		return nil
+	}
+	server := nodeValue(root.Content[0], "server")
+	i2p := nodeValue(server, "i2p")
+	return nodeValue(i2p, "enabled") != nil
+}
+
+func isApplicationContainer() bool {
+	if os.Getenv("INVOCATION_ID") != "" || os.Getenv("RC_SVCNAME") != "" || os.Getenv("SVDIR") != "" || os.Getenv("S6_LOGGING") != "" {
+		return false
+	}
+	if _, err := os.Stat("/run/systemd/system"); err == nil {
+		return false
+	}
+	manager := service.DetectServiceManager()
+	if manager == "systemd" || manager == "openrc" || manager == "runit" || manager == "s6" {
+		return false
+	}
+	return service.IsContainer()
 }
 
 // Validate validates the configuration. Invalid settings are warned about and
@@ -1408,10 +1641,7 @@ func (c *ServerConfig) Validate() error {
 	}
 
 	// Compliance mode validation
-	if c.Compliance.Enabled && !c.Backup.Encryption.Enabled {
-		// This will be caught at backup time and user will be prompted
-		// Don't block server startup
-	}
+	// Compliance mode prompts for backup encryption when a backup is created.
 
 	// Update branch validation (AI.md PART 22)
 	if c.Update.Branch != "stable" && c.Update.Branch != "beta" && c.Update.Branch != "daily" {
@@ -1421,9 +1651,9 @@ func (c *ServerConfig) Validate() error {
 		c.Update.DeferDays = 0
 	}
 
-	// API version validation — default to v1 if empty
+	// An omitted API version uses the project default.
 	if c.APIVersion == "" {
-		c.APIVersion = "v1"
+		c.APIVersion = DefaultAPIVersion
 	}
 
 	return nil
@@ -1711,56 +1941,53 @@ func (c *ServerConfig) IsDevelopment() bool {
 // Sanitized returns a copy of the config with sensitive values redacted.
 func (c *ServerConfig) Sanitized() map[string]any {
 	return map[string]any{
-		"address":            c.Address,
-		"port":               c.Port,
-		"mode":               c.Mode,
-		"debug":              c.Debug,
-		"data_dir":           c.DataDir,
-		"log_dir":            c.LogDir,
-		"backup_dir":         c.Backup.Dir,
-		"smtp_host":          c.Notifications.Email.SMTP.Host,
-		"smtp_tls_mode":      c.Notifications.Email.SMTP.TLS,
-		"metrics_enabled":    c.Metrics.Enabled,
-		"metrics_endpoint":   c.Metrics.Endpoint,
-		"rate_limit_enabled": c.RateLimit.Enabled,
-		"server_token":       "xxxxx",
+		"address":          c.Address,
+		"port":             c.Port,
+		"mode":             c.Mode,
+		"debug":            c.Debug,
+		"data_dir":         c.DataDir,
+		"log_dir":          c.LogDir,
+		"backup_dir":       c.Backup.Dir,
+		"smtp_host":        c.Notifications.Email.SMTP.Host,
+		"smtp_tls_mode":    c.Notifications.Email.SMTP.TLS,
+		"metrics_enabled":  c.Metrics.Enabled,
+		"metrics_endpoint": c.Metrics.Endpoint,
+		"server_token":     "xxxxx",
 	}
 }
 
-func (c *ServerConfig) Save(configDir string) error {
-	if configDir == "" {
-		configDir = c.ConfigDir
+func secureConfigDir(path string) error {
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
 	}
-	if configDir == "" {
-		return fmt.Errorf("config directory not specified")
+	if err := os.Chmod(path, 0700); err != nil {
+		return fmt.Errorf("secure config directory: %w", err)
 	}
-
-	// Ensure config directory exists
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	configPath := filepath.Join(configDir, "server.yml")
-
-	// Marshal via ConfigFile wrapper so the file uses the server: top-level key
-	// matching the AI.md PART 5 format. server.cors defaults to allowed_origins: ["*"].
-	cf := ConfigFile{
-		Server: *c,
-		Web:    c.Web,
-	}
-	if len(cf.Server.Cors.AllowedOrigins) == 0 {
-		cf.Server.Cors.AllowedOrigins = []string{"*"}
-	}
-	data, err := yaml.Marshal(cf)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	// Write with restrictive permissions — the file contains the operator token
-	// and installation secret (AI.md PART 11). Matches GenerateDefaultConfig.
-	if err := os.WriteFile(configPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
-	}
-
 	return nil
+}
+
+func readOperatorToken(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read secrets file: %w", err)
+	}
+	var secrets struct {
+		Server struct {
+			Token string `yaml:"token"`
+		} `yaml:"server"`
+	}
+	if err := yaml.Unmarshal(data, &secrets); err != nil {
+		return "", fmt.Errorf("parse secrets file: %w", err)
+	}
+	return secrets.Server.Token, nil
+}
+
+// ReadOperatorToken reads the existing operator token without creating or
+// migrating configuration files. Sensitive CLI actions use it for local
+// authorization before contacting the server.
+func ReadOperatorToken(configDir string) (string, error) {
+	return readOperatorToken(filepath.Join(configDir, "secrets.yml"))
 }

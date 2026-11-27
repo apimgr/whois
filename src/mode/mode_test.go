@@ -105,11 +105,11 @@ func TestGetAppModeString(t *testing.T) {
 
 func TestFromEnvMode(t *testing.T) {
 	defer resetMode()
-	defer os.Unsetenv("MODE")
-	defer os.Unsetenv("DEBUG")
+	defer func() { _ = os.Unsetenv("MODE") }()
+	defer func() { _ = os.Unsetenv("DEBUG") }()
 
-	os.Setenv("MODE", "development")
-	os.Unsetenv("DEBUG")
+	_ = os.Setenv("MODE", "development")
+	_ = os.Unsetenv("DEBUG")
 	FromEnv()
 
 	if !IsAppModeDev() {
@@ -119,11 +119,11 @@ func TestFromEnvMode(t *testing.T) {
 
 func TestFromEnvDebugOverridesAlias(t *testing.T) {
 	defer resetMode()
-	defer os.Unsetenv("MODE")
-	defer os.Unsetenv("DEBUG")
+	defer func() { _ = os.Unsetenv("MODE") }()
+	defer func() { _ = os.Unsetenv("DEBUG") }()
 
-	os.Setenv("MODE", "debug")
-	os.Setenv("DEBUG", "false")
+	_ = os.Setenv("MODE", "debug")
+	_ = os.Setenv("DEBUG", "false")
 	FromEnv()
 
 	if !IsAppModeDev() {
@@ -136,8 +136,8 @@ func TestFromEnvDebugOverridesAlias(t *testing.T) {
 
 func TestFromEnvNoVars(t *testing.T) {
 	defer resetMode()
-	os.Unsetenv("MODE")
-	os.Unsetenv("DEBUG")
+	_ = os.Unsetenv("MODE")
+	_ = os.Unsetenv("DEBUG")
 
 	SetAppMode("development")
 	SetDebugEnabled(true)

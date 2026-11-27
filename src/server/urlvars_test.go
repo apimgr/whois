@@ -1,12 +1,25 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/apimgr/whois/src/config"
 )
+
+type urlVarsTorRuntime struct{ address string }
+
+func (tor urlVarsTorRuntime) OnionAddress() string        { return tor.address }
+func (urlVarsTorRuntime) OutboundEnabled() bool           { return false }
+func (urlVarsTorRuntime) GetHTTPClient(bool) *http.Client { return nil }
+func (urlVarsTorRuntime) Health(context.Context) error    { return nil }
+func (urlVarsTorRuntime) Serve(http.Handler, time.Duration, time.Duration, time.Duration) error {
+	return nil
+}
+func (urlVarsTorRuntime) Close() error { return nil }
 
 // ---------------------------------------------------------------------------
 // isTrustedPeer / IsTrustedPeer
@@ -228,8 +241,8 @@ func TestGetURLVars_StandardPortsStripped(t *testing.T) {
 // other resolution and returns proto=http, fqdn=onionAddr, port="" (AI.md PART 12).
 func TestGetURLVars_TorPriority(t *testing.T) {
 	cfg := minCfg()
-	cfg.Tor = config.TorConfig{OnionAddress: "testhiddenservice.onion"}
 	s := newURLVarsServer(cfg)
+	s.torService = urlVarsTorRuntime{address: "testhiddenservice.onion"}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "testhiddenservice.onion"
@@ -329,8 +342,8 @@ func TestBuildURL_StandardPortStripped(t *testing.T) {
 // TestBuildURL_Tor verifies BuildURL returns an http:// onion URL for Tor requests.
 func TestBuildURL_Tor(t *testing.T) {
 	cfg := minCfg()
-	cfg.Tor = config.TorConfig{OnionAddress: "myhiddenservice.onion"}
 	s := newURLVarsServer(cfg)
+	s.torService = urlVarsTorRuntime{address: "myhiddenservice.onion"}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "myhiddenservice.onion"
@@ -340,5 +353,30 @@ func TestBuildURL_Tor(t *testing.T) {
 	want := "http://myhiddenservice.onion/api/v1/whois"
 	if got != want {
 		t.Errorf("BuildURL (Tor) = %q, want %q", got, want)
+	}
+}
+
+func TestBuildURL_ReverseProxyPrefix(t *testing.T) {
+	s := newURLVarsServer(minCfg())
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req.Host = "example.com"
+	req.RemoteAddr = "10.1.2.3:1234"
+	req.Header.Set("X-Forwarded-Prefix", "/myproject")
+	if got, want := s.BuildURL(req, "/api/v1/health"), "http://example.com/myproject/api/v1/health"; got != want {
+		t.Fatalf("BuildURL = %q, want %q", got, want)
+	}
+}
+
+func TestBaseURLRouter_StripsConfiguredPrefix(t *testing.T) {
+	cfg := minCfg()
+	cfg.BaseURL = "/myproject"
+	s := newURLVarsServer(cfg)
+	handler := s.baseURLRouter(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/myproject/api/v1/health", nil))
+	if got, want := recorder.Body.String(), "/api/v1/health"; got != want {
+		t.Fatalf("routed path = %q, want %q", got, want)
 	}
 }

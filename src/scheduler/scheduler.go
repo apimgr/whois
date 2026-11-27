@@ -6,13 +6,18 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/apimgr/whois/src/db"
 )
 
 // Scheduler manages persistent scheduled tasks using the built-in scheduler loop.
 type Scheduler struct {
 	db          *sql.DB
+	store       *db.DB
 	tasks       map[string]*Task
 	mu          sync.RWMutex
 	ctx         context.Context
@@ -37,12 +42,63 @@ type Scheduler struct {
 	// TokenCleanupHook removes expired API tokens and sessions from the DB (AI.md PART 18).
 	TokenCleanupHook func(context.Context) error
 	// HealthCheckSelfHook verifies server health and alerts if degraded (AI.md PART 18).
-	HealthCheckSelfHook func(context.Context) error
-	TorHealthHook       func(context.Context) error
+	HealthCheckSelfHook   func(context.Context) error
+	TorHealthHook         func(context.Context) error
+	I2PHealthHook         func(context.Context) error
+	securityRetentionDays int
+	retiredPGPPath        string
 	// WhoisRefreshHook re-queries the supplied stale queries and upserts fresh records.
 	WhoisRefreshHook func(context.Context, []string) error
 	// RDAPBootstrapHook fetches latest IANA RDAP bootstrap files.
 	RDAPBootstrapHook func(context.Context) error
+}
+
+// SetSecurityCleanup configures retention cleanup for encrypted disclosure reports
+// and the retired PGP private key.
+func (s *Scheduler) SetSecurityCleanup(retentionDays int, retiredPGPPath string) {
+	if retentionDays <= 0 {
+		retentionDays = 365
+	}
+	s.mu.Lock()
+	s.securityRetentionDays = retentionDays
+	if retiredPGPPath != "" {
+		s.retiredPGPPath = filepath.Clean(retiredPGPPath)
+	} else {
+		s.retiredPGPPath = ""
+	}
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) securityCleanupSettings() (int, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	days := s.securityRetentionDays
+	if days <= 0 {
+		days = 365
+	}
+	return days, s.retiredPGPPath
+}
+
+func (s *Scheduler) cleanupRetiredPGPKey() error {
+	_, path := s.securityCleanupSettings()
+	if path == "" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if time.Since(info.ModTime()) < 30*24*time.Hour {
+		return nil
+	}
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	log.Printf("INFO: security_cleanup: removed retired PGP private key")
+	return nil
 }
 
 // Task represents a scheduled task
@@ -89,6 +145,29 @@ func New(db *sql.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, 
 	}
 
 	return s, nil
+}
+
+// NewWithStore wires scheduler writes through the database's serialized writer.
+func NewWithStore(store *db.DB, timezone string, catchUpWindow time.Duration) (*Scheduler, error) {
+	if store == nil {
+		return nil, fmt.Errorf("database store is nil")
+	}
+	s, err := New(store.Read(), timezone, catchUpWindow)
+	if err != nil {
+		return nil, err
+	}
+	s.store = store
+	return s, nil
+}
+
+func (s *Scheduler) execWrite(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if s.store != nil {
+		return s.store.ExecResult(ctx, query, args...)
+	}
+	if ctx == nil {
+		return s.db.Exec(query, args...)
+	}
+	return s.db.ExecContext(ctx, query, args...)
 }
 
 // Register adds a task to the scheduler
@@ -185,7 +264,7 @@ func (s *Scheduler) saveTaskState(task *Task) error {
 	 next_run, run_count, fail_count, enabled)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err := s.db.Exec(query,
+	_, err := s.execWrite(context.Background(), query,
 		task.ID,
 		task.Name,
 		task.Schedule,
@@ -348,7 +427,7 @@ func retryDelayForAttempt(policy *RetryPolicy, attempt int) time.Duration {
 // returns its ID, or 0 if the insert failed (history logging is best-effort
 // and never blocks task execution).
 func (s *Scheduler) recordHistoryStart(taskID string, startedAt time.Time) int64 {
-	res, err := s.db.Exec(
+	res, err := s.execWrite(context.Background(),
 		`INSERT INTO scheduler_history (task_id, started_at, status) VALUES (?, ?, ?)`,
 		taskID, startedAt.Unix(), "running",
 	)
@@ -375,7 +454,7 @@ func (s *Scheduler) recordHistoryFinish(historyID int64, taskErr error, duration
 		status = "failed"
 		errMsg = sql.NullString{String: taskErr.Error(), Valid: true}
 	}
-	_, err := s.db.Exec(
+	_, err := s.execWrite(context.Background(),
 		`UPDATE scheduler_history SET finished_at = ?, status = ?, error = ?, duration_ms = ? WHERE id = ?`,
 		time.Now().Unix(), status, errMsg, duration.Milliseconds(), historyID,
 	)
@@ -410,7 +489,7 @@ func (s *Scheduler) GetTaskHistory(taskID string, limit int) ([]HistoryEntry, er
 	if err != nil {
 		return nil, fmt.Errorf("querying scheduler_history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []HistoryEntry
 	for rows.Next() {
@@ -673,7 +752,7 @@ func (s *Scheduler) EnableTask(id string) error {
 	task.Enabled = true
 
 	// Persist enabled state to scheduler_tasks
-	_, err := s.db.Exec(
+	_, err := s.execWrite(context.Background(),
 		"UPDATE scheduler_tasks SET enabled = 1 WHERE id = ?",
 		id,
 	)
@@ -693,7 +772,7 @@ func (s *Scheduler) DisableTask(id string) error {
 	task.Enabled = false
 
 	// Persist disabled state to scheduler_tasks
-	_, err := s.db.Exec(
+	_, err := s.execWrite(context.Background(),
 		"UPDATE scheduler_tasks SET enabled = 0 WHERE id = ?",
 		id,
 	)

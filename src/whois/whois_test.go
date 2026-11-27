@@ -27,7 +27,7 @@ func startMockWHOISServer(t *testing.T, response string) string {
 		t.Fatalf("startMockWHOISServer: listen failed: %v", err)
 	}
 
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -36,11 +36,11 @@ func startMockWHOISServer(t *testing.T, response string) string {
 				return
 			}
 			go func(c net.Conn) {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				buf := make([]byte, 512)
-				c.SetDeadline(time.Now().Add(5 * time.Second))
-				c.Read(buf)
-				fmt.Fprint(c, response)
+				_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+				_, _ = c.Read(buf)
+				_, _ = fmt.Fprint(c, response)
 			}(conn)
 		}
 	}()
@@ -316,7 +316,7 @@ func TestTCPQueryEmptyResponse(t *testing.T) {
 func TestQueryWHOISWithCacheHit(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCache()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Pre-populate cache with a serialised WHOISResult.
 	cached := &WHOISResult{
@@ -353,7 +353,7 @@ func TestQueryWHOISWithCacheHit(t *testing.T) {
 func TestQueryWHOISWithCacheFailureKey(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCache()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Set(ctx, cache.WHOISFailureKey("8.8.8.8"), []byte("1"), time.Hour); err != nil {
 		t.Fatalf("cache.Set failure key failed: %v", err)
@@ -380,7 +380,7 @@ func TestQueryWHOISWithCacheMissStoresResult(t *testing.T) {
 	// then manually store in cache and verify round-trip via QueryWHOISWithCache.
 	ctx := context.Background()
 	c := newTestCache()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Use tcpQuery directly to get the raw response from the mock server.
 	raw, err := tcpQuery(addr, "example.com")
@@ -396,7 +396,7 @@ func TestQueryWHOISWithCacheMissStoresResult(t *testing.T) {
 		Raw:    raw,
 	}
 	data, _ := json.Marshal(stored)
-	c.Set(ctx, cache.WHOISKey("example.com"), data, time.Hour)
+	_ = c.Set(ctx, cache.WHOISKey("example.com"), data, time.Hour)
 
 	// The cache hit path must now return without a network call.
 	result, err := QueryWHOISWithCache(ctx, "example.com", c)
@@ -441,14 +441,14 @@ func TestQueryWHOISUnknownType(t *testing.T) {
 func TestQueryWHOISWithCacheNetworkFailureStoresFailureKey(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCache()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// 8.8.4.4 is a valid IPv4, so it will pass type detection and server
 	// selection, but the selected IANA server is unreachable in this test
 	// environment. We inject a pre-cached failure key to simulate the post-
 	// failure state and verify the "failed recently" short-circuit.
 	failureKey := cache.WHOISFailureKey("8.8.4.4")
-	c.Set(ctx, failureKey, []byte("1"), time.Hour)
+	_ = c.Set(ctx, failureKey, []byte("1"), time.Hour)
 
 	_, err := QueryWHOISWithCache(ctx, "8.8.4.4", c)
 	if err == nil {
@@ -464,7 +464,7 @@ func TestQueryWHOISWithCacheNetworkFailureStoresFailureKey(t *testing.T) {
 func TestQueryWHOISResultFields(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCache()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	cached := &WHOISResult{
@@ -475,7 +475,7 @@ func TestQueryWHOISResultFields(t *testing.T) {
 		Timestamp: now,
 	}
 	data, _ := json.Marshal(cached)
-	c.Set(ctx, cache.WHOISKey("203.0.113.1"), data, time.Hour)
+	_ = c.Set(ctx, cache.WHOISKey("203.0.113.1"), data, time.Hour)
 
 	result, err := QueryWHOISWithCache(ctx, "203.0.113.1", c)
 	if err != nil {
@@ -655,7 +655,7 @@ func TestGetAllRIRServers(t *testing.T) {
 func TestQueryWHOISWithMockServer(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCache()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Pre-populate cache so that QueryWHOISWithCache serves from cache —
 	// this exercises the unmarshal/timestamp-refresh path end-to-end.
@@ -666,7 +666,7 @@ func TestQueryWHOISWithMockServer(t *testing.T) {
 		Raw:    "ASNumber: 15169\r\nOrganization: Google LLC\r\n",
 	}
 	data, _ := json.Marshal(pre)
-	c.Set(ctx, cache.WHOISKey("AS15169"), data, time.Hour)
+	_ = c.Set(ctx, cache.WHOISKey("AS15169"), data, time.Hour)
 
 	result, err := QueryWHOISWithCache(ctx, "AS15169", c)
 	if err != nil {

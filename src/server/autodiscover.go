@@ -27,6 +27,7 @@ type AutodiscoverResponse struct {
 
 	// Tor .onion address (when Tor is enabled and running)
 	OnionAddress string `json:"onion_address,omitempty"`
+	I2PAddress   string `json:"i2p_address,omitempty"`
 
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -51,6 +52,7 @@ type AutodiscoverFeatures struct {
 	GeoIP        bool `json:"geoip"`
 	Metrics      bool `json:"metrics"`
 	TorHidden    bool `json:"tor_hidden_service"`
+	I2P          bool `json:"i2p_eepsite"`
 }
 
 // CLIBinaryInfo holds version and checksum for a single platform's CLI binary.
@@ -79,8 +81,8 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 
 	// Tor .onion address (if hidden service is running)
 	var onionAddr string
-	if s.torService != nil {
-		onionAddr = s.torService.OnionAddress()
+	if torService := s.currentTor(); torService != nil {
+		onionAddr = torService.OnionAddress()
 	}
 
 	resp := AutodiscoverResponse{
@@ -89,24 +91,33 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 			Version:   Version,
 			GoVersion: runtime.Version(),
 		},
-		APIVersion:  "v1",
-		APIVersions: []string{"v1"},
+		APIVersion:  s.config.APIVersion,
+		APIVersions: []string{s.config.APIVersion},
 		BaseURL:     baseURL,
 		Features: AutodiscoverFeatures{
 			WHOIS:        true,
 			BulkLookup:   true,
-			RateLimiting: s.config.RateLimit.Enabled,
+			RateLimiting: true,
 			Caching:      true,
 			GeoIP:        s.config.GeoIP.Enabled,
 			Metrics:      s.config.Metrics.Enabled,
 			TorHidden:    onionAddr != "",
+			I2P:          func() bool { svc := s.currentI2P(); return svc != nil && svc.Status() == "running" }(),
 		},
 		// CLI versions map is empty until server-side binary hosting is added.
 		// Clients check this map before attempting an update.
 		CLIVersions:   map[string]CLIBinaryInfo{},
 		CLIMinVersion: "0.0.0",
 		OnionAddress:  onionAddr,
-		Timestamp:     time.Now().UTC(),
+		I2PAddress: func() string {
+			if s.config.I2P.Expose {
+				if svc := s.currentI2P(); svc != nil {
+					return svc.Address()
+				}
+			}
+			return ""
+		}(),
+		Timestamp: time.Now().UTC(),
 	}
 
 	// Populate build info from package-level build variables

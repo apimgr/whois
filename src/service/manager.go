@@ -2,8 +2,11 @@ package service
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/apimgr/whois/src/common/constants"
 )
@@ -37,6 +40,12 @@ type ServiceManager struct {
 	BinaryPath string
 	// WorkingDir is the working directory used when the service starts.
 	WorkingDir string
+	// UninstallPaths lists the configured application directories to remove.
+	UninstallPaths []string
+	// DataDir stores the resolved data path for the service-account ownership marker.
+	DataDir string
+	// ServiceDirs lists application directories prepared for the service account.
+	ServiceDirs []string
 }
 
 // NewServiceManager creates a new service manager
@@ -53,6 +62,19 @@ func NewServiceManager(name, displayName, description string) (*ServiceManager, 
 		BinaryPath:  binaryPath,
 		WorkingDir:  "/",
 	}, nil
+}
+
+// SetUninstallPaths configures application data paths removed after service uninstall.
+func (sm *ServiceManager) SetUninstallPaths(paths ...string) {
+	sm.UninstallPaths = append([]string(nil), paths...)
+	if len(paths) > 1 {
+		sm.DataDir = paths[1]
+	}
+}
+
+// SetServiceDirectories configures directories prepared before service startup.
+func (sm *ServiceManager) SetServiceDirectories(paths ...string) {
+	sm.ServiceDirs = append([]string(nil), paths...)
 }
 
 // Execute runs the specified service command
@@ -96,7 +118,9 @@ func (sm *ServiceManager) Install() error {
 		fmt.Println("Service installation requires administrator privileges.")
 		fmt.Print("Escalate? [Y/n]: ")
 		var response string
-		fmt.Scanln(&response)
+		if _, err := fmt.Scanln(&response); err != nil && err != io.EOF {
+			return fmt.Errorf("read escalation confirmation: %w", err)
+		}
 		if response != "" && response != "y" && response != "Y" {
 			return fmt.Errorf("escalation declined")
 		}
@@ -114,7 +138,9 @@ func (sm *ServiceManager) Uninstall() error {
 	fmt.Println("WARNING: This will delete ALL data, configs, and the system user.")
 	fmt.Print("Continue? [y/N]: ")
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil && err != io.EOF {
+		return fmt.Errorf("read uninstall confirmation: %w", err)
+	}
 	if response != "y" && response != "Y" {
 		return fmt.Errorf("uninstall cancelled")
 	}
@@ -124,7 +150,9 @@ func (sm *ServiceManager) Uninstall() error {
 		if CanEscalate() {
 			fmt.Println("Service uninstallation requires administrator privileges.")
 			fmt.Print("Escalate? [Y/n]: ")
-			fmt.Scanln(&response)
+			if _, err := fmt.Scanln(&response); err != nil && err != io.EOF {
+				return fmt.Errorf("read escalation confirmation: %w", err)
+			}
 			if response != "" && response != "y" && response != "Y" {
 				return fmt.Errorf("escalation declined")
 			}
@@ -133,7 +161,44 @@ func (sm *ServiceManager) Uninstall() error {
 		return fmt.Errorf("uninstall requires administrator privileges")
 	}
 
-	return sm.uninstall()
+	if err := sm.uninstall(); err != nil {
+		return err
+	}
+	if err := sm.removeCreatedServiceAccount(); err != nil {
+		return err
+	}
+	return sm.removeUninstallPaths()
+}
+
+func (sm *ServiceManager) removeUninstallPaths() error {
+	for _, path := range sm.UninstallPaths {
+		if path == "" {
+			continue
+		}
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("resolve uninstall path %q: %w", path, err)
+		}
+		clean := filepath.Clean(absolute)
+		if clean == string(filepath.Separator) || filepath.Dir(clean) == clean {
+			return fmt.Errorf("refusing to remove filesystem root during uninstall")
+		}
+		for _, protected := range []string{"/etc", "/var", "/usr", "/home", "/root", "/opt", "/tmp", "/run", "/boot", "/dev", "/proc", "/sys"} {
+			if clean == protected || strings.HasPrefix(protected, clean+string(filepath.Separator)) {
+				return fmt.Errorf("refusing to remove protected system path %q during uninstall", clean)
+			}
+		}
+		if workingDir, err := os.Getwd(); err == nil {
+			workingDir, _ = filepath.Abs(workingDir)
+			if clean == workingDir || strings.HasPrefix(workingDir, clean+string(filepath.Separator)) {
+				return fmt.Errorf("refusing to remove working directory or its parent during uninstall")
+			}
+		}
+		if err := os.RemoveAll(clean); err != nil {
+			return fmt.Errorf("remove uninstall path %q: %w", clean, err)
+		}
+	}
+	return nil
 }
 
 // Disable stops and disables the service (keeps data)
@@ -144,7 +209,9 @@ func (sm *ServiceManager) Disable() error {
 			fmt.Println("Service disable requires administrator privileges.")
 			fmt.Print("Escalate? [Y/n]: ")
 			var response string
-			fmt.Scanln(&response)
+			if _, err := fmt.Scanln(&response); err != nil && err != io.EOF {
+				return fmt.Errorf("read escalation confirmation: %w", err)
+			}
 			if response != "" && response != "y" && response != "Y" {
 				return fmt.Errorf("escalation declined")
 			}

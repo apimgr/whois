@@ -55,6 +55,37 @@ func TestHandleSecurityTxtWithFQDN(t *testing.T) {
 	}
 }
 
+func TestHandleSecurityTxtPublishesDisclosureChannels(t *testing.T) {
+	s := newTestServer(t)
+	s.config.FQDN = "whois.example.test"
+	s.config.TLS.Enabled = true
+	s.config.Contact.Security.Email = "security@example.test"
+	req := httptest.NewRequest(http.MethodGet, "https://whois.example.test/.well-known/security.txt", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleSecurityTxt(rr, req)
+
+	body := rr.Body.String()
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+	wantPrefix := []string{
+		"Contact: https://github.com/apimgr/whois/security/advisories/new",
+		"Contact: https://whois.example.test/server/contact?security_id=",
+		"Contact: mailto:security@example.test",
+		"Policy: https://whois.example.test/server/security/policy",
+	}
+	if len(lines) < len(wantPrefix)+1 {
+		t.Fatalf("security.txt has %d lines, want at least %d: %q", len(lines), len(wantPrefix)+1, body)
+	}
+	for i, prefix := range wantPrefix {
+		if !strings.HasPrefix(lines[i], prefix) {
+			t.Errorf("line %d = %q, want prefix %q", i+1, lines[i], prefix)
+		}
+	}
+	if !strings.HasPrefix(lines[4], "Expires: ") {
+		t.Errorf("line 5 = %q, want Expires", lines[4])
+	}
+}
+
 // TestHandleSitemap verifies /sitemap.xml returns valid XML with expected URLs.
 func TestHandleSitemap(t *testing.T) {
 	s := newTestServer(t)
@@ -79,18 +110,17 @@ func TestHandleSitemap(t *testing.T) {
 	}
 }
 
-// TestHandleSitemapWithFQDN verifies FQDN is used in sitemap URLs.
-func TestHandleSitemapWithFQDN(t *testing.T) {
+// TestHandleSitemapUsesRequestHost verifies sitemap URLs use the request host.
+func TestHandleSitemapUsesRequestHost(t *testing.T) {
 	s := newTestServer(t)
-	s.config.FQDN = "mysite.example.com"
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	rr := httptest.NewRecorder()
 
 	s.handleSitemap(rr, req)
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "mysite.example.com") {
-		t.Error("sitemap should use configured FQDN")
+	if !strings.Contains(body, "example.com") {
+		t.Error("sitemap should use request host")
 	}
 }
 
@@ -118,18 +148,17 @@ func TestHandleRobotsTxt(t *testing.T) {
 	}
 }
 
-// TestHandleRobotsTxtWithFQDN verifies FQDN is used in Sitemap directive.
-func TestHandleRobotsTxtWithFQDN(t *testing.T) {
+// TestHandleRobotsTxtUsesRequestHost verifies the Sitemap directive uses the request host.
+func TestHandleRobotsTxtUsesRequestHost(t *testing.T) {
 	s := newTestServer(t)
-	s.config.FQDN = "search.example.com"
 	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
 	rr := httptest.NewRecorder()
 
 	s.handleRobotsTxt(rr, req)
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "search.example.com") {
-		t.Error("robots.txt should contain configured FQDN in Sitemap")
+	if !strings.Contains(body, "example.com") {
+		t.Error("robots.txt should contain request host in Sitemap")
 	}
 }
 
@@ -160,18 +189,17 @@ func TestHandleLLMsTxt(t *testing.T) {
 	}
 }
 
-// TestHandleLLMsTxtWithFQDN verifies llms.txt uses configured FQDN.
-func TestHandleLLMsTxtWithFQDN(t *testing.T) {
+// TestHandleLLMsTxtUsesRequestHost verifies llms.txt uses the request host.
+func TestHandleLLMsTxtUsesRequestHost(t *testing.T) {
 	s := newTestServer(t)
-	s.config.FQDN = "whois.example.com"
 	req := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)
 	rr := httptest.NewRecorder()
 
 	s.handleLLMsTxt(rr, req)
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "whois.example.com") {
-		t.Error("llms.txt should contain the configured FQDN")
+	if !strings.Contains(body, "example.com") {
+		t.Error("llms.txt should contain the request host")
 	}
 }
 
@@ -212,7 +240,7 @@ func TestWellKnownMethodCheckRejectsPost(t *testing.T) {
 func TestWellKnownMethodCheckAllowsGet(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ok")
+		_, _ = fmt.Fprint(w, "ok")
 	})
 	handler := wellKnownMethodCheck(inner)
 
@@ -591,14 +619,14 @@ func TestSendTextResponse(t *testing.T) {
 func TestSendHTMLResponse(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/whois?q=example.com", nil)
-	result := &whois.WHOISResult{
-		Query:     "example.com",
-		Server:    "whois.verisign-grs.com",
-		Raw:       "Domain Name: EXAMPLE.COM\n",
-		Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	result := &whois.UnifiedResult{
+		Query:       "example.com",
+		QueryType:   whois.QueryTypeDomain,
+		WHOISServer: "whois.verisign-grs.com",
+		RawWHOIS:    "Domain Name: EXAMPLE.COM\n",
+		Timestamp:   time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
-	result.Type = whois.QueryTypeDomain
-	sendHTMLResponse(rr, req, result)
+	newTestServer(t).sendUnifiedHTMLResponse(rr, req, result)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rr.Code)

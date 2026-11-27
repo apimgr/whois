@@ -79,7 +79,7 @@ func NewRedisCache(ctx context.Context, opts RedisOptions) (*RedisCache, error) 
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := client.Ping(pingCtx).Err(); err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}
 
@@ -93,6 +93,54 @@ func NewRedisCache(ctx context.Context, opts RedisOptions) (*RedisCache, error) 
 // key applies the configured prefix to a cache key.
 func (rc *RedisCache) key(k string) string {
 	return KeyPrefix(rc.prefix, k)
+}
+
+const rateLimitScript = `
+local key = KEYS[1]
+local sequence = KEYS[2]
+local now = tonumber(ARGV[1])
+local cutoff = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local ttl = tonumber(ARGV[4])
+local consume = tonumber(ARGV[5])
+redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
+local count = redis.call('ZCARD', key)
+if count >= limit then
+  return 0
+end
+if consume == 1 then
+  local member = tostring(now) .. ':' .. tostring(redis.call('INCR', sequence))
+  redis.call('ZADD', key, now, member)
+  redis.call('EXPIRE', key, ttl)
+  redis.call('EXPIRE', sequence, ttl)
+end
+return 1
+`
+
+// AllowRateLimit atomically enforces a rolling window in Redis or Valkey.
+func (rc *RedisCache) AllowRateLimit(ctx context.Context, key string, requests int, window time.Duration, consume bool) (bool, error) {
+	if requests <= 0 {
+		requests = 60
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	now := time.Now().UnixMilli()
+	ttl := int((2*window + time.Second - 1) / time.Second)
+	if ttl < 1 {
+		ttl = 1
+	}
+	consumeValue := 0
+	if consume {
+		consumeValue = 1
+	}
+	baseKey := rc.key("ratelimit:" + key)
+	allowed, err := rc.client.Eval(ctx, rateLimitScript, []string{baseKey, baseKey + ":seq"},
+		now, now-window.Milliseconds(), requests, ttl, consumeValue).Int()
+	if err != nil {
+		return false, fmt.Errorf("redis rate limit: %w", err)
+	}
+	return allowed == 1, nil
 }
 
 // Get retrieves a value from cache

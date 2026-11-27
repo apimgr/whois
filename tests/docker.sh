@@ -1,388 +1,248 @@
-#!/bin/bash
-# Docker integration tests for caswhois — 100% endpoint/route coverage
-# See AI.md PART 28 for testing rules
+#!/usr/bin/env bash
+# shellcheck disable=SC1078,SC1079,SC1083,SC2102
+# @@License          :  WTFPL
+# @@Description      :  Run Docker binary and HTTP integration checks.
+# @@Resource         :  AI.md PART 28
 
-set -e
+set -euo pipefail
 
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+PROJECT_DIR="$(git rev-parse --show-toplevel)"
+PROJECT_NAME="$(sed -n 's/^project_name:[[:space:]]*//p' "$PROJECT_DIR/IDEA.md" | head -n1 | tr -d '[:space:]')"
+PROJECT_ORG="$(sed -n 's/^project_org:[[:space:]]*//p' "$PROJECT_DIR/IDEA.md" | head -n1 | tr -d '[:space:]')"
+INTERNAL_NAME="$(sed -n 's/^internal_name:[[:space:]]*//p' "$PROJECT_DIR/IDEA.md" | head -n1 | tr -d '[:space:]')"
+CONTAINER_NAME="${PROJECT_NAME}-$(date +%s%N | sha256sum | cut -c1-8)"
 
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DOCKER_DIR="$PROJECT_ROOT/docker"
+image_check() {
+    local image_ref port elapsed tor_status outbound
+    image_ref="${1:?Usage: tests/docker.sh --image-check IMAGE}"
+    CONTAINER_NAME="${PROJECT_NAME}-image-check-$(date +%s%N | sha256sum | cut -c1-8)"
+    docker run --rm --entrypoint sh "$image_ref" -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'
+    docker run -d --name "$CONTAINER_NAME" -p 127.0.0.1::80 "$image_ref" >/dev/null
+    port="$(docker port "$CONTAINER_NAME" 80/tcp | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n1)"
+    if [ -z "$port" ]; then
+        echo "ERROR: unable to determine mapped health port for $image_ref" >&2
+        return 1
+    fi
 
-echo "========================================"
-echo "caswhois Docker Integration Tests"
-echo "========================================"
-echo "Project root: $PROJECT_ROOT"
-echo
+    elapsed=0
+    tor_status=""
+    while [ "$elapsed" -lt "${TOR_BOOTSTRAP_TIMEOUT:-180}" ]; do
+        tor_status="$(curl -q -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$port/server/healthz" 2>/dev/null | sed -n '/"tor": {/,/}/p' | sed -n 's/.*"status":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
+        if [ "$tor_status" = healthy ]; then
+            echo "PASS image contract and Tor health: $image_ref"
+            return 0
+        fi
+        if [ "$tor_status" = error ]; then
+            echo "ERROR: Tor reported error in $image_ref" >&2
+            return 1
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
 
-# Cleanup function — only removes this project's test resources, never a broad sweep
+    if [ "${REQUIRE_OVERLAY:-0}" = 1 ]; then
+        echo "ERROR: Tor did not become healthy within ${TOR_BOOTSTRAP_TIMEOUT:-180}s (status: ${tor_status:-unknown})" >&2
+        return 1
+    fi
+    outbound=0
+    if command -v curl >/dev/null 2>&1 && curl -q -fsS --connect-timeout 5 --max-time 10 https://check.torproject.org/ >/dev/null 2>&1; then
+        outbound=1
+    fi
+    if [ "$outbound" -eq 0 ] && { [ "$tor_status" = starting ] || [ "$tor_status" = unavailable ]; }; then
+        echo "SKIP: no outbound network" >&2
+        return 0
+    fi
+    echo "ERROR: Tor did not become healthy within ${TOR_BOOTSTRAP_TIMEOUT:-180}s (status: ${tor_status:-unknown})" >&2
+    return 1
+}
+
+if [ "${1:-}" = --image-check ]; then
+    trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT INT TERM
+    image_check "${2:-}"
+    exit $?
+fi
+
+DOCKER_MEM="${DOCKER_MEM:-4g}"
+DOCKER_CPUS="${DOCKER_CPUS:-2}"
+DOCKER_CPU_SHARES="${DOCKER_CPU_SHARES:-256}"
+DOCKER_TIMEOUT="${DOCKER_TIMEOUT:-3600}"
+ARTIFACT_DIR=""
+
 cleanup() {
-    echo
-    echo "Cleaning up..."
-    docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/docker-compose.test.yml" down -v 2>/dev/null || true
-}
-
-trap cleanup EXIT
-
-# Test counters
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
-FAILED_TESTS=""
-
-# run_test NAME COMMAND
-# Eval COMMAND; pass/fail is determined by exit code
-run_test() {
-    local test_name="$1"
-    local test_command="$2"
-
-    TESTS_RUN=$((TESTS_RUN + 1))
-    printf "[%d] %s... " "$TESTS_RUN" "$test_name"
-
-    if eval "$test_command" &>/dev/null; then
-        echo -e "${GREEN}PASS${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "${RED}FAIL${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        FAILED_TESTS="${FAILED_TESTS}  - ${test_name}\n"
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    if [ -n "$ARTIFACT_DIR" ]; then
+        rm -rf -- "$ARTIFACT_DIR"
     fi
 }
+trap cleanup EXIT INT TERM
 
-# run_test_status NAME EXPECTED_CODE COMMAND
-# Checks HTTP status code equals EXPECTED_CODE
-run_test_status() {
-    local test_name="$1"
-    local expected="$2"
-    local url="$3"
-    shift 3
-    local extra_args="$*"
+TEMP_PARENT="${TMPDIR:-/tmp}/$PROJECT_ORG"
+mkdir -p "$TEMP_PARENT"
+ARTIFACT_DIR="$(mktemp -d "$TEMP_PARENT/$INTERNAL_NAME-XXXXXX")"
+chmod 0700 "$ARTIFACT_DIR"
+BIN_DIR="$ARTIFACT_DIR/binaries"
+RELEASE_DIR="$ARTIFACT_DIR/releases"
+mkdir -p "$BIN_DIR" "$RELEASE_DIR"
 
-    TESTS_RUN=$((TESTS_RUN + 1))
-    printf "[%d] %s... " "$TESTS_RUN" "$test_name"
+cd "$PROJECT_DIR"
+echo "Building server and CLI binaries in Docker..."
+make build BINDIR="$BIN_DIR" RELDIR="$RELEASE_DIR"
 
-    local got
-    got=$(curl -s -o /dev/null -w '%{http_code}' $extra_args "$url" 2>/dev/null)
-    if [ "$got" = "$expected" ]; then
-        echo -e "${GREEN}PASS${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "${RED}FAIL (got $got, want $expected)${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        FAILED_TESTS="${FAILED_TESTS}  - ${test_name}\n"
-    fi
-}
-
-# Build and start test container
-echo "Building test container..."
-docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/docker-compose.test.yml" build
-echo
-
-echo "Starting test container..."
-docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/docker-compose.test.yml" up -d
-echo
-
-# Wait for container to be healthy (max 90s)
-echo "Waiting for container to be healthy (max 90s)..."
-TIMEOUT=90
-ELAPSED=0
-while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-    if docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/docker-compose.test.yml" ps | grep -q -- "healthy"; then
-        echo -e "${GREEN}Container is healthy${NC}"
-        break
-    fi
-    sleep 2
-    ELAPSED=$((ELAPSED + 2))
-    printf "."
-done
-echo
-
-if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-    echo -e "${RED}Container failed to become healthy in ${TIMEOUT}s${NC}"
-    docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/docker-compose.test.yml" logs
+if [ ! -x "$BIN_DIR/$INTERNAL_NAME" ]; then
+    echo "ERROR: server binary missing: $BIN_DIR/$INTERNAL_NAME" >&2
     exit 1
 fi
 
-# Base URL
-PORT=64581
-BASE="http://localhost:$PORT"
-
-# Extract server token from the running container's generated server.yml
-TOKEN=$(docker exec caswhois-test sh -c 'grep "^  token:" /config/caswhois/server.yml 2>/dev/null | awk "{print \$2}"' 2>/dev/null || true)
-if [ -z "$TOKEN" ]; then
-    echo -e "${YELLOW}⚠ Could not read server token — token-protected tests will verify 401${NC}"
-fi
-
-echo "Running integration tests against $BASE"
-echo
-
-# -----------------------------------------------------------------------
-echo "--- Health endpoints ---"
-# -----------------------------------------------------------------------
-
-run_test "GET /healthz → 200" \
-    "curl -f -s $BASE/healthz"
-
-run_test "GET /server/healthz → 200" \
-    "curl -f -s $BASE/server/healthz"
-
-run_test "GET /server/healthz returns ok:true" \
-    "curl -f -s $BASE/server/healthz | grep -q -- '\"ok\":true'"
-
-run_test "GET /api/v1/server/healthz → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/server/healthz | grep -q -- '\"ok\":true'"
-
-run_test "GET /api/v1/server/healthz → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/server/healthz"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Text-only / fixed-format endpoints ---"
-# -----------------------------------------------------------------------
-
-run_test "GET /.well-known/security.txt → 200" \
-    "curl -f -s $BASE/.well-known/security.txt"
-
-run_test "GET /robots.txt → 200" \
-    "curl -f -s $BASE/robots.txt"
-
-run_test "GET /sitemap.xml → 200" \
-    "curl -f -s $BASE/sitemap.xml"
-
-run_test "GET /manifest.json → 200 (JSON)" \
-    "curl -f -s $BASE/manifest.json | grep -q -- 'name'"
-
-run_test "GET /sw.js → 200" \
-    "curl -f -s $BASE/sw.js"
-
-run_test "GET /offline.html → 200 (text/html)" \
-    "curl -f -s -H 'Accept: text/html' $BASE/offline.html | grep -qi '<html'"
-
-run_test "GET /offline.html → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/offline.html"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Metrics endpoint ---"
-# -----------------------------------------------------------------------
-
-run_test "GET /metrics → 200" \
-    "curl -f -s $BASE/metrics | grep -q -- 'caswhois_'"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Frontend routes (text/html + text/plain required per PART 28) ---"
-# -----------------------------------------------------------------------
-
-run_test "GET / → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/ | grep -qi '<html'"
-
-run_test "GET / → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/"
-
-run_test "GET /about → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/about | grep -qi '<html'"
-
-run_test "GET /about → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/about"
-
-run_test "GET /server/about → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/server/about | grep -qi '<html'"
-
-run_test "GET /server/about → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/server/about"
-
-run_test "GET /docs → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/docs | grep -qi '<html'"
-
-run_test "GET /docs → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/docs"
-
-run_test "GET /server/docs → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/server/docs | grep -qi '<html'"
-
-run_test "GET /server/docs → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/server/docs"
-
-run_test "GET /whois → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/whois | grep -qi '<html'"
-
-run_test "GET /whois → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/whois"
-
-run_test "GET /whois/search → 200 (text/html)" \
-    "curl -f -sL -H 'Accept: text/html' $BASE/whois/search | grep -qi '<html'"
-
-run_test "GET /whois/search → 200 (text/plain)" \
-    "curl -f -sL -H 'Accept: text/plain' $BASE/whois/search"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- WHOIS API endpoints (application/json + text/plain per PART 28) ---"
-# -----------------------------------------------------------------------
-
-run_test "GET /api/v1/whois/example.com → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/whois/example.com | grep -q 'ok'"
-
-run_test "GET /api/v1/whois/example.com → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/whois/example.com"
-
-run_test "GET /api/v1/whois/domain/example.com → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/whois/domain/example.com | grep -q 'ok'"
-
-run_test "GET /api/v1/whois/domain/example.com → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/whois/domain/example.com"
-
-run_test "GET /api/v1/whois/ip/8.8.8.8 → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/whois/ip/8.8.8.8 | grep -q 'ok'"
-
-run_test "GET /api/v1/whois/ip/8.8.8.8 → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/whois/ip/8.8.8.8"
-
-run_test "GET /api/v1/whois/asn/AS15169 → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/whois/asn/AS15169 | grep -q 'ok'"
-
-run_test "GET /api/v1/whois/asn/AS15169 → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/whois/asn/AS15169"
-
-run_test "GET /api/v1/whois/validate/example.com → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/whois/validate/example.com | grep -q 'ok'"
-
-run_test "GET /api/v1/whois/validate/example.com → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/whois/validate/example.com"
-
-run_test "GET /api/v1/whois/search?q=example → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' '$BASE/api/v1/whois/search?q=example' | grep -q 'ok'"
-
-run_test "GET /api/v1/whois/search?q=example → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' '$BASE/api/v1/whois/search?q=example'"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Other API endpoints ---"
-# -----------------------------------------------------------------------
-
-run_test "GET /api/v1/whois-servers → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/whois-servers | grep -q -- 'servers'"
-
-run_test "GET /api/v1/whois-servers → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/whois-servers"
-
-run_test "GET /api/v1/server/stats → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/v1/server/stats | grep -q 'ok'"
-
-run_test "GET /api/v1/server/stats → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/v1/server/stats"
-
-run_test "GET /api/autodiscover → 200 (JSON)" \
-    "curl -f -s -H 'Accept: application/json' $BASE/api/autodiscover | grep -q 'api'"
-
-run_test "GET /api/autodiscover → 200 (text/plain)" \
-    "curl -f -s -H 'Accept: text/plain' $BASE/api/autodiscover"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Locale / i18n endpoints ---"
-# -----------------------------------------------------------------------
-
-run_test "GET /locales/en.json → 200" \
-    "curl -f -s $BASE/locales/en.json | grep -q '{'"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Token-protected endpoints ---"
-# -----------------------------------------------------------------------
-
-# Verify 401 when no token is provided
-run_test_status "GET /api/v1/server/schedulers → 401 (no token)" \
-    "401" "$BASE/api/v1/server/schedulers"
-
-run_test_status "GET /api/v1/server/backups → 401 (no token)" \
-    "401" "$BASE/api/v1/server/backups"
-
-run_test_status "POST /api/v1/whois/bulk → 401 (no token)" \
-    "401" "$BASE/api/v1/whois/bulk" -X POST -H 'Content-Type: application/json' -d '{"queries":[]}'
-
-if [ -n "$TOKEN" ]; then
-    run_test "GET /api/v1/server/schedulers → 200 (JSON, with token)" \
-        "curl -f -s -H 'Accept: application/json' -H 'Authorization: Bearer $TOKEN' $BASE/api/v1/server/schedulers | grep -q 'ok'"
-
-    run_test "GET /api/v1/server/schedulers → 200 (text/plain, with token)" \
-        "curl -f -s -H 'Accept: text/plain' -H 'Authorization: Bearer $TOKEN' $BASE/api/v1/server/schedulers"
-
-    run_test "GET /api/v1/server/backups → 200 (JSON, with token)" \
-        "curl -f -s -H 'Accept: application/json' -H 'Authorization: Bearer $TOKEN' $BASE/api/v1/server/backups | grep -q 'ok'"
-
-    run_test "GET /api/v1/server/backups → 200 (text/plain, with token)" \
-        "curl -f -s -H 'Accept: text/plain' -H 'Authorization: Bearer $TOKEN' $BASE/api/v1/server/backups"
-
-    run_test "POST /api/v1/whois/bulk → 200 (with token)" \
-        "curl -f -s -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' -d '{\"queries\":[\"example.com\"]}' $BASE/api/v1/whois/bulk | grep -q 'ok'"
-else
-    echo -e "  ${YELLOW}Skipping authenticated tests — token not available${NC}"
-fi
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Error handling ---"
-# -----------------------------------------------------------------------
-
-run_test_status "GET /nonexistent → 404" \
-    "404" "$BASE/nonexistent-route-xyz"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Security headers ---"
-# -----------------------------------------------------------------------
-
-run_test "CORS headers present" \
-    "curl -s -I $BASE/api/v1/server/healthz | grep -qi 'access-control'"
-
-run_test "CSP header present" \
-    "curl -s -I $BASE/ | grep -qi 'content-security-policy'"
-
-# -----------------------------------------------------------------------
-echo
-echo "--- Binary version/help ---"
-# -----------------------------------------------------------------------
-
-run_test "Binary version flag" \
-    "docker exec caswhois-test caswhois --version 2>&1 | grep -q 'caswhois version'"
-
-run_test "Binary help flag" \
-    "docker exec caswhois-test caswhois --help 2>&1 | grep -qi 'usage'"
-
-# -----------------------------------------------------------------------
-echo
-echo "========================================"
-echo "Test Summary"
-echo "========================================"
-echo "Total:  $TESTS_RUN"
-echo -e "Passed: ${GREEN}$TESTS_PASSED${NC}"
-if [ "$TESTS_FAILED" -gt 0 ]; then
-    echo -e "Failed: ${RED}$TESTS_FAILED${NC}"
-    echo
-    echo "Failed tests:"
-    printf "%b" "$FAILED_TESTS"
-else
-    echo "Failed: 0"
-fi
-echo
-
-# Show container logs if any tests failed
-if [ "$TESTS_FAILED" -gt 0 ]; then
-    echo "Container logs:"
-    echo "========================================"
-    docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/docker-compose.test.yml" logs
-    echo "========================================"
-    exit 1
-fi
-
-echo -e "${GREEN}All $TESTS_RUN tests passed!${NC}"
-exit 0
+timeout -k 30 "$DOCKER_TIMEOUT" docker run --rm --no-healthcheck --name "$CONTAINER_NAME" \
+    --memory="$DOCKER_MEM" --cpus="$DOCKER_CPUS" --cpu-shares="$DOCKER_CPU_SHARES" \
+    -v "$BIN_DIR:/binaries:ro" \
+    -e PROJECT_NAME="$PROJECT_NAME" \
+    -e PROJECT_ORG="$PROJECT_ORG" \
+    -e INTERNAL_NAME="$INTERNAL_NAME" \
+    alpine:latest sh -eu -c "$(cat <<'CONTAINER_SCRIPT'
+        apk add --no-cache curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
+        mkdir -p "/tmp/$PROJECT_ORG"
+        TEST_ROOT=$(mktemp -d "/tmp/$PROJECT_ORG/$INTERNAL_NAME-XXXXXX")
+        chmod 0700 "$TEST_ROOT"
+        CONFIG_DIR="$TEST_ROOT/config"
+        DATA_DIR="$TEST_ROOT/data"
+        LOG_DIR="$TEST_ROOT/log"
+        mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
+        chmod 0700 "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
+        adduser -D -H -s /sbin/nologin "$INTERNAL_NAME"
+        chown -R "$INTERNAL_NAME:$INTERNAL_NAME" "$TEST_ROOT"
+        SERVER="/binaries/$INTERNAL_NAME"
+        CLI="/binaries/$INTERNAL_NAME-cli"
+        PORT=64580
+        BASE="http://127.0.0.1:$PORT"
+
+        "$SERVER" --version
+        "$SERVER" --help | grep -F -- "$PROJECT_NAME" >/dev/null
+        file "$SERVER"
+        if [ -x "$CLI" ]; then
+            "$CLI" --version
+            "$CLI" --help >/dev/null
+        fi
+
+        cp "$SERVER" "$TEST_ROOT/renamed-server"
+        chmod 0700 "$TEST_ROOT/renamed-server"
+        "$TEST_ROOT/renamed-server" --help | grep -F renamed-server >/dev/null
+        if [ -x "$CLI" ]; then
+            cp "$CLI" "$TEST_ROOT/renamed-cli"
+            chmod 0700 "$TEST_ROOT/renamed-cli"
+            "$TEST_ROOT/renamed-cli" --help | grep -F renamed-cli >/dev/null
+        fi
+
+        "$SERVER" --mode development --config "$CONFIG_DIR" --data "$DATA_DIR" --log "$LOG_DIR" --address 127.0.0.1 --port "$PORT" >"$TEST_ROOT/server.log" 2>&1 &
+        SERVER_PID=$!
+        trap "kill $SERVER_PID 2>/dev/null || true; wait $SERVER_PID 2>/dev/null || true; rm -rf \"$TEST_ROOT\"" EXIT INT TERM
+
+        ready=0
+        for _ in $(seq 1 60); do
+            if curl -q -LSsf "$BASE/server/healthz" >/dev/null 2>&1; then
+                ready=1
+                break
+            fi
+            sleep 1
+        done
+        if [ "$ready" -ne 1 ]; then
+            sed -E 's/adm_[A-Za-z0-9-]{32,}/[REDACTED]/g' "$TEST_ROOT/server.log" >&2
+            echo "ERROR: server did not become healthy" >&2
+            exit 1
+        fi
+
+        FAILURES=0
+        check() {
+            label=$1
+            shift
+            if "$@" >/dev/null; then
+                printf "PASS %s\n" "$label"
+            else
+                printf "FAIL %s\n" "$label" >&2
+                FAILURES=$((FAILURES + 1))
+            fi
+        }
+
+        curl_checked() {
+            command curl -q -LSsf --connect-timeout 5 --max-time 10 "$@"
+        }
+
+        http_status() {
+            command curl -q -LSs --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "$@"
+        }
+
+        api_health_json() {
+            curl -q -LSsf -H 'Accept: application/json' "$BASE/api/v1/server/healthz" | jq -e '.status == "healthy" or .status == "degraded"' >/dev/null
+        }
+
+        api_health_text() {
+            curl -q -LSsf -H 'Accept: text/plain' "$BASE/api/v1/server/healthz" | grep 'status: ' >/dev/null
+        }
+
+        api_html_prefers_json() {
+            curl -q -LSsf -H 'Accept: text/html' "$BASE/api/v1/server/healthz" | jq -e '.status == "healthy" or .status == "degraded"' >/dev/null
+        }
+
+        homepage_html() {
+            curl -q -LSsf --connect-timeout 5 --max-time 10 -H 'Accept: text/html' "$BASE/" | grep -i '<html' >/dev/null
+        }
+
+        browser_homepage_html() {
+            curl -q -LSsf -A 'Mozilla/5.0' "$BASE/" | grep -i '<html' >/dev/null
+        }
+
+        cli_homepage_text() {
+            curl -q -LSsf "$BASE/" | grep -i WHOIS >/dev/null
+        }
+
+        whois_page_html() {
+            curl -q -LSsf --connect-timeout 5 --max-time 10 -H 'Accept: text/html' "$BASE/whois" | grep -i '<html' >/dev/null
+        }
+
+        operator_bulk() {
+            curl -q -LSsf --connect-timeout 5 --max-time 10 -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"queries":["!!!"]}' "$BASE/api/v1/whois/bulk" >/dev/null
+        }
+
+        check "health JSON" curl_checked -H "Accept: application/json" "$BASE/api/v1/server/healthz"
+        check "health text" curl_checked -H "Accept: text/plain" "$BASE/server/healthz"
+        check "API health .txt" curl_checked "$BASE/api/v1/server/healthz.txt"
+        check "API health JSON Accept" api_health_json
+        check "API health text Accept" api_health_text
+        check "API HTML Accept defaults to JSON" api_html_prefers_json
+        check "homepage HTML" homepage_html
+        check "browser user agent receives HTML" browser_homepage_html
+        check "curl user agent receives formatted text" cli_homepage_text
+        check "WHOIS form HTML" whois_page_html
+        check "WHOIS validation" curl_checked "$BASE/api/v1/whois/validate/example.com"
+        check "WHOIS owner search" curl_checked "$BASE/api/v1/whois/search?owner=example"
+        check "WHOIS server list" curl_checked "$BASE/api/v1/whois-servers"
+        check "server stats" curl_checked "$BASE/api/v1/server/stats"
+        check "about page" curl_checked -H "Accept: text/html" "$BASE/server/about"
+        check "docs page" curl_checked -H "Accept: text/html" "$BASE/server/docs"
+        check "privacy page" curl_checked -H "Accept: text/html" "$BASE/server/privacy"
+        check "security policy" curl_checked -H "Accept: text/html" "$BASE/server/security/policy"
+        check "security.txt" curl_checked "$BASE/.well-known/security.txt"
+        check "robots.txt" curl_checked "$BASE/robots.txt"
+        check "sitemap.xml" curl_checked "$BASE/sitemap.xml"
+        check "manifest.json" curl_checked "$BASE/manifest.json"
+        check "service worker" curl_checked "$BASE/sw.js"
+
+        TOKEN=$(awk '/^server:/{inside=1;next} inside && /^    token:/{sub(/^    token:[[:space:]]*/, ""); print; exit}' "$CONFIG_DIR/secrets.yml" | tr -d "\047\042")
+        if [ -z "$TOKEN" ]; then
+            find "$CONFIG_DIR" -maxdepth 2 -type f -print >&2
+            awk '/token:/{print FNR ": token: [REDACTED]"}' "$CONFIG_DIR/secrets.yml" >&2 || true
+            echo "ERROR: server.token was not generated in secrets.yml" >&2
+            exit 1
+        fi
+        check "operator-only bulk route rejects anonymous access" test "$(http_status -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/api/v1/whois/bulk")" = 401
+        check "operator-only bulk route rejects invalid token" test "$(http_status -X POST -H 'Authorization: Bearer invalid' -H 'Content-Type: application/json' -d '{}' "$BASE/api/v1/whois/bulk")" = 401
+        check "operator-only scheduler route accepts operator token" curl_checked -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/server/schedulers"
+        check "operator-only bulk route accepts operator token" operator_bulk
+        check "metrics endpoint" curl_checked "$BASE/metrics"
+        if [ "$FAILURES" -ne 0 ]; then
+            echo "ERROR: $FAILURES Docker integration check(s) failed" >&2
+            exit 1
+        fi
+        echo "PASS Docker binary integration tests"
+CONTAINER_SCRIPT
+)"

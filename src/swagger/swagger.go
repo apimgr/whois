@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/apimgr/whois/src/config"
 )
 
 // OpenAPISpec represents the OpenAPI 3.0 specification structure.
@@ -98,6 +101,7 @@ type Schema struct {
 	Format     string            `json:"format,omitempty"`
 	Items      *Schema           `json:"items,omitempty"`
 	Properties map[string]Schema `json:"properties,omitempty"`
+	Required   []string          `json:"required,omitempty"`
 	Ref        string            `json:"$ref,omitempty"`
 }
 
@@ -122,6 +126,23 @@ type SecurityScheme struct {
 // baseURL is the absolute server URL (e.g. "https://whois.example.com") and
 // version is the running server version (AI.md PART 13 "version").
 func BuildSpec(baseURL, version string) OpenAPISpec {
+	return BuildSpecWithAPIBase(baseURL, version, defaultAPIBase())
+}
+
+// BuildSpecWithAPIBase builds a specification whose operation paths match the
+// configured API prefix.
+func BuildSpecWithAPIBase(baseURL, version, apiBase string) OpenAPISpec {
+	paths := buildPaths()
+	if apiBase == "" {
+		apiBase = defaultAPIBase()
+	}
+	defaultBase := defaultAPIBase()
+	for path, operations := range paths {
+		if strings.HasPrefix(path, defaultBase+"/") {
+			delete(paths, path)
+			paths[strings.Replace(path, defaultBase, apiBase, 1)] = operations
+		}
+	}
 	return OpenAPISpec{
 		OpenAPI: "3.0.3",
 		Info: OpenAPIInfo{
@@ -140,15 +161,24 @@ func BuildSpec(baseURL, version string) OpenAPISpec {
 		Servers: []OpenAPIServer{
 			{URL: baseURL, Description: "Current server"},
 		},
-		Paths:      buildPaths(),
+		Paths:      paths,
 		Components: buildComponents(),
 	}
 }
 
+func defaultAPIBase() string {
+	return (&config.ServerConfig{APIVersion: config.DefaultAPIVersion}).APIBasePath()
+}
+
 // WriteJSON writes the OpenAPI specification as a JSON response.
-// Routes: /api/swagger, /api/v1/server/swagger (AI.md PART 14).
+// Routes: /api/swagger, /api/{api_version}/server/swagger (AI.md PART 14).
 func WriteJSON(w http.ResponseWriter, baseURL, version string) {
-	spec := BuildSpec(baseURL, version)
+	WriteJSONWithAPIBase(w, baseURL, version, defaultAPIBase())
+}
+
+// WriteJSONWithAPIBase writes a spec using the configured API prefix.
+func WriteJSONWithAPIBase(w http.ResponseWriter, baseURL, version, apiBase string) {
+	spec := BuildSpecWithAPIBase(baseURL, version, apiBase)
 
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {
@@ -158,8 +188,8 @@ func WriteJSON(w http.ResponseWriter, baseURL, version string) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-	w.Write([]byte("\n"))
+	_, _ = w.Write(data)
+	_, _ = w.Write([]byte("\n"))
 }
 
 // WriteUI writes the Swagger UI HTML page.
@@ -194,5 +224,5 @@ func WriteUI(w http.ResponseWriter, baseURL string) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, html)
+	_, _ = fmt.Fprint(w, html)
 }

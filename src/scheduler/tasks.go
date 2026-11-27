@@ -2,6 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"time"
@@ -13,7 +16,7 @@ import (
 // Task IDs use underscore convention per AI.md PART 18.
 // Required tasks: ssl_renewal, geoip_update, token_cleanup, log_rotation,
 // backup_daily, backup_hourly, healthcheck_self, blocklist_update, cve_update,
-// update_check, tor_health.
+// update_check, tor_health, i2p_health.
 func (s *Scheduler) RegisterBuiltInTasks() error {
 	// token_cleanup — Every 15 minutes (REQUIRED)
 	if err := s.Register(&Task{
@@ -29,6 +32,27 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to register token_cleanup: %w", err)
+	}
+
+	if err := s.Register(&Task{
+		ID:          "security_cleanup",
+		Name:        "Security Report Cleanup",
+		Schedule:    "30 3 * * *",
+		Enabled:     true,
+		Handler:     s.taskSecurityCleanup,
+		RetryPolicy: &RetryPolicy{MaxRetries: 3, RetryDelay: 10 * time.Minute, Backoff: "exponential"},
+	}); err != nil {
+		return fmt.Errorf("failed to register security_cleanup: %w", err)
+	}
+	if err := s.Register(&Task{
+		ID:          "secret_rotation",
+		Name:        "Generated Secret Rotation",
+		Schedule:    "15 1 * * *",
+		Enabled:     true,
+		Handler:     s.taskSecretRotation,
+		RetryPolicy: &RetryPolicy{MaxRetries: 3, RetryDelay: 10 * time.Minute, Backoff: "exponential"},
+	}); err != nil {
+		return fmt.Errorf("failed to register secret_rotation: %w", err)
 	}
 
 	// log_rotation — Daily at midnight (REQUIRED)
@@ -174,6 +198,9 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 	}); err != nil {
 		return fmt.Errorf("failed to register tor_health: %w", err)
 	}
+	if err := s.Register(&Task{ID: "i2p_health", Name: "I2P Health Check", Schedule: "@every 10m", Enabled: false, Handler: s.taskI2PHealth}); err != nil {
+		return fmt.Errorf("failed to register i2p_health: %w", err)
+	}
 
 	// whois_records_refresh — Daily; re-queries permanent records older than 30 days
 	if err := s.Register(&Task{
@@ -223,14 +250,109 @@ func (s *Scheduler) RegisterBuiltInTasks() error {
 		return fmt.Errorf("failed to register update_check: %w", err)
 	}
 
-	log.Printf("INFO: Registered %d built-in scheduler tasks", 13)
+	log.Printf("INFO: Registered %d built-in scheduler tasks", 16)
 	return nil
+}
+
+func (s *Scheduler) taskSecurityCleanup(ctx context.Context) error {
+	days, _ := s.securityCleanupSettings()
+	result, err := s.execWrite(ctx, "DELETE FROM security_reports WHERE tracking_id IN (SELECT tracking_id FROM security_reports WHERE closed_at IS NOT NULL AND closed_at <= datetime('now', ?) LIMIT 500)", fmt.Sprintf("-%d days", days))
+	if err != nil {
+		return fmt.Errorf("delete expired security reports: %w", err)
+	}
+	if removed, _ := result.RowsAffected(); removed > 0 {
+		log.Printf("INFO: security_cleanup: removed %d expired security reports", removed)
+	}
+	if err := s.cleanupRetiredPGPKey(); err != nil {
+		return fmt.Errorf("remove retired PGP key: %w", err)
+	}
+	for _, name := range []string{"installation_secret", "encryption_key", "cookie_signing_key", "csrf_token_secret"} {
+		var until string
+		err := s.store.Read().QueryRowContext(ctx, `SELECT value FROM app_secrets WHERE name=?`, name+"_previous_until").Scan(&until)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read %s grace deadline: %w", name, err)
+		}
+		deadline, err := time.Parse(time.RFC3339, until)
+		if err != nil {
+			return fmt.Errorf("parse %s grace deadline: %w", name, err)
+		}
+		if !time.Now().UTC().Before(deadline) {
+			if _, err := s.execWrite(ctx, `DELETE FROM app_secrets WHERE name IN (?,?)`, name+"_previous", name+"_previous_until"); err != nil {
+				return fmt.Errorf("retire previous %s: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Scheduler) taskSecretRotation(ctx context.Context) error {
+	for _, rotation := range []struct {
+		name   string
+		period time.Duration
+		grace  time.Duration
+	}{
+		{name: "cookie_signing_key", period: 90 * 24 * time.Hour, grace: 7 * 24 * time.Hour},
+		{name: "csrf_token_secret", period: 180 * 24 * time.Hour, grace: 7 * 24 * time.Hour},
+	} {
+		if err := s.rotateAppSecretIfDue(ctx, rotation.name, rotation.period, rotation.grace); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Scheduler) rotateAppSecretIfDue(ctx context.Context, name string, period, grace time.Duration) error {
+	if s.store == nil {
+		return fmt.Errorf("secret rotation requires the application database")
+	}
+	now := time.Now().UTC()
+	return s.store.Write(ctx, func(tx *sql.Tx) error {
+		var oldValue, updatedAt string
+		if err := tx.QueryRowContext(ctx, `SELECT value,updated_at FROM app_secrets WHERE name=?`, name).Scan(&oldValue, &updatedAt); err != nil {
+			return fmt.Errorf("read %s rotation state: %w", name, err)
+		}
+		lastRotation, err := time.Parse(time.RFC3339, updatedAt)
+		if err != nil {
+			return fmt.Errorf("parse %s rotation time: %w", name, err)
+		}
+		if now.Sub(lastRotation) < period {
+			return nil
+		}
+		oldSecret, err := base64.StdEncoding.DecodeString(oldValue)
+		if err != nil || len(oldSecret) != 32 {
+			return fmt.Errorf("current %s is invalid", name)
+		}
+		newSecret := make([]byte, 32)
+		if _, err := rand.Read(newSecret); err != nil {
+			return fmt.Errorf("generate %s: %w", name, err)
+		}
+		previousValue := base64.StdEncoding.EncodeToString(oldSecret)
+		currentValue := base64.StdEncoding.EncodeToString(newSecret)
+		values := map[string]string{name + "_previous": previousValue, name + "_previous_until": now.Add(grace).Format(time.RFC3339), name: currentValue}
+		for key, value := range values {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO app_secrets(name,value,updated_at) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`, key, value, now.Format(time.RFC3339)); err != nil {
+				return fmt.Errorf("save %s rotation state: %w", name, err)
+			}
+		}
+		log.Printf("INFO: secret_rotation rotated %s", name)
+		return nil
+	})
+}
+
+func (s *Scheduler) taskI2PHealth(ctx context.Context) error {
+	if s.I2PHealthHook == nil {
+		return nil
+	}
+	return s.I2PHealthHook(ctx)
 }
 
 // taskTokenCleanup removes expired and revoked API tokens.
 func (s *Scheduler) taskTokenCleanup(ctx context.Context) error {
 	// Remove revoked tokens soft-deleted more than 30 days ago
-	result, err := s.db.ExecContext(ctx,
+	result, err := s.execWrite(ctx,
 		`DELETE FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at < datetime('now', '-30 days')`)
 	if err != nil {
 		return fmt.Errorf("failed to delete revoked tokens: %w", err)

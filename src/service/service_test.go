@@ -2,6 +2,7 @@ package service
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -68,6 +69,25 @@ func TestNewServiceManager_BinaryPath(t *testing.T) {
 	}
 	if sm.BinaryPath == "" {
 		t.Error("BinaryPath is empty; expected path to current test binary")
+	}
+}
+
+func TestRemoveUninstallPaths(t *testing.T) {
+	parent := t.TempDir()
+	data := filepath.Join(parent, "data")
+	if err := os.MkdirAll(data, 0700); err != nil {
+		t.Fatal(err)
+	}
+	sm := &ServiceManager{UninstallPaths: []string{data}}
+	if err := sm.removeUninstallPaths(); err != nil {
+		t.Fatalf("removeUninstallPaths() error: %v", err)
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Errorf("data directory still exists after cleanup: %v", err)
+	}
+	sm.UninstallPaths = []string{"/var"}
+	if err := sm.removeUninstallPaths(); err == nil {
+		t.Error("removeUninstallPaths() allowed removal of a protected system path")
 	}
 }
 
@@ -751,7 +771,7 @@ func TestDetectServiceManagerImpl_Runit_SVDIR(t *testing.T) {
 	t.Cleanup(func() { isContainerFn = origIsContainer })
 	isContainerFn = func() bool { return false }
 	t.Setenv("SVDIR", "/var/service")
-	os.Unsetenv("INVOCATION_ID")
+	_ = os.Unsetenv("INVOCATION_ID")
 
 	got := detectServiceManagerImpl()
 	if got != "runit" {
@@ -764,8 +784,8 @@ func TestDetectServiceManagerImpl_S6(t *testing.T) {
 	origIsContainer := isContainerFn
 	t.Cleanup(func() { isContainerFn = origIsContainer })
 	isContainerFn = func() bool { return false }
-	os.Unsetenv("INVOCATION_ID")
-	os.Unsetenv("SVDIR")
+	_ = os.Unsetenv("INVOCATION_ID")
+	_ = os.Unsetenv("SVDIR")
 	t.Setenv("S6_LOGGING", "1")
 
 	got := detectServiceManagerImpl()
@@ -779,9 +799,9 @@ func TestDetectServiceManagerImpl_OpenRC_RC_SVCNAME(t *testing.T) {
 	origIsContainer := isContainerFn
 	t.Cleanup(func() { isContainerFn = origIsContainer })
 	isContainerFn = func() bool { return false }
-	os.Unsetenv("INVOCATION_ID")
-	os.Unsetenv("SVDIR")
-	os.Unsetenv("S6_LOGGING")
+	_ = os.Unsetenv("INVOCATION_ID")
+	_ = os.Unsetenv("SVDIR")
+	_ = os.Unsetenv("S6_LOGGING")
 	t.Setenv("RC_SVCNAME", "caswhois")
 
 	got := detectServiceManagerImpl()
@@ -796,10 +816,10 @@ func TestDetectServiceManagerImpl_Manual(t *testing.T) {
 	origIsContainer := isContainerFn
 	t.Cleanup(func() { isContainerFn = origIsContainer })
 	isContainerFn = func() bool { return false }
-	os.Unsetenv("INVOCATION_ID")
-	os.Unsetenv("SVDIR")
-	os.Unsetenv("S6_LOGGING")
-	os.Unsetenv("RC_SVCNAME")
+	_ = os.Unsetenv("INVOCATION_ID")
+	_ = os.Unsetenv("SVDIR")
+	_ = os.Unsetenv("S6_LOGGING")
+	_ = os.Unsetenv("RC_SVCNAME")
 
 	got := detectServiceManagerImpl()
 	// On a container with PPID != 1 and no matching env vars or files the result is "manual".
@@ -1152,8 +1172,8 @@ func TestUninstall_Confirmed_ContainerManager(t *testing.T) {
 	origStdin := os.Stdin
 	os.Stdin = r
 	t.Cleanup(func() { os.Stdin = origStdin })
-	w.WriteString("y\n")
-	w.Close()
+	_, _ = w.WriteString("y\n")
+	_ = w.Close()
 
 	// Uninstall calls uninstall() → stop() → default "unsupported" error. That's fine.
 	err = sm.Uninstall()

@@ -21,9 +21,9 @@ func TestIsStderrTerminal(t *testing.T) {
 func TestGetTerminalType(t *testing.T) {
 	// Save and restore
 	old := os.Getenv("TERM")
-	defer os.Setenv("TERM", old)
+	defer func() { _ = os.Setenv("TERM", old) }()
 
-	os.Setenv("TERM", "test-term")
+	_ = os.Setenv("TERM", "test-term")
 	if got := GetTerminalType(); got != "test-term" {
 		t.Errorf("GetTerminalType() = %q, want %q", got, "test-term")
 	}
@@ -31,14 +31,14 @@ func TestGetTerminalType(t *testing.T) {
 
 func TestIsDumbTerminal(t *testing.T) {
 	old := os.Getenv("TERM")
-	defer os.Setenv("TERM", old)
+	defer func() { _ = os.Setenv("TERM", old) }()
 
-	os.Setenv("TERM", "dumb")
+	_ = os.Setenv("TERM", "dumb")
 	if !IsDumbTerminal() {
 		t.Error("IsDumbTerminal() = false, want true")
 	}
 
-	os.Setenv("TERM", "xterm")
+	_ = os.Setenv("TERM", "xterm")
 	if IsDumbTerminal() {
 		t.Error("IsDumbTerminal() = true, want false")
 	}
@@ -48,18 +48,18 @@ func TestNoColorRequested(t *testing.T) {
 	old := os.Getenv("NO_COLOR")
 	defer func() {
 		if old != "" {
-			os.Setenv("NO_COLOR", old)
+			_ = os.Setenv("NO_COLOR", old)
 		} else {
-			os.Unsetenv("NO_COLOR")
+			_ = os.Unsetenv("NO_COLOR")
 		}
 	}()
 
-	os.Setenv("NO_COLOR", "1")
+	_ = os.Setenv("NO_COLOR", "1")
 	if !NoColorRequested() {
 		t.Error("NoColorRequested() = false, want true")
 	}
 
-	os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("NO_COLOR")
 	if NoColorRequested() {
 		t.Error("NoColorRequested() = true, want false")
 	}
@@ -69,24 +69,24 @@ func TestCanUseColors(t *testing.T) {
 	oldTerm := os.Getenv("TERM")
 	oldNoColor := os.Getenv("NO_COLOR")
 	defer func() {
-		os.Setenv("TERM", oldTerm)
+		_ = os.Setenv("TERM", oldTerm)
 		if oldNoColor != "" {
-			os.Setenv("NO_COLOR", oldNoColor)
+			_ = os.Setenv("NO_COLOR", oldNoColor)
 		} else {
-			os.Unsetenv("NO_COLOR")
+			_ = os.Unsetenv("NO_COLOR")
 		}
 	}()
 
 	// NO_COLOR blocks colors
-	os.Setenv("NO_COLOR", "1")
-	os.Setenv("TERM", "xterm-256color")
+	_ = os.Setenv("NO_COLOR", "1")
+	_ = os.Setenv("TERM", "xterm-256color")
 	if CanUseColors() {
 		t.Error("CanUseColors() should be false when NO_COLOR is set")
 	}
 
 	// Dumb terminal blocks colors
-	os.Unsetenv("NO_COLOR")
-	os.Setenv("TERM", "dumb")
+	_ = os.Unsetenv("NO_COLOR")
+	_ = os.Setenv("TERM", "dumb")
 	if CanUseColors() {
 		t.Error("CanUseColors() should be false for dumb terminal")
 	}

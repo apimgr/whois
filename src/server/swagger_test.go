@@ -45,18 +45,17 @@ func TestHandleSwaggerJSON(t *testing.T) {
 	}
 }
 
-// TestHandleSwaggerJSONWithFQDN verifies FQDN is used in server URL.
-func TestHandleSwaggerJSONWithFQDN(t *testing.T) {
+// TestHandleSwaggerJSONUsesRequestHost verifies the server URL uses the request host.
+func TestHandleSwaggerJSONUsesRequestHost(t *testing.T) {
 	s := newTestServer(t)
-	s.config.FQDN = "whois.example.com"
 	req := httptest.NewRequest(http.MethodGet, "/api/swagger", nil)
 	rr := httptest.NewRecorder()
 
 	s.handleSwaggerJSON(rr, req)
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "https://whois.example.com") {
-		t.Error("spec should contain FQDN-based server URL")
+	if !strings.Contains(body, "http://example.com") {
+		t.Error("spec should contain request-host-based server URL")
 	}
 }
 

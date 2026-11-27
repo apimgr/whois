@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -89,6 +90,39 @@ func TestPathSecurityMiddleware_BlocksTraversal(t *testing.T) {
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("PathSecurityMiddleware(%q) = %d, want %d", p, rr.Code, http.StatusBadRequest)
 		}
+	}
+}
+
+func TestPathSecurityErrorsUseResolvedLocaleAndAPIEnvelope(t *testing.T) {
+	handler := PathSecurityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	for _, test := range []struct {
+		name      string
+		path      string
+		wantJSON  bool
+		wantError string
+	}{
+		{name: "web", path: "/../blocked?lang=de", wantError: "Ungültige Anfrage"},
+		{name: "api", path: "/api/v1/../blocked?lang=de", wantJSON: true, wantError: "Ungültige Anfrage"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, test.path, nil)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+			if recorder.Header().Get("Content-Language") != "de" {
+				t.Errorf("Content-Language = %q, want de", recorder.Header().Get("Content-Language"))
+			}
+			if test.wantJSON {
+				response := decodeAPIResponse(t, recorder.Body.String())
+				if response.Message != test.wantError || response.Error != ErrBadRequest {
+					t.Errorf("API error = %#v, want localized BAD_REQUEST", response)
+				}
+			} else if !strings.Contains(recorder.Body.String(), test.wantError) {
+				t.Errorf("web error %q does not contain %q", recorder.Body.String(), test.wantError)
+			}
+		})
 	}
 }
 

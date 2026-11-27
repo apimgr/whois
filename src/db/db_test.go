@@ -3,7 +3,13 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -108,7 +114,7 @@ func TestNew_SQLiteSuccess(t *testing.T) {
 	if database.Driver != "sqlite" {
 		t.Errorf("Driver: got %q, want %q", database.Driver, "sqlite")
 	}
-	if database.Server == nil {
+	if database.Read() == nil {
 		t.Error("Server db should not be nil")
 	}
 	_ = database.Close()
@@ -181,6 +187,87 @@ func TestNewSQLite_ValidPath(t *testing.T) {
 	_ = database.Close()
 }
 
+func TestNewSQLiteEscapesFileURIPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "database dir ? one")
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatalf("create database path: %v", err)
+	}
+	database, err := NewSQLite(context.Background(), &DatabaseConfig{Driver: "sqlite", Path: path, Pool: DefaultPoolConfig()})
+	if err != nil {
+		t.Fatalf("NewSQLite with URI-special path: %v", err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatalf("close database: %v", err)
+	}
+}
+
+func TestSQLiteConcurrentReadersAndWriters(t *testing.T) {
+	database := openTempDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := database.ExecWrite(ctx, `CREATE TABLE contention_test (id INTEGER PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create contention table: %v", err)
+	}
+
+	const workers = 20
+	errorsFound := make(chan error, workers*2)
+	var group sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		group.Add(2)
+		go func(worker int) {
+			defer group.Done()
+			for n := 0; ; n++ {
+				if ctx.Err() != nil {
+					return
+				}
+				if err := database.ExecWrite(ctx, `INSERT INTO contention_test(value) VALUES (?)`, fmt.Sprintf("writer-%d-%d", worker, n)); err != nil {
+					if ctx.Err() == nil {
+						errorsFound <- err
+					}
+					return
+				}
+			}
+		}(i)
+		go func() {
+			defer group.Done()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				var count int
+				if err := database.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM contention_test`).Scan(&count); err != nil {
+					if ctx.Err() == nil {
+						errorsFound <- err
+					}
+					return
+				}
+			}
+		}()
+	}
+	group.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		t.Errorf("concurrent database operation failed: %v", err)
+	}
+}
+
+func TestSQLiteReadHandleIsQueryOnly(t *testing.T) {
+	database := openTempDB(t)
+	if database.readDB == database.writeDB {
+		t.Fatal("SQLite read and write handles must be independent")
+	}
+	var queryOnly int
+	if err := database.Read().QueryRow(`PRAGMA query_only`).Scan(&queryOnly); err != nil {
+		t.Fatalf("read query_only pragma: %v", err)
+	}
+	if queryOnly != 1 {
+		t.Fatalf("query_only = %d, want 1", queryOnly)
+	}
+	if _, err := database.Read().Exec(`INSERT INTO config(key, value) VALUES ('read-only-test', 'x')`); err == nil {
+		t.Fatal("write through read handle unexpectedly succeeded")
+	}
+}
+
 // --- ConfigurePool ---
 
 func TestConfigurePool(t *testing.T) {
@@ -189,7 +276,7 @@ func TestConfigurePool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
 	}
-	defer rawDB.Close()
+	defer func() { _ = rawDB.Close() }()
 
 	pool := PoolConfig{
 		MaxOpen:     10,
@@ -210,7 +297,7 @@ func TestConfigurePool(t *testing.T) {
 
 func TestPing_ValidConnection(t *testing.T) {
 	database := openTempDB(t)
-	if err := Ping(context.Background(), database.Server); err != nil {
+	if err := Ping(context.Background(), database.Read()); err != nil {
 		t.Errorf("Ping: unexpected error: %v", err)
 	}
 }
@@ -234,7 +321,7 @@ func TestClose_NoError(t *testing.T) {
 
 func TestClose_NilServer(t *testing.T) {
 	// DB with nil Server must not panic and must return nil
-	database := &DB{Driver: "sqlite", Server: nil}
+	database := &DB{Driver: "sqlite", readDB: nil}
 	if err := database.Close(); err != nil {
 		t.Errorf("Close with nil Server: %v", err)
 	}
@@ -260,7 +347,7 @@ func TestWithTransaction_CommitSuccess(t *testing.T) {
 	database := openTempDB(t)
 
 	called := false
-	err := WithTransaction(context.Background(), database.Server, func(tx *sql.Tx) error {
+	err := database.Write(context.Background(), func(tx *sql.Tx) error {
 		called = true
 		// Insert a row to prove the transaction is real
 		_, execErr := tx.ExecContext(context.Background(),
@@ -276,7 +363,7 @@ func TestWithTransaction_CommitSuccess(t *testing.T) {
 
 	// Verify the row was committed
 	var val string
-	row := database.Server.QueryRowContext(context.Background(),
+	row := database.Read().QueryRowContext(context.Background(),
 		`SELECT value FROM config WHERE key = 'txtest'`)
 	if err := row.Scan(&val); err != nil {
 		t.Errorf("committed row not found: %v", err)
@@ -290,7 +377,7 @@ func TestWithTransaction_RollbackOnError(t *testing.T) {
 	database := openTempDB(t)
 
 	sentinel := errors.New("intentional error")
-	err := WithTransaction(context.Background(), database.Server, func(tx *sql.Tx) error {
+	err := database.Write(context.Background(), func(tx *sql.Tx) error {
 		// Insert a row that should be rolled back
 		_, execErr := tx.ExecContext(context.Background(),
 			`INSERT INTO config (key, value) VALUES ('should_not_exist', '1')`)
@@ -304,7 +391,7 @@ func TestWithTransaction_RollbackOnError(t *testing.T) {
 	}
 
 	// Verify the row was rolled back
-	row := database.Server.QueryRowContext(context.Background(),
+	row := database.Read().QueryRowContext(context.Background(),
 		`SELECT value FROM config WHERE key = 'should_not_exist'`)
 	var val string
 	if scanErr := row.Scan(&val); !errors.Is(scanErr, sql.ErrNoRows) {
@@ -418,16 +505,23 @@ func TestEnsureSchema_TablesExist(t *testing.T) {
 		"config",
 		"config_meta",
 		"rate_limits",
+		"rate_limit_events",
 		"audit_log",
+		"app_secrets",
 		"scheduler_tasks",
 		"scheduler_history",
 		"backups",
 		"api_tokens",
+		"owners",
+		"security_reports",
+		"security_thanks",
+		"captcha_challenges",
+		"whois_records",
 	}
 
 	for _, table := range expectedTables {
 		t.Run(table, func(t *testing.T) {
-			row := database.Server.QueryRowContext(
+			row := database.Read().QueryRowContext(
 				context.Background(),
 				"SELECT name FROM sqlite_master WHERE type='table' AND name=?",
 				table,
@@ -437,6 +531,179 @@ func TestEnsureSchema_TablesExist(t *testing.T) {
 				t.Errorf("table %q not found in schema: %v", table, err)
 			}
 		})
+	}
+}
+
+func TestEnsureSchemaMigratesWHOISRecordMetadataColumns(t *testing.T) {
+	databasePath := t.TempDir()
+	legacy, err := sql.Open("sqlite", filepath.Join(databasePath, "server.db"))
+	if err != nil {
+		t.Fatalf("open legacy database: %v", err)
+	}
+	_, err = legacy.Exec(`CREATE TABLE whois_records (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		query TEXT NOT NULL,
+		query_type TEXT NOT NULL,
+		registrant_name TEXT,
+		registrant_org TEXT,
+		registrant_email TEXT,
+		registrant_country TEXT,
+		registrar TEXT,
+		created_date TEXT,
+		expiry_date TEXT,
+		nameservers TEXT,
+		status TEXT,
+		whois_server TEXT,
+		raw_whois TEXT,
+		first_seen INTEGER NOT NULL DEFAULT 1,
+		last_seen INTEGER NOT NULL DEFAULT 1,
+		last_updated INTEGER NOT NULL DEFAULT 1
+	)`)
+	if err != nil {
+		t.Fatalf("create legacy whois_records: %v", err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy database: %v", err)
+	}
+	database, err := New(context.Background(), &DatabaseConfig{Driver: "sqlite", Path: databasePath})
+	if err != nil {
+		t.Fatalf("migrate legacy database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	rows, err := database.Read().QueryContext(context.Background(), `PRAGMA table_info(whois_records)`)
+	if err != nil {
+		t.Fatalf("inspect migrated whois_records: %v", err)
+	}
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, kind string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &primaryKey); err != nil {
+			_ = rows.Close()
+			t.Fatalf("scan migrated column: %v", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatalf("close migrated column query: %v", err)
+	}
+	for _, name := range []string{"source", "updated_date", "rdap_server", "raw_rdap", "network_name", "network_range", "network_type", "asn_number", "asn_name", "rir"} {
+		if !columns[name] {
+			t.Errorf("migrated whois_records missing %q", name)
+		}
+	}
+}
+
+func TestEnsureSchemaPreservesLegacyAPITokensDuringMigration(t *testing.T) {
+	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy.db"))
+	if err != nil {
+		t.Fatalf("open legacy database: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	_, err = raw.Exec(`CREATE TABLE api_tokens (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		token_hash TEXT NOT NULL UNIQUE,
+		token_prefix TEXT NOT NULL,
+		resource_type TEXT NOT NULL,
+		resource_id TEXT NOT NULL,
+		created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+		expires_at INTEGER,
+		last_used_at INTEGER,
+		revoked_at INTEGER,
+		revoked_reason TEXT
+	)`)
+	if err != nil {
+		t.Fatalf("create legacy token schema: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO api_tokens (token_hash, token_prefix, resource_type, resource_id) VALUES ('hash', 'own_legacy', 'domain', 'example.test')`); err != nil {
+		t.Fatalf("insert legacy token: %v", err)
+	}
+	database := &DB{Driver: "sqlite", readDB: raw, writeDB: raw}
+	if err := database.ensureSchema(context.Background()); err != nil {
+		t.Fatalf("ensureSchema: %v", err)
+	}
+	var prefix, resourceType, resourceID string
+	if err := raw.QueryRow(`SELECT token_prefix, resource_type, resource_id FROM api_tokens_legacy WHERE token_hash='hash'`).Scan(&prefix, &resourceType, &resourceID); err != nil {
+		t.Fatalf("read preserved token: %v", err)
+	}
+	if prefix != "own_legacy" || resourceType != "domain" || resourceID != "example.test" {
+		t.Fatalf("legacy token = %q %q/%q; values changed", prefix, resourceType, resourceID)
+	}
+	var columns int
+	if err := raw.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('api_tokens') WHERE name='owner_id'`).Scan(&columns); err != nil || columns != 1 {
+		t.Fatalf("canonical api_tokens schema missing owner_id: count=%d err=%v", columns, err)
+	}
+}
+
+func TestEnsureSchemaRefusesDuplicateLinkedNamesWithoutDeletingTokens(t *testing.T) {
+	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "server.db"))
+	if err != nil {
+		t.Fatalf("open SQLite database: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	if _, err := raw.Exec(`CREATE TABLE owners (id TEXT PRIMARY KEY, created_at INTEGER, last_seen_at INTEGER)`); err != nil {
+		t.Fatalf("create owners: %v", err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE api_tokens (
+		id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, name TEXT,
+		token_hash TEXT NOT NULL UNIQUE, token_prefix TEXT NOT NULL, token_last4 TEXT NOT NULL,
+		token_enc TEXT NOT NULL, created_at INTEGER, rotated_at INTEGER, expires_at INTEGER,
+		last_used_at INTEGER, revoked_at INTEGER, revoked_reason TEXT
+	)`); err != nil {
+		t.Fatalf("create api_tokens: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO owners (id) VALUES ('owner')`); err != nil {
+		t.Fatalf("insert owner: %v", err)
+	}
+	for _, id := range []string{"one", "two"} {
+		if _, err := raw.Exec(`INSERT INTO api_tokens (id, owner_id, kind, name, token_hash, token_prefix, token_last4, token_enc)
+			VALUES (?, 'owner', 'linked', 'automation', ?, 'own_prefix', 'last', 'encrypted')`, id, id+"-hash"); err != nil {
+			t.Fatalf("insert existing linked token %s: %v", id, err)
+		}
+	}
+	database := &DB{Driver: "sqlite", readDB: raw, writeDB: raw}
+	err = database.ensureSchema(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "duplicate linked-token names") {
+		t.Fatalf("ensureSchema error = %v, want actionable duplicate-name migration error", err)
+	}
+	var count int
+	if err := raw.QueryRow(`SELECT COUNT(*) FROM api_tokens WHERE owner_id = 'owner' AND name = 'automation'`).Scan(&count); err != nil {
+		t.Fatalf("count preserved linked tokens: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("preserved linked-token rows = %d, want 2", count)
+	}
+}
+
+func TestEnsureSchema_InitializesPersistentSecrets(t *testing.T) {
+	database := openTempDB(t)
+	secretNames := []string{"installation_secret", "cookie_signing_key", "csrf_token_secret"}
+	initial := make(map[string]string, len(secretNames))
+	for _, name := range secretNames {
+		var value string
+		if err := database.Read().QueryRow(`SELECT value FROM app_secrets WHERE name = ?`, name).Scan(&value); err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(value)
+		if err != nil || len(decoded) != 32 {
+			t.Fatalf("%s must be base64-encoded 32 bytes; got %q (decode error %v)", name, value, err)
+		}
+		initial[name] = value
+	}
+
+	if err := database.ensureSchema(context.Background()); err != nil {
+		t.Fatalf("repeat ensureSchema: %v", err)
+	}
+	for _, name := range secretNames {
+		var value string
+		if err := database.Read().QueryRow(`SELECT value FROM app_secrets WHERE name = ?`, name).Scan(&value); err != nil {
+			t.Fatalf("read %s after repeat: %v", name, err)
+		}
+		if value != initial[name] {
+			t.Errorf("%s changed during schema initialization", name)
+		}
 	}
 }
 
@@ -465,7 +732,7 @@ func TestWithTransaction_BeginFails(t *testing.T) {
 func TestWithTransaction_CommitFails(t *testing.T) {
 	database := openTempDB(t)
 
-	err := WithTransaction(context.Background(), database.Server, func(tx *sql.Tx) error {
+	err := database.Write(context.Background(), func(tx *sql.Tx) error {
 		// Commit early inside fn; the deferred outer Commit will then fail.
 		return tx.Commit()
 	})
@@ -515,7 +782,7 @@ func TestEnsureSchema_ClosedDB(t *testing.T) {
 	// Close the DB so every subsequent Exec will fail.
 	_ = rawDB.Close()
 
-	database := &DB{Driver: "sqlite", Server: rawDB}
+	database := &DB{Driver: "sqlite", readDB: rawDB}
 	if err := database.ensureSchema(context.Background()); err == nil {
 		t.Error("expected error from ensureSchema on closed DB, got nil")
 	}

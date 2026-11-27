@@ -14,7 +14,7 @@ import (
 )
 
 // handleGraphQL handles GraphQL POST requests.
-// Routes: /api/graphql, /api/v1/server/graphql (AI.md PART 14)
+// Routes: /api/graphql, /api/{api_version}/server/graphql (AI.md PART 14)
 func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
@@ -79,7 +79,7 @@ func (s *Server) graphqlLookup(ctx context.Context, query string) (*whois.Unifie
 
 // graphqlTmpl is the server-side template for the GraphQL explorer UI (AI.md PART 16).
 // No external CDN or JavaScript framework - progressive enhancement only.
-var graphqlTmpl = mustParseTemplate("graphql", "graphql.html")
+var graphqlTmpl = mustParseTemplate("graphql", "page/graphql.tmpl")
 
 // graphqlPageData is the view model for the GraphQL explorer template.
 type graphqlPageData struct {
@@ -109,11 +109,7 @@ func (s *Server) writeGraphQLError(w http.ResponseWriter, status int, message st
 // Route: /server/docs/graphql (AI.md PART 14)
 // Supports both GET (display form) and POST (no-JS query submission).
 func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
-	baseURL := fmt.Sprintf("http://localhost:%d", s.config.Port)
-	if s.config.FQDN != "" {
-		baseURL = "https://" + s.config.FQDN
-	}
-	endpointURL := baseURL + "/api/graphql"
+	endpointURL := s.BuildURL(r, "/api/graphql")
 
 	brandName := s.config.Branding.Title
 	if brandName == "" {
@@ -159,9 +155,7 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 		pd.OperationName = r.URL.Query().Get("operationName")
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	if err := graphqlTmpl.Execute(w, pd); err != nil {
-		http.Error(w, "template error", http.StatusInternalServerError)
+	if err := s.renderTemplate(graphqlTmpl, w, r, pd); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }

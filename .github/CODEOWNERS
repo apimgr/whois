@@ -1,0 +1,9 @@
+* @apimgr
+/.github/ @apimgr
+/docker/ @apimgr
+/Jenkinsfile @apimgr
+/.gitlab-ci.yml @apimgr
+/src/config/ @apimgr
+/src/security/ @apimgr
+/src/server/token_auth.go @apimgr
+/src/update/ @apimgr

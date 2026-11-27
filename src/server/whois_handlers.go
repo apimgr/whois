@@ -1,16 +1,17 @@
 package server
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/apimgr/whois/src/common/i18n"
 	"github.com/apimgr/whois/src/whois"
 	"github.com/apimgr/whois/src/whois/records"
 	"github.com/apimgr/whois/src/whois/reverse"
@@ -131,7 +132,7 @@ func (s *Server) handleWHOISValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleWHOISBulkLookup handles bulk WHOIS lookups (authenticated)
-// POST /api/v1/whois/bulk
+// POST /api/{api_version}/whois/bulk
 func (s *Server) handleWHOISBulkLookup(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req struct {
@@ -176,7 +177,7 @@ func (s *Server) handleWHOISBulkLookup(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Perform WHOIS lookup with cache
-		result, err := whois.QueryWHOISWithCache(r.Context(), query, s.cache)
+		result, err := s.lookupWHOIS(r.Context(), query)
 		if err != nil {
 			results = append(results, map[string]interface{}{
 				"query":   query,
@@ -190,10 +191,11 @@ func (s *Server) handleWHOISBulkLookup(w http.ResponseWriter, r *http.Request) {
 		results = append(results, map[string]interface{}{
 			"query":     result.Query,
 			"success":   true,
-			"type":      result.Type.String(),
-			"server":    result.Server,
+			"type":      result.QueryType.String(),
+			"source":    result.Source,
+			"server":    lookupServer(result),
 			"timestamp": result.Timestamp.Format(time.RFC3339),
-			"raw":       result.Raw,
+			"raw":       lookupRaw(result),
 		})
 	}
 
@@ -214,45 +216,146 @@ func (s *Server) performWHOISLookup(w http.ResponseWriter, r *http.Request, quer
 		return
 	}
 
-	// Perform WHOIS lookup with cache
-	result, err := whois.QueryWHOISWithCache(r.Context(), query, s.cache)
+	// The shared lookup service prefers RDAP and falls back to WHOIS.
+	result, err := s.lookupWHOIS(r.Context(), query)
 	if err != nil {
 		SendError(w, ErrServerError, fmt.Sprintf("WHOIS lookup failed: %v", err))
 		return
-	}
-
-	// Persist domain registrant data permanently for reverse owner search (fire-and-forget).
-	if result.Domain != nil && s.database != nil {
-		go func() {
-			if saveErr := records.UpsertRecord(r.Context(), s.database.Server, query, result.Type.String(), result.Domain); saveErr != nil {
-				_ = saveErr
-			}
-		}()
 	}
 
 	// Determine response format
 	format := determineResponseFormat(r)
 
 	// Build response data
-	data := map[string]interface{}{
-		"query":     result.Query,
-		"type":      result.Type.String(),
-		"server":    result.Server,
-		"timestamp": result.Timestamp.Format(time.RFC3339),
-		"raw":       result.Raw,
-	}
+	data := lookupResponseData(result)
 
 	// Send response in requested format
 	switch format {
 	case "xml":
 		sendXMLResponse(w, data)
 	case "text":
-		sendTextResponse(w, result)
+		sendUnifiedTextResponse(w, result)
 	case "html":
-		sendHTMLResponse(w, r, result)
+		s.sendUnifiedHTMLResponse(w, r, result)
 	default:
 		// Default to JSON
 		SendSuccess(w, data)
+	}
+}
+
+func (s *Server) lookupWHOIS(ctx context.Context, query string) (*whois.UnifiedResult, error) {
+	var result *whois.UnifiedResult
+	var err error
+	if s.lookupService != nil {
+		result, err = s.lookupService.Lookup(ctx, query)
+	} else {
+		var legacy *whois.WHOISResult
+		legacy, err = whois.QueryWHOISWithCache(ctx, query, s.cache)
+		if err == nil {
+			switch {
+			case legacy.Domain != nil:
+				result = whois.FromWHOISDomain(legacy.Domain, legacy.Query, legacy.Server)
+			case legacy.IP != nil:
+				result = whois.FromWHOISIP(legacy.IP, legacy.Query, legacy.Server, legacy.Type)
+			case legacy.ASN != nil:
+				result = whois.FromWHOISASN(legacy.ASN, legacy.Query, legacy.Server)
+			default:
+				return nil, fmt.Errorf("WHOIS lookup returned no parsed result")
+			}
+			result.Timestamp = legacy.Timestamp
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("lookup returned no result")
+	}
+	if s.database != nil {
+		persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		err := records.UpsertUnifiedRecordInStore(persistCtx, s.database, result)
+		cancel()
+		if err != nil {
+			log.Printf("ERROR: Failed to persist WHOIS record for query type %s: %v", result.QueryType.String(), err)
+		}
+	}
+	return result, nil
+}
+
+func lookupServer(result *whois.UnifiedResult) string {
+	if result.RDAPServer != "" {
+		return result.RDAPServer
+	}
+	return result.WHOISServer
+}
+
+func lookupRaw(result *whois.UnifiedResult) string {
+	if result.RawWHOIS != "" {
+		return result.RawWHOIS
+	}
+	if len(result.RawRDAP) == 0 {
+		return ""
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, result.RawRDAP, "", "  "); err == nil {
+		return pretty.String()
+	}
+	return string(result.RawRDAP)
+}
+
+func lookupResponseData(result *whois.UnifiedResult) map[string]interface{} {
+	return map[string]interface{}{
+		"query":              result.Query,
+		"type":               result.QueryType.String(),
+		"source":             result.Source,
+		"server":             lookupServer(result),
+		"rdap_server":        result.RDAPServer,
+		"timestamp":          result.Timestamp.Format(time.RFC3339),
+		"raw":                lookupRaw(result),
+		"raw_whois":          result.RawWHOIS,
+		"raw_rdap":           result.RawRDAP,
+		"registrant_name":    result.RegistrantName,
+		"registrant_org":     result.RegistrantOrg,
+		"registrant_email":   result.RegistrantEmail,
+		"registrant_country": result.RegistrantCountry,
+		"registrar":          result.Registrar,
+		"created_date":       result.CreatedDate,
+		"updated_date":       result.UpdatedDate,
+		"expiry_date":        result.ExpiryDate,
+		"nameservers":        result.Nameservers,
+		"status":             result.Status,
+		"network_name":       result.NetworkName,
+		"network_range":      result.NetworkRange,
+		"network_type":       result.NetworkType,
+		"asn_number":         result.ASNNumber,
+		"asn_name":           result.ASNName,
+		"rir":                result.RIR,
+	}
+}
+
+func sendUnifiedTextResponse(w http.ResponseWriter, result *whois.UnifiedResult) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, "Query: %s\nType: %s\nSource: %s\nServer: %s\nTimestamp: %s\n\n%s",
+		result.Query, result.QueryType.String(), result.Source, lookupServer(result), result.Timestamp.Format(time.RFC3339), lookupRaw(result))
+}
+
+func (s *Server) sendUnifiedHTMLResponse(w http.ResponseWriter, r *http.Request, result *whois.UnifiedResult) {
+	data := whoisPageData{
+		translatablePageData: s.newPageData(w, r),
+		Name:                 s.brandName(),
+		Query:                result.Query,
+		Result: &whoisResultView{
+			Query:     result.Query,
+			Type:      result.QueryType.String(),
+			Server:    lookupServer(result),
+			Timestamp: result.Timestamp.Format(time.RFC3339),
+			Raw:       lookupRaw(result),
+		},
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := whoisPageTmpl.ExecuteTemplate(w, "public.tmpl", data); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }
 
@@ -306,7 +409,7 @@ func sendXMLResponse(w http.ResponseWriter, data map[string]interface{}) {
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	xml.NewEncoder(w).Encode(response)
+	_ = xml.NewEncoder(w).Encode(response)
 }
 
 // sendTextResponse sends a WHOIS response in plain text format
@@ -315,83 +418,13 @@ func sendTextResponse(w http.ResponseWriter, result *whois.WHOISResult) {
 	w.WriteHeader(http.StatusOK)
 
 	// Write header
-	fmt.Fprintf(w, "Query: %s\n", result.Query)
-	fmt.Fprintf(w, "Type: %s\n", result.Type.String())
-	fmt.Fprintf(w, "Server: %s\n", result.Server)
-	fmt.Fprintf(w, "Timestamp: %s\n\n", result.Timestamp.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "Query: %s\n", result.Query)
+	_, _ = fmt.Fprintf(w, "Type: %s\n", result.Type.String())
+	_, _ = fmt.Fprintf(w, "Server: %s\n", result.Server)
+	_, _ = fmt.Fprintf(w, "Timestamp: %s\n\n", result.Timestamp.Format(time.RFC3339))
 
 	// Write raw WHOIS data
-	fmt.Fprint(w, result.Raw)
-}
-
-// sendHTMLResponse sends a WHOIS response in HTML format using the shared stylesheet.
-// lang and dir are derived from the request context (AI.md PART 16, PART 30).
-func sendHTMLResponse(w http.ResponseWriter, r *http.Request, result *whois.WHOISResult) {
-	lang := LangFromContext(r.Context())
-	dir := i18n.Dir(lang)
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="%s" dir="%s">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WHOIS: %s — caswhois</title>
-<link rel="stylesheet" href="/static/css/main.css">
-</head>
-<body>
-<nav class="site-nav" aria-label="Site navigation">
-  <div class="nav-inner">
-    <a href="/" class="nav-brand" aria-label="caswhois home">caswhois</a>
-    <ul class="nav-links" role="list">
-      <li><a href="/about">About</a></li>
-      <li><a href="/docs">API Docs</a></li>
-    </ul>
-  </div>
-</nav>
-<main id="main-content">
-  <div class="container" style="padding-top:2rem;padding-bottom:2rem">
-    <div class="card">
-      <div class="result-meta" style="margin-bottom:1rem">
-        <div class="meta-item">
-          <div class="meta-label">Query</div>
-          <div class="meta-value long-string">%s</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Type</div>
-          <div class="meta-value"><span class="type-badge">%s</span></div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Server</div>
-          <div class="meta-value long-string">%s</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">Timestamp</div>
-          <div class="meta-value">%s</div>
-        </div>
-      </div>
-      <pre class="whois-raw" aria-label="Raw WHOIS data">%s</pre>
-      <p style="margin-top:1rem"><a href="/">&larr; New lookup</a></p>
-    </div>
-  </div>
-</main>
-<footer class="site-footer">
-  <p><a href="/">caswhois</a> &mdash; <a href="/about">About</a> &middot; <a href="/docs">API Docs</a></p>
-</footer>
-<script src="/static/js/main.js" defer></script>
-</body>
-</html>`,
-		lang,
-		dir,
-		result.Query,
-		template.HTMLEscapeString(result.Query),
-		template.HTMLEscapeString(result.Type.String()),
-		template.HTMLEscapeString(result.Server),
-		template.HTMLEscapeString(result.Timestamp.Format(time.RFC3339)),
-		template.HTMLEscapeString(result.Raw),
-	)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	_, _ = fmt.Fprint(w, result.Raw)
 }
 
 // handleWHOISOwnerSearch serves reverse-WHOIS / owner search.
@@ -401,7 +434,7 @@ func sendHTMLResponse(w http.ResponseWriter, r *http.Request, result *whois.WHOI
 // request headers (user-supplied key, never stored server-side).
 //
 // GET /whois/search?owner=…&page=1&limit=100
-// GET /api/v1/whois/search?owner=…&page=1&limit=100
+// GET /api/{api_version}/whois/search?owner=…&page=1&limit=100
 func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) {
 	owner := strings.TrimSpace(r.URL.Query().Get("owner"))
 	if owner == "" {
@@ -425,7 +458,7 @@ func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) 
 	offset := (page - 1) * limit
 
 	// 1. Search local permanent records (always; no API key needed).
-	localRecords, err := records.SearchByOwner(r.Context(), s.database.Server, owner, limit, offset)
+	localRecords, err := records.SearchByOwner(r.Context(), s.database.Read(), owner, limit, offset)
 	if err != nil {
 		SendError(w, ErrServerError, fmt.Sprintf("owner search failed: %v", err))
 		return
@@ -478,7 +511,7 @@ func (s *Server) handleWHOISOwnerSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	total := len(results)
-	if localTotal, countErr := records.CountByOwner(r.Context(), s.database.Server, owner); countErr == nil {
+	if localTotal, countErr := records.CountByOwner(r.Context(), s.database.Read(), owner); countErr == nil {
 		total = localTotal
 	}
 

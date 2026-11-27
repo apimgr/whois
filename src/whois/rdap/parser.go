@@ -334,12 +334,7 @@ func parseVCard(vcard VCardArray) (name, org, email string) {
 				email = val
 			}
 		case "adr":
-			// Address - check for country (last element of address array)
-			if addrArr, ok := arr[3].([]interface{}); ok && len(addrArr) >= 7 {
-				if country, ok := addrArr[6].(string); ok && country != "" {
-					// We could set country here, but we'd need to pass result
-				}
-			}
+			// Address country data is not represented in the current RDAP result.
 		}
 	}
 

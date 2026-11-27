@@ -70,7 +70,7 @@ func Restore(opts *RestoreOptions) error {
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	if err := extractBackup(archiveData, tempDir); err != nil {
 		return fmt.Errorf("extract backup: %w", err)
@@ -142,7 +142,7 @@ func verifyBackupIntegrity(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	if err := extractTarGz(data, tempDir); err != nil {
 		return fmt.Errorf("extract archive: %w", err)
@@ -176,7 +176,7 @@ func extractBackup(data []byte, destDir string) error {
 	if err != nil {
 		return fmt.Errorf("create gzip reader: %w", err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	// Create tar reader
 	tr := tar.NewReader(gr)
@@ -219,10 +219,10 @@ func extractBackup(data []byte, destDir string) error {
 
 			// Copy content
 			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
+				_ = f.Close()
 				return fmt.Errorf("write file %s: %w", target, err)
 			}
-			f.Close()
+			_ = f.Close()
 
 		default:
 			// Skip unknown types
@@ -329,14 +329,14 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// Create destination
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	// Copy content
 	if _, err := io.Copy(dstFile, srcFile); err != nil {

@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/apimgr/whois/src/config"
 )
 
 // Result holds a parsed WHOIS lookup response
@@ -38,10 +41,13 @@ type whoisData struct {
 
 // Client performs WHOIS lookups against a caswhois server
 type Client struct {
-	ServerURL string
-	Token     string
-	Version   string
-	http      *http.Client
+	ServerURL      string
+	Token          string
+	Version        string
+	http           *http.Client
+	apiVersionOnce sync.Once
+	apiVersion     string
+	apiVersionErr  error
 }
 
 // New returns a Client configured for the given server URL and token
@@ -56,31 +62,51 @@ func New(serverURL, token, version string) *Client {
 
 // Lookup performs an auto-detect WHOIS query
 func (c *Client) Lookup(query string) (*Result, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/whois/%s", c.ServerURL, url.PathEscape(query))
+	apiBase, err := c.apiBasePath()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("%s%s/whois/%s", c.ServerURL, apiBase, url.PathEscape(query))
 	return c.do(endpoint)
 }
 
 // Domain performs a domain-specific WHOIS query
 func (c *Client) Domain(domain string) (*Result, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/whois/domain/%s", c.ServerURL, url.PathEscape(domain))
+	apiBase, err := c.apiBasePath()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("%s%s/whois/domain/%s", c.ServerURL, apiBase, url.PathEscape(domain))
 	return c.do(endpoint)
 }
 
 // IP performs an IP-specific WHOIS query
 func (c *Client) IP(ip string) (*Result, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/whois/ip/%s", c.ServerURL, url.PathEscape(ip))
+	apiBase, err := c.apiBasePath()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("%s%s/whois/ip/%s", c.ServerURL, apiBase, url.PathEscape(ip))
 	return c.do(endpoint)
 }
 
 // ASN performs an ASN-specific WHOIS query
 func (c *Client) ASN(asn string) (*Result, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/whois/asn/%s", c.ServerURL, url.PathEscape(asn))
+	apiBase, err := c.apiBasePath()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("%s%s/whois/asn/%s", c.ServerURL, apiBase, url.PathEscape(asn))
 	return c.do(endpoint)
 }
 
 // Validate checks whether a query is valid without performing a lookup
 func (c *Client) Validate(query string) (string, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/whois/validate/%s", c.ServerURL, url.PathEscape(query))
+	apiBase, err := c.apiBasePath()
+	if err != nil {
+		return "", err
+	}
+	endpoint := fmt.Sprintf("%s%s/whois/validate/%s", c.ServerURL, apiBase, url.PathEscape(query))
 	req, err := c.newRequest("GET", endpoint)
 	if err != nil {
 		return "", err
@@ -90,7 +116,7 @@ func (c *Client) Validate(query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -107,6 +133,56 @@ func (c *Client) Validate(query string) (string, error) {
 	return ar.Message, nil
 }
 
+func (c *Client) apiBasePath() (string, error) {
+	c.apiVersionOnce.Do(func() {
+		request, err := http.NewRequest(http.MethodGet, c.ServerURL+"/api/autodiscover", nil)
+		if err != nil {
+			c.apiVersionErr = err
+			return
+		}
+		response, err := c.http.Do(request)
+		if err != nil {
+			c.apiVersionErr = err
+			return
+		}
+		defer func() { _ = response.Body.Close() }()
+		var discovery struct {
+			APIVersion string `json:"api_version"`
+			Data       struct {
+				APIVersion string `json:"api_version"`
+			} `json:"data"`
+		}
+		if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&discovery) != nil {
+			c.apiVersion = config.DefaultAPIVersion
+			return
+		}
+		if discovery.APIVersion == "" {
+			discovery.APIVersion = discovery.Data.APIVersion
+		}
+		if validAPIVersion(discovery.APIVersion) {
+			c.apiVersion = discovery.APIVersion
+		} else {
+			c.apiVersion = config.DefaultAPIVersion
+		}
+	})
+	if c.apiVersionErr != nil {
+		return "", c.apiVersionErr
+	}
+	return (&config.ServerConfig{APIVersion: c.apiVersion}).APIBasePath(), nil
+}
+
+func validAPIVersion(version string) bool {
+	if len(version) < 2 || version[0] != 'v' {
+		return false
+	}
+	for _, char := range version[1:] {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // HealthCheck calls /server/healthz and returns nil on success
 func (c *Client) HealthCheck() error {
 	endpoint := fmt.Sprintf("%s/server/healthz", c.ServerURL)
@@ -119,7 +195,7 @@ func (c *Client) HealthCheck() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check returned HTTP %d", resp.StatusCode)
@@ -138,7 +214,7 @@ func (c *Client) do(endpoint string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

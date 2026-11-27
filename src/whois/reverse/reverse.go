@@ -96,7 +96,7 @@ func searchSecurityTrailsWithURL(ctx context.Context, apiKey, owner string, maxR
 	if err != nil {
 		return nil, fmt.Errorf("securitytrails: http request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("securitytrails: invalid API key")
@@ -162,7 +162,7 @@ func searchWhoxyWithURL(ctx context.Context, apiKey, owner string, maxResults in
 	if err != nil {
 		return nil, fmt.Errorf("whoxy: http request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("whoxy: unexpected status %d", resp.StatusCode)
@@ -219,7 +219,7 @@ func searchViewDNSWithURL(ctx context.Context, apiKey, owner string, maxResults 
 	if err != nil {
 		return nil, fmt.Errorf("viewdns: http request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("viewdns: unexpected status %d", resp.StatusCode)

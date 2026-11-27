@@ -108,7 +108,7 @@ func TestLookup(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 
@@ -131,6 +131,32 @@ func TestLookup(t *testing.T) {
 	}
 }
 
+func TestLookupUsesServerDiscoveredAPIVersion(t *testing.T) {
+	body := makeWhoisJSON("example.com", "domain", "whois.example.test", "2024-01-01T00:00:00Z", "raw")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/autodiscover" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"ok":true,"data":{"api_version":"v9"}}`)
+			return
+		}
+		if r.URL.Path != "/api/v9/whois/example.com" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, body)
+	}))
+	defer srv.Close()
+
+	result, err := New(srv.URL, "", "").Lookup("example.com")
+	if err != nil {
+		t.Fatalf("Lookup with discovered API version: %v", err)
+	}
+	if result.Query != "example.com" {
+		t.Fatalf("query = %q, want example.com", result.Query)
+	}
+}
+
 // --- TestDomain ---
 
 // TestDomain exercises the /whois/domain/{domain} endpoint.
@@ -138,7 +164,7 @@ func TestDomain(t *testing.T) {
 	body := makeWhoisJSON("github.com", "domain", "whois.verisign-grs.com", "2024-01-01T00:00:00Z", "domain raw")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 
@@ -159,7 +185,7 @@ func TestIP(t *testing.T) {
 	body := makeWhoisJSON("8.8.8.8", "ip", "whois.arin.net", "2024-01-01T00:00:00Z", "ip raw")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 
@@ -180,7 +206,7 @@ func TestASN(t *testing.T) {
 	body := makeWhoisJSON("AS15169", "asn", "whois.radb.net", "2024-01-01T00:00:00Z", "asn raw")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 
@@ -253,7 +279,7 @@ func TestDoErrorBranches(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.statusCode)
-				fmt.Fprint(w, tc.body)
+				_, _ = fmt.Fprint(w, tc.body)
 			}))
 			defer srv.Close()
 
@@ -280,7 +306,7 @@ func TestDoHTTPError(t *testing.T) {
 			return
 		}
 		conn, _, _ := hj.Hijack()
-		conn.Close()
+		_ = conn.Close()
 	}))
 	defer srv.Close()
 
@@ -330,7 +356,7 @@ func TestValidate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
-				fmt.Fprint(w, tc.body)
+				_, _ = fmt.Fprint(w, tc.body)
 			}))
 			defer srv.Close()
 
@@ -365,7 +391,7 @@ func TestValidateHTTPError(t *testing.T) {
 			return
 		}
 		conn, _, _ := hj.Hijack()
-		conn.Close()
+		_ = conn.Close()
 	}))
 	defer srv.Close()
 
@@ -439,7 +465,7 @@ func TestHealthCheckHTTPError(t *testing.T) {
 			return
 		}
 		conn, _, _ := hj.Hijack()
-		conn.Close()
+		_ = conn.Close()
 	}))
 	defer srv.Close()
 
@@ -589,7 +615,7 @@ func TestResultFields(t *testing.T) {
 	body := makeWhoisJSON("192.0.2.1", "ip", "whois.arin.net", ts, "raw whois output")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 

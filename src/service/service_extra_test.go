@@ -196,9 +196,9 @@ func TestUninstallRCD_RemovesEnableLine(t *testing.T) {
 	// Restore after the test.
 	t.Cleanup(func() {
 		if readErr == nil {
-			os.WriteFile(rcConf, existingData, 0644)
+			_ = os.WriteFile(rcConf, existingData, 0644)
 		} else {
-			os.Remove(rcConf)
+			_ = os.Remove(rcConf)
 		}
 	})
 
@@ -275,7 +275,7 @@ func TestDisable_RunitPath(t *testing.T) {
 	if err := os.Symlink("/tmp", linkPath); err != nil && !os.IsExist(err) {
 		t.Fatalf("creating test symlink: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(linkPath) })
+	t.Cleanup(func() { _ = os.Remove(linkPath) })
 
 	// disable() calls stop() first (which will error) then removes the symlink.
 	_ = sm.disable()
@@ -314,9 +314,9 @@ func TestDisable_RCDPath(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		if readErr == nil {
-			os.WriteFile(rcConf, existing, 0644)
+			_ = os.WriteFile(rcConf, existing, 0644)
 		} else {
-			os.Remove(rcConf)
+			_ = os.Remove(rcConf)
 		}
 	})
 
@@ -354,7 +354,7 @@ func TestInstallSystemdUser_CreatesDir(t *testing.T) {
 	}
 
 	// Cleanup: remove only our service file, not the whole directory.
-	os.Remove(filepath.Join(serviceDir, sm.Name+".service"))
+	_ = os.Remove(filepath.Join(serviceDir, sm.Name+".service"))
 }
 
 // ---------------------------------------------------------------------------
@@ -404,9 +404,9 @@ func TestInstallRunit_AsRoot(t *testing.T) {
 	_ = sm.installRunit()
 
 	// Cleanup any leftover directories or files.
-	os.RemoveAll("/etc/sv/" + sm.Name)
-	os.Remove("/etc/service/" + sm.Name)
-	os.RemoveAll("/var/log/apimgr/" + sm.Name)
+	_ = os.RemoveAll("/etc/sv/" + sm.Name)
+	_ = os.Remove("/etc/service/" + sm.Name)
+	_ = os.RemoveAll("/var/log/apimgr/" + sm.Name)
 }
 
 // ---------------------------------------------------------------------------
@@ -426,8 +426,8 @@ func TestInstallLaunchd_PermissionDenied(t *testing.T) {
 	err = sm.installLaunchd()
 	if err == nil {
 		// Cleanup if it somehow succeeded.
-		os.RemoveAll("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist")
-		os.RemoveAll("/var/log/apimgr/" + sm.Name)
+		_ = os.RemoveAll("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist")
+		_ = os.RemoveAll("/var/log/apimgr/" + sm.Name)
 		t.Log("installLaunchd() succeeded unexpectedly; cleaned up")
 	}
 }
@@ -456,7 +456,7 @@ func TestInstallLaunchdUser_CreatesDir(t *testing.T) {
 	if _, err := os.Stat(plistPath); err == nil {
 		t.Logf("plist was written to %s — directory and file branches covered", plistPath)
 		// Cleanup.
-		os.Remove(plistPath)
+		_ = os.Remove(plistPath)
 	}
 }
 
@@ -502,7 +502,7 @@ func TestInstallOpenRC_AsRoot(t *testing.T) {
 	_ = sm.installOpenRC()
 
 	// Cleanup.
-	os.Remove("/etc/init.d/" + sm.Name)
+	_ = os.Remove("/etc/init.d/" + sm.Name)
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +525,7 @@ func TestInstallRCD_AsRoot(t *testing.T) {
 	_ = sm.installRCD()
 
 	// Cleanup.
-	os.Remove("/usr/local/etc/rc.d/" + sm.Name)
+	_ = os.Remove("/usr/local/etc/rc.d/" + sm.Name)
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +548,7 @@ func TestInstallSystemd_AsRoot(t *testing.T) {
 	_ = sm.installSystemd()
 
 	// Cleanup.
-	os.Remove(servicePath)
+	_ = os.Remove(servicePath)
 }
 
 // ---------------------------------------------------------------------------
@@ -1075,7 +1075,7 @@ func TestInstallSystemService_SystemdManager(t *testing.T) {
 		}
 		_ = sm.installSystemService()
 		// Cleanup: remove any unit file written.
-		os.Remove("/etc/systemd/system/" + sm.Name + ".service")
+		_ = os.Remove("/etc/systemd/system/" + sm.Name + ".service")
 	})
 }
 
@@ -1090,7 +1090,7 @@ func TestInstallSystemService_OpenRCManager(t *testing.T) {
 			t.Fatalf("NewServiceManager: %v", err)
 		}
 		_ = sm.installSystemService()
-		os.Remove("/etc/init.d/" + sm.Name)
+		_ = os.Remove("/etc/init.d/" + sm.Name)
 	})
 }
 
@@ -1105,8 +1105,8 @@ func TestInstallSystemService_RunitManager(t *testing.T) {
 			t.Fatalf("NewServiceManager: %v", err)
 		}
 		_ = sm.installSystemService()
-		os.RemoveAll("/etc/sv/" + sm.Name)
-		os.Remove("/etc/service/" + sm.Name)
+		_ = os.RemoveAll("/etc/sv/" + sm.Name)
+		_ = os.Remove("/etc/service/" + sm.Name)
 	})
 }
 
@@ -1121,7 +1121,7 @@ func TestInstallSystemService_RcdManager(t *testing.T) {
 			t.Fatalf("NewServiceManager: %v", err)
 		}
 		_ = sm.installSystemService()
-		os.Remove("/usr/local/etc/rc.d/" + sm.Name)
+		_ = os.Remove("/usr/local/etc/rc.d/" + sm.Name)
 	})
 }
 
@@ -1133,8 +1133,8 @@ func TestInstallSystemService_LaunchdManager(t *testing.T) {
 			t.Fatalf("NewServiceManager: %v", err)
 		}
 		_ = sm.installSystemService()
-		os.RemoveAll("/var/log/apimgr/" + sm.Name)
-		os.Remove("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist")
+		_ = os.RemoveAll("/var/log/apimgr/" + sm.Name)
+		_ = os.Remove("/Library/LaunchDaemons/io.github.apimgr." + sm.Name + ".plist")
 	})
 }
 
@@ -1165,7 +1165,7 @@ func TestInstallUserService_SystemdManager(t *testing.T) {
 		// Will fail at systemctl --user enable but creates ~/.config/systemd/user/
 		_ = sm.installUserService()
 		home, _ := os.UserHomeDir()
-		os.Remove(filepath.Join(home, ".config", "systemd", "user", sm.Name+".service"))
+		_ = os.Remove(filepath.Join(home, ".config", "systemd", "user", sm.Name+".service"))
 	})
 }
 
@@ -1178,7 +1178,7 @@ func TestInstallUserService_LaunchdManager(t *testing.T) {
 		}
 		_ = sm.installUserService()
 		home, _ := os.UserHomeDir()
-		os.Remove(filepath.Join(home, "Library", "LaunchAgents", "io.github.apimgr."+sm.Name+".plist"))
+		_ = os.Remove(filepath.Join(home, "Library", "LaunchAgents", "io.github.apimgr."+sm.Name+".plist"))
 	})
 }
 
@@ -1361,7 +1361,7 @@ func TestIsSystemServiceInstalled_OpenRCPath(t *testing.T) {
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(path) })
+	t.Cleanup(func() { _ = os.Remove(path) })
 
 	if !sm.isSystemServiceInstalled() {
 		t.Error("isSystemServiceInstalled() = false, want true for /etc/init.d presence")
@@ -1382,7 +1382,7 @@ func TestIsSystemServiceInstalled_RunitPath(t *testing.T) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(path) })
+	t.Cleanup(func() { _ = os.RemoveAll(path) })
 
 	if !sm.isSystemServiceInstalled() {
 		t.Error("isSystemServiceInstalled() = false, want true for /etc/sv presence")

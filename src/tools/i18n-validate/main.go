@@ -1,7 +1,5 @@
-// Command i18n-validate checks that every locale file under
-// src/common/i18n/locales/ has the exact same key set as en.json,
-// no empty string values, and matching {var} interpolation tokens.
-// AI.md PART 30 requires this build-time check.
+// Command i18n-validate checks embedded locale files against the shared
+// internationalization registry and the English message catalog.
 package main
 
 import (
@@ -12,155 +10,300 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/i18n"
 )
 
-// requiredLanguages are the 7 languages AI.md PART 30 mandates.
-var requiredLanguages = []string{"en", "es", "zh", "fr", "ar", "de", "ja"}
-
-// interpVarPattern matches {var}-style interpolation placeholders.
 var interpVarPattern = regexp.MustCompile(`\{[a-zA-Z0-9_]+\}`)
+var positionalVerbPattern = regexp.MustCompile(`%[-+0-9.#]*[sd]`)
+
+type localeMessages struct {
+	strings map[string]string
+	plurals map[string]map[string]string
+	meta    map[string]string
+}
 
 func main() {
 	dir := "src/common/i18n/locales"
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
-
-	enPath := filepath.Join(dir, "en.json")
-	enFlat, err := loadFlat(enPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "i18n-validate: failed to load %s: %v\n", enPath, err)
+	if err := validate(dir); err != nil {
+		fmt.Fprintf(os.Stderr, "i18n-validate: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Println("i18n-validate: OK — locale files match the registry, keys, placeholders, and plural rules")
+}
 
-	failed := false
-
-	for _, lang := range requiredLanguages {
-		if lang == "en" {
+func validate(dir string) error {
+	registered := make(map[string]i18n.Locale, len(i18n.Registry))
+	for _, locale := range i18n.Registry {
+		registered[locale.Code] = locale
+	}
+	if !sameSet(i18n.SupportedLanguages(), mapKeys(registered)) {
+		return fmt.Errorf("runtime language list does not match the registry")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("reading locale directory: %w", err)
+	}
+	files := make(map[string]bool)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		path := filepath.Join(dir, lang+".json")
-		flat, err := loadFlat(path)
+		files[strings.TrimSuffix(entry.Name(), ".json")] = true
+	}
+	if !sameSet(mapKeys(files), mapKeys(registered)) {
+		return fmt.Errorf("locale files %v do not match registered languages %v", mapKeys(files), mapKeys(registered))
+	}
+	all := make(map[string]localeMessages, len(registered))
+	for code, spec := range registered {
+		messages, err := loadMessages(filepath.Join(dir, code+".json"))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "i18n-validate: %s: %v\n", lang, err)
-			failed = true
+			return fmt.Errorf("%s: %w", code, err)
+		}
+		if err := validateMetadata(code, spec, messages.meta); err != nil {
+			return err
+		}
+		all[code] = messages
+	}
+
+	english := all["en"]
+	englishKeys := messageKeys(english)
+	for code, locale := range all {
+		if code == "en" {
 			continue
 		}
-
-		missing := diffKeys(enFlat, flat)
-		extra := diffKeys(flat, enFlat)
-
-		if len(missing) > 0 {
-			failed = true
-			fmt.Fprintf(os.Stderr, "i18n-validate: %s missing %d key(s):\n", lang, len(missing))
-			for _, k := range missing {
-				fmt.Fprintf(os.Stderr, "  - %s\n", k)
-			}
+		if missing := diffKeys(englishKeys, messageKeys(locale)); len(missing) > 0 {
+			return fmt.Errorf("%s is missing message key(s): %s", code, strings.Join(missing, ", "))
 		}
-		if len(extra) > 0 {
-			failed = true
-			fmt.Fprintf(os.Stderr, "i18n-validate: %s has %d orphaned key(s) not in en.json:\n", lang, len(extra))
-			for _, k := range extra {
-				fmt.Fprintf(os.Stderr, "  - %s\n", k)
-			}
+		if extra := diffKeys(messageKeys(locale), englishKeys); len(extra) > 0 {
+			return fmt.Errorf("%s has orphaned message key(s): %s", code, strings.Join(extra, ", "))
 		}
-
-		for k, v := range flat {
-			if strings.TrimSpace(v) == "" {
-				failed = true
-				fmt.Fprintf(os.Stderr, "i18n-validate: %s key %q has an empty value\n", lang, k)
-			}
-			enVal, ok := enFlat[k]
+	}
+	for code, locale := range all {
+		if err := validateStrings(code, locale.strings); err != nil {
+			return err
+		}
+		for key, englishValue := range english.strings {
+			localeValue, ok := locale.strings[key]
 			if !ok {
 				continue
 			}
-			enVars := interpVarPattern.FindAllString(enVal, -1)
-			langVars := interpVarPattern.FindAllString(v, -1)
-			if !sameSet(enVars, langVars) {
-				failed = true
-				fmt.Fprintf(os.Stderr, "i18n-validate: %s key %q interpolation vars %v do not match en %v\n", lang, k, langVars, enVars)
+			if !sameSet(interpVarPattern.FindAllString(englishValue, -1), interpVarPattern.FindAllString(localeValue, -1)) {
+				return fmt.Errorf("%s key %q interpolation variables do not match English", code, key)
 			}
 		}
-	}
-
-	for k, v := range enFlat {
-		if strings.TrimSpace(v) == "" {
-			failed = true
-			fmt.Fprintf(os.Stderr, "i18n-validate: en key %q has an empty value\n", k)
+		if err := validatePluralMessages(code, registered[code], english.plurals, locale.plurals); err != nil {
+			return err
 		}
 	}
-
-	if failed {
-		fmt.Fprintln(os.Stderr, "i18n-validate: FAILED")
-		os.Exit(1)
-	}
-
-	fmt.Println("i18n-validate: OK — all languages match en.json key set")
+	return nil
 }
 
-// loadFlat reads a locale JSON file and flattens it into dot-path keys.
-func loadFlat(path string) (map[string]string, error) {
+func loadMessages(path string) (localeMessages, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading file: %w", err)
+		return localeMessages{}, fmt.Errorf("reading file: %w", err)
 	}
 	var tree map[string]interface{}
 	if err := json.Unmarshal(raw, &tree); err != nil {
-		return nil, fmt.Errorf("parsing JSON: %w", err)
+		return localeMessages{}, fmt.Errorf("parsing JSON: %w", err)
 	}
-	flat := make(map[string]string)
-	flatten("", tree, flat)
-	return flat, nil
+	result := localeMessages{strings: map[string]string{}, plurals: map[string]map[string]string{}, meta: map[string]string{}}
+	if err := flattenMessages("", tree, &result); err != nil {
+		return localeMessages{}, err
+	}
+	for key, value := range result.strings {
+		if strings.HasPrefix(key, "meta.") {
+			result.meta[strings.TrimPrefix(key, "meta.")] = value
+		}
+	}
+	return result, nil
 }
 
-// flatten walks a nested map and records dot-path keys with string leaf values.
-func flatten(prefix string, node map[string]interface{}, out map[string]string) {
-	for k, v := range node {
-		key := k
+func flattenMessages(prefix string, node map[string]interface{}, out *localeMessages) error {
+	if strings.HasPrefix(prefix, "plurals.") && isPluralCategoryMap(node) {
+		categories := make(map[string]string, len(node))
+		for category, value := range node {
+			text, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("plural %q category %q must be a string", prefix, category)
+			}
+			categories[category] = text
+		}
+		out.plurals[prefix] = categories
+		return nil
+	}
+	for key, value := range node {
+		path := key
 		if prefix != "" {
-			key = prefix + "." + k
+			path = prefix + "." + key
 		}
-		switch val := v.(type) {
+		switch item := value.(type) {
 		case map[string]interface{}:
-			flatten(key, val, out)
+			if err := flattenMessages(path, item, out); err != nil {
+				return err
+			}
 		case string:
-			out[key] = val
+			out.strings[path] = item
 		default:
-			out[key] = fmt.Sprintf("%v", val)
+			return fmt.Errorf("%s must be a string or object", path)
 		}
 	}
+	return nil
 }
 
-// diffKeys returns sorted keys present in a but not in b.
-func diffKeys(a, b map[string]string) []string {
-	var out []string
-	for k := range a {
-		if _, ok := b[k]; !ok {
-			out = append(out, k)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// sameSet reports whether two string slices contain the same elements,
-// ignoring order and duplicates.
-func sameSet(a, b []string) bool {
-	setA := make(map[string]bool)
-	for _, v := range a {
-		setA[v] = true
-	}
-	setB := make(map[string]bool)
-	for _, v := range b {
-		setB[v] = true
-	}
-	if len(setA) != len(setB) {
+func isPluralCategoryMap(node map[string]interface{}) bool {
+	if len(node) == 0 {
 		return false
 	}
-	for k := range setA {
-		if !setB[k] {
+	for key := range node {
+		switch key {
+		case "zero", "one", "two", "few", "many", "other":
+		default:
 			return false
 		}
 	}
 	return true
+}
+
+func validateMetadata(code string, spec i18n.Locale, metadata map[string]string) error {
+	if metadata["language"] != code {
+		return fmt.Errorf("%s metadata language is %q", code, metadata["language"])
+	}
+	if metadata["name"] != spec.Name {
+		return fmt.Errorf("%s metadata name is %q, want %q", code, metadata["name"], spec.Name)
+	}
+	if metadata["native_name"] != spec.NativeName {
+		return fmt.Errorf("%s native name is %q, want %q", code, metadata["native_name"], spec.NativeName)
+	}
+	if metadata["direction"] != spec.Direction {
+		return fmt.Errorf("%s direction is %q, want %q", code, metadata["direction"], spec.Direction)
+	}
+	return nil
+}
+
+func messageKeys(messages localeMessages) map[string]string {
+	keys := make(map[string]string, len(messages.strings)+len(messages.plurals))
+	for key, value := range messages.strings {
+		keys[key] = value
+	}
+	for key := range messages.plurals {
+		keys[key] = ""
+	}
+	return keys
+}
+
+func validateStrings(code string, values map[string]string) error {
+	for key, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s key %q has an empty value", code, key)
+		}
+		if positionalVerbPattern.MatchString(value) {
+			return fmt.Errorf("%s key %q contains a positional format verb; use named placeholders", code, key)
+		}
+	}
+	return nil
+}
+
+func validatePluralMessages(code string, spec i18n.Locale, english, locale map[string]map[string]string) error {
+	for key, categories := range locale {
+		actual := mapKeys(categories)
+		validCategories := sameSet(actual, spec.PluralCategories)
+		if !validCategories && !contains(spec.PluralCategories, "zero") {
+			withZero := append(append([]string(nil), spec.PluralCategories...), "zero")
+			validCategories = sameSet(actual, withZero)
+		}
+		if !validCategories {
+			return fmt.Errorf("%s plural %q categories %v; expected %v (optional zero)", code, key, mapKeys(categories), spec.PluralCategories)
+		}
+		for category, value := range categories {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("%s plural %q category %q is empty", code, key, category)
+			}
+			if positionalVerbPattern.MatchString(value) {
+				return fmt.Errorf("%s plural %q category %q contains a positional format verb", code, key, category)
+			}
+		}
+		base := pluralVariables(english[key])
+		for _, category := range spec.PluralCategories {
+			value, ok := categories[category]
+			if !ok {
+				return fmt.Errorf("%s plural %q is missing category %q", code, key, category)
+			}
+			if !sameSet(base, pluralVariables(map[string]string{category: value})) {
+				return fmt.Errorf("%s plural %q category %q placeholders do not match English (excluding optional {count})", code, key, category)
+			}
+		}
+		if zero, ok := categories["zero"]; ok {
+			if !sameSet(base, pluralVariables(map[string]string{"zero": zero})) {
+				return fmt.Errorf("%s plural %q category zero placeholders do not match English (excluding optional {count})", code, key)
+			}
+		}
+	}
+	for key := range english {
+		if _, ok := locale[key]; !ok {
+			return fmt.Errorf("%s plural key %q is missing", code, key)
+		}
+	}
+	return nil
+}
+
+func pluralVariables(categories map[string]string) []string {
+	variables := map[string]bool{}
+	for _, value := range categories {
+		for _, variable := range interpVarPattern.FindAllString(value, -1) {
+			if variable != "{count}" {
+				variables[variable] = true
+			}
+		}
+	}
+	return mapKeys(variables)
+}
+
+func diffKeys(a, b map[string]string) []string {
+	missing := make([]string, 0)
+	for key := range a {
+		if _, ok := b[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+func mapKeys[T any](values map[string]T) []string {
+	result := make([]string, 0, len(values))
+	for key := range values {
+		result = append(result, key)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]bool, len(a))
+	for _, value := range a {
+		set[value] = true
+	}
+	for _, value := range b {
+		if !set[value] {
+			return false
+		}
+	}
+	return true
+}
+
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }

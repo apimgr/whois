@@ -1,0 +1,88 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "about.title_prefix"}} {{.Name}} — {{.Tagline}}">
+<title>{{t .Lang "about.title_prefix"}} — {{.Name}}</title>
+{{end}}
+
+{{define "page_content"}}
+{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+
+<main id="main-content">
+  <header class="page-header">
+    <div class="container container-md">
+      <h1 class="page-title">{{t .Lang "about.title_prefix"}} {{.Name}}</h1>
+      <p class="tagline">{{.Tagline}}</p>
+    </div>
+  </header>
+
+  <div class="container about-content container-md">
+
+    <section class="card section-card" aria-labelledby="about-description">
+      <h2 id="about-description">{{t .Lang "about.section_about_heading"}}</h2>
+      <p>{{.Description}}</p>
+    </section>
+
+    <section class="card section-card" aria-labelledby="who-uses">
+      <h2 id="who-uses">{{t .Lang "about.who_uses_heading_prefix"}} {{.Name}}?</h2>
+      <ul class="check-list">
+        <li><strong>{{t .Lang "about.who_uses_sysadmins_title"}}</strong> — {{t .Lang "about.who_uses_sysadmins_desc"}}</li>
+        <li><strong>{{t .Lang "about.who_uses_security_title"}}</strong> — {{t .Lang "about.who_uses_security_desc"}}</li>
+        <li><strong>{{t .Lang "about.who_uses_investors_title"}}</strong> — {{t .Lang "about.who_uses_investors_desc"}}</li>
+        <li><strong>{{t .Lang "about.who_uses_developers_title"}}</strong> — {{t .Lang "about.who_uses_developers_desc"}}</li>
+      </ul>
+    </section>
+
+    <section class="card section-card" aria-labelledby="features">
+      <h2 id="features">{{t .Lang "about.features_heading"}}</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>{{t .Lang "about.feature_domain_title"}}</h3>
+          <p>{{t .Lang "about.feature_domain_desc"}}</p>
+        </div>
+        <div class="feature-card">
+          <h3>{{t .Lang "about.feature_ip_title"}}</h3>
+          <p>{{t .Lang "about.feature_ip_desc"}}</p>
+        </div>
+        <div class="feature-card">
+          <h3>{{t .Lang "about.feature_asn_title"}}</h3>
+          <p>{{t .Lang "about.feature_asn_desc"}}</p>
+        </div>
+        <div class="feature-card">
+          <h3>{{t .Lang "about.feature_formats_title"}}</h3>
+          <p>{{t .Lang "about.feature_formats_desc"}}</p>
+        </div>
+        <div class="feature-card">
+          <h3>{{t .Lang "about.feature_caching_title"}}</h3>
+          <p>{{t .Lang "about.feature_caching_desc"}}</p>
+        </div>
+        <div class="feature-card">
+          <h3>{{t .Lang "about.feature_ratelimit_title"}}</h3>
+          <p>{{t .Lang "about.feature_ratelimit_desc"}}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card section-card" aria-labelledby="tech-stack">
+      <h2 id="tech-stack">{{t .Lang "about.technology_heading"}}</h2>
+      <ul class="check-list">
+        <li><strong>{{t .Lang "about.tech_go_title"}}</strong> — {{t .Lang "about.tech_go_desc"}}</li>
+        <li><strong>{{t .Lang "about.tech_sqlite_title"}}</strong> — {{t .Lang "about.tech_sqlite_desc"}}</li>
+        <li><strong>{{t .Lang "about.tech_scheduler_title"}}</strong> — {{t .Lang "about.tech_scheduler_desc"}}</li>
+        <li><strong>{{t .Lang "about.tech_docker_title"}}</strong> — {{t .Lang "about.tech_docker_desc"}}</li>
+        <li><strong>{{t .Lang "about.tech_license_title"}}</strong> — {{t .Lang "about.tech_license_desc"}}</li>
+      </ul>
+    </section>
+
+    <nav class="about-nav" aria-label="{{t .Lang "about.page_navigation"}}">
+      <a href="{{path "/"}}" class="btn-primary">{{t .Lang "common.new_lookup"}}</a>
+      <a href="{{path "/docs"}}" class="btn-secondary">{{t .Lang "about.api_documentation"}}</a>
+    </nav>
+
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

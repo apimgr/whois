@@ -330,7 +330,7 @@ func (m *GeoIPManager) UpdateDatabases(ctx context.Context, cfg DatabaseConfig) 
 		// Replace old database atomically
 		if err := os.Rename(tmpPath, dbPath); err != nil {
 			errors = append(errors, fmt.Errorf("%s rename: %w", dl.filename, err))
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			continue
 		}
 

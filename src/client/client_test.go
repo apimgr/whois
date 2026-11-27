@@ -40,7 +40,7 @@ func TestResolveColor_NoColor(t *testing.T) {
 }
 
 func TestResolveColor_Auto_NoPanic(t *testing.T) {
-	os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("NO_COLOR")
 	// Auto mode checks TTY; just verify no panic
 	_ = resolveColor("")
 	_ = resolveColor("auto")
@@ -83,9 +83,9 @@ func TestApplyEnvOverrides_Format(t *testing.T) {
 }
 
 func TestApplyEnvOverrides_AllEmpty(t *testing.T) {
-	os.Unsetenv("CASWHOIS_SERVER")
-	os.Unsetenv("CASWHOIS_TOKEN")
-	os.Unsetenv("CASWHOIS_FORMAT")
+	_ = os.Unsetenv("CASWHOIS_SERVER")
+	_ = os.Unsetenv("CASWHOIS_TOKEN")
+	_ = os.Unsetenv("CASWHOIS_FORMAT")
 	cfg := &config.CLIConfig{}
 	applyEnvOverrides(cfg)
 	if cfg.Server != "" || cfg.Token != "" || cfg.Format != "" {
@@ -107,10 +107,10 @@ func TestPrintResult_Text(t *testing.T) {
 	}
 	printResult(result, nil, "text")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 
 	if !strings.Contains(out, "example.com") {
@@ -133,10 +133,10 @@ func TestPrintResult_JSON(t *testing.T) {
 	}
 	printResult(result, nil, "json")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 
 	var parsed map[string]interface{}
@@ -157,10 +157,10 @@ func TestPrintResult_Plain(t *testing.T) {
 	}
 	printResult(result, nil, "plain")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 
 	if !strings.Contains(out, "aut-num: AS15169") {
@@ -173,7 +173,7 @@ func TestShowVersion_NoPanic(t *testing.T) {
 	_, w, _ := os.Pipe()
 	os.Stdout = w
 	showVersion()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 }
 
@@ -182,7 +182,7 @@ func TestShowHelp_NoPanic(t *testing.T) {
 	_, w, _ := os.Pipe()
 	os.Stdout = w
 	showHelp()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 }
 
@@ -191,10 +191,10 @@ func TestShowHelp_ContainsUsage(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	showHelp()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 
 	if !strings.Contains(out, "Usage") {
@@ -248,10 +248,10 @@ func TestPrintResult_DefaultFormat(t *testing.T) {
 	}
 	printResult(result, nil, "")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 
 	if !strings.Contains(out, "test.com") {
@@ -270,13 +270,13 @@ func TestPrintResult_UnknownFormat(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(old, "panic: %v\n", r)
+				_, _ = fmt.Fprintf(old, "panic: %v\n", r)
 			}
 		}()
 		printResult(result, nil, "unknown")
 	}()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 }
 
@@ -298,11 +298,11 @@ func TestRunStatusCheck_Healthy(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	runStatusCheck(cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if !strings.Contains(out, "healthy") {
 		t.Errorf("runStatusCheck healthy output should contain 'healthy', got %q", out)
@@ -326,11 +326,11 @@ func TestRunUpdateCommand_BranchSet(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	runUpdateCommand("branch=beta", cfg, config.ConfigPath())
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 
 	if cfg.UpdateChannel != "beta" {
@@ -350,7 +350,7 @@ func TestRunUpdateCommand_BranchSet(t *testing.T) {
 func TestRunCLICommand_Validate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"ok":true,"message":"domain"}`)
+		_, _ = fmt.Fprintf(w, `{"ok":true,"message":"domain"}`)
 	}))
 	defer srv.Close()
 
@@ -360,14 +360,14 @@ func TestRunCLICommand_Validate(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	code := runCLICommand([]string{"validate", "example.com"}, cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 	if code != 0 {
 		t.Errorf("validate returned exit code %d, want 0", code)
 	}
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if !strings.Contains(out, "domain") {
 		t.Errorf("validate output = %q, want it to contain %q", out, "domain")
@@ -390,7 +390,7 @@ func TestRunCLICommand_Lookup(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -400,11 +400,11 @@ func TestRunCLICommand_Lookup(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	code := runCLICommand([]string{"lookup", "example.com"}, cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if code != 0 {
 		t.Errorf("lookup returned exit code %d, want 0", code)
@@ -430,7 +430,7 @@ func TestRunCLICommand_Domain(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -440,11 +440,11 @@ func TestRunCLICommand_Domain(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	code := runCLICommand([]string{"domain", "github.com"}, cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if code != 0 {
 		t.Errorf("domain returned exit code %d, want 0", code)
@@ -470,7 +470,7 @@ func TestRunCLICommand_IP(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -480,11 +480,11 @@ func TestRunCLICommand_IP(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	code := runCLICommand([]string{"ip", "8.8.8.8"}, cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if code != 0 {
 		t.Errorf("ip returned exit code %d, want 0", code)
@@ -511,7 +511,7 @@ func TestRunCLICommand_ASN(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -521,11 +521,11 @@ func TestRunCLICommand_ASN(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	code := runCLICommand([]string{"asn", "AS15169"}, cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if code != 0 {
 		t.Errorf("asn returned exit code %d, want 0", code)
@@ -552,7 +552,7 @@ func TestRunCLICommand_DefaultLookup(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -562,11 +562,11 @@ func TestRunCLICommand_DefaultLookup(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	code := runCLICommand([]string{"auto.example.com"}, cfg)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	out := buf.String()
 	if code != 0 {
 		t.Errorf("default lookup returned exit code %d, want 0", code)
@@ -612,10 +612,10 @@ func TestRun_Version(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--version"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run(--version) = %d, want 0", code)
 	}
@@ -630,10 +630,10 @@ func TestRun_ShortVersion(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"-v"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run(-v) = %d, want 0", code)
 	}
@@ -678,7 +678,7 @@ func TestRun_ServerFlag_WithCommand(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"example.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -686,10 +686,10 @@ func TestRun_ServerFlag_WithCommand(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "domain", "example.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run with server and domain command = %d, want 0", code)
 	}
@@ -710,7 +710,7 @@ func TestRun_OutputFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"8.8.8.8", "ip", "whois.arin.net", "2024-01-01T00:00:00Z", "NetRange: 8.8.8.0"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -718,10 +718,10 @@ func TestRun_OutputFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--output", "json", "ip", "8.8.8.8"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --output json = %d, want 0", code)
 	}
@@ -743,7 +743,7 @@ func TestRun_FormatFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"AS15169", "asn", "whois.radb.net", "2024-01-01T00:00:00Z", "aut-num: AS15169"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -751,10 +751,10 @@ func TestRun_FormatFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--format", "plain", "asn", "AS15169"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --format plain = %d, want 0", code)
 	}
@@ -775,7 +775,7 @@ func TestRun_OutputFlag_Plain(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"8.8.8.8", "ip", "whois.arin.net", "2024-01-01T00:00:00Z", "NetRange: 8.8.8.0"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -783,10 +783,10 @@ func TestRun_OutputFlag_Plain(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--output", "plain", "ip", "8.8.8.8"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --output plain = %d, want 0", code)
 	}
@@ -808,7 +808,7 @@ func TestRun_OutputFlag_Table(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"8.8.8.8", "ip", "whois.arin.net", "2024-01-01T00:00:00Z", "NetRange: 8.8.8.0"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -816,10 +816,10 @@ func TestRun_OutputFlag_Table(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--output", "table", "ip", "8.8.8.8"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --output table = %d, want 0", code)
 	}
@@ -843,7 +843,7 @@ func TestRun_TokenFileFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"example.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -856,10 +856,10 @@ func TestRun_TokenFileFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--token-file", tokenFile, "domain", "example.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 
 	if code != 0 {
 		t.Errorf("run --token-file = %d, want 0", code)
@@ -884,10 +884,10 @@ func TestHandleShellCommand_Completions(t *testing.T) {
 		old := os.Stdout
 		os.Stdout = w
 		code := handleShellCommand([]string{"completions", shell})
-		w.Close()
+		_ = w.Close()
 		os.Stdout = old
 		var buf bytes.Buffer
-		buf.ReadFrom(r)
+		_, _ = buf.ReadFrom(r)
 		if code != 0 {
 			t.Errorf("handleShellCommand completions %s = %d, want 0", shell, code)
 		}
@@ -903,10 +903,10 @@ func TestHandleShellCommand_Init(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := handleShellCommand([]string{"init", "bash"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("handleShellCommand init bash = %d, want 0", code)
 	}
@@ -921,10 +921,10 @@ func TestHandleShellCommand_Help(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := handleShellCommand([]string{"help"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("handleShellCommand help = %d, want 0", code)
 	}
@@ -952,14 +952,14 @@ func TestHandleShellCommand_NoArgs(t *testing.T) {
 // TestDetectShell verifies auto-detection from $SHELL falls back to bash when unset.
 func TestDetectShell(t *testing.T) {
 	old := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", old)
+	defer func() { _ = os.Setenv("SHELL", old) }()
 
-	os.Setenv("SHELL", "/usr/bin/zsh")
+	_ = os.Setenv("SHELL", "/usr/bin/zsh")
 	if got := detectShell(); got != "zsh" {
 		t.Errorf("detectShell() with SHELL=/usr/bin/zsh = %q, want zsh", got)
 	}
 
-	os.Unsetenv("SHELL")
+	_ = os.Unsetenv("SHELL")
 	if got := detectShell(); got != "bash" {
 		t.Errorf("detectShell() with unset SHELL = %q, want bash", got)
 	}
@@ -971,10 +971,10 @@ func TestRun_ShellFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--shell", "completions", "bash"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --shell completions bash = %d, want 0", code)
 	}
@@ -995,7 +995,7 @@ func TestRun_NoColorFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"test.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1003,10 +1003,10 @@ func TestRun_NoColorFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--no-color", "test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --no-color = %d, want 0", code)
 	}
@@ -1025,7 +1025,7 @@ func TestRun_DebugFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"test.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1033,10 +1033,10 @@ func TestRun_DebugFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--debug", "test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --debug = %d, want 0", code)
 	}
@@ -1055,7 +1055,7 @@ func TestRun_TokenFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"test.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1063,10 +1063,10 @@ func TestRun_TokenFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--token", "tok_abc123", "test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --token = %d, want 0", code)
 	}
@@ -1085,7 +1085,7 @@ func TestRun_LangFlag(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"test.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1093,10 +1093,10 @@ func TestRun_LangFlag(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--lang", "es", "test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --lang es = %d, want 0", code)
 	}
@@ -1115,7 +1115,7 @@ func TestRun_LangFlag_Unsupported(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"test.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1123,10 +1123,10 @@ func TestRun_LangFlag_Unsupported(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--lang", "xx", "test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	// Unsupported lang falls back to "en" — should still succeed.
 	if code != 0 {
 		t.Errorf("run --lang xx (unsupported) = %d, want 0", code)
@@ -1146,7 +1146,7 @@ func TestRun_ColorFlag_Always(t *testing.T) {
 			Raw       string `json:"raw"`
 		}{"test.com", "domain", "whois.test", "2024-01-01T00:00:00Z", "raw"})
 		body, _ := json.Marshal(map[string]interface{}{"ok": true, "data": json.RawMessage(inner)})
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1154,10 +1154,10 @@ func TestRun_ColorFlag_Always(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--color", "always", "test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --color always = %d, want 0", code)
 	}
@@ -1173,10 +1173,10 @@ func TestRun_Update_Branch(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--update", "branch=beta"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --update branch=beta = %d, want 0", code)
 	}
@@ -1196,10 +1196,10 @@ func TestRun_Status_Healthy(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "--status"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run --status healthy = %d, want 0", code)
 	}
@@ -1221,7 +1221,7 @@ func TestRun_Lookup(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1229,10 +1229,10 @@ func TestRun_Lookup(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "lookup", "example.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run lookup = %d, want 0", code)
 	}
@@ -1245,7 +1245,7 @@ func TestRun_Lookup(t *testing.T) {
 func TestRun_Validate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"ok":true,"message":"domain"}`)
+		_, _ = fmt.Fprintf(w, `{"ok":true,"message":"domain"}`)
 	}))
 	defer srv.Close()
 
@@ -1253,10 +1253,10 @@ func TestRun_Validate(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"--server", srv.URL, "validate", "example.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run validate = %d, want 0", code)
 	}
@@ -1278,7 +1278,7 @@ func TestRun_EnvServerOverride(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
@@ -1289,10 +1289,10 @@ func TestRun_EnvServerOverride(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = w
 	code := run([]string{"test.com"})
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	if code != 0 {
 		t.Errorf("run via CASWHOIS_SERVER env = %d, want 0", code)
 	}
@@ -1456,7 +1456,7 @@ func TestRunUpdateCommand_CheckWithServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/autodiscover" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"api_version":"v1","base_url":"http://%s","cli_versions":{},"cli_min_version":"v0.0.0"}`, r.Host)
+			_, _ = fmt.Fprintf(w, `{"api_version":"v1","base_url":"http://%s","cli_versions":{},"cli_min_version":"v0.0.0"}`, r.Host)
 			return
 		}
 		http.NotFound(w, r)
@@ -1471,12 +1471,12 @@ func TestRunUpdateCommand_CheckWithServer(t *testing.T) {
 	os.Stdout = w
 	os.Stderr = w
 	code := runUpdateCommand("check", cfg, config.ConfigPath())
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	// Since no CLI binary is available for the platform, check should fail
 	if code == 0 {
 		// If platform binary was found, it would report up to date
@@ -1491,7 +1491,7 @@ func TestRunUpdateCommand_EmptyDefaultsToYes(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/autodiscover" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"api_version":"v1","base_url":"http://%s","cli_versions":{},"cli_min_version":"v0.0.0"}`, r.Host)
+			_, _ = fmt.Fprintf(w, `{"api_version":"v1","base_url":"http://%s","cli_versions":{},"cli_min_version":"v0.0.0"}`, r.Host)
 			return
 		}
 		http.NotFound(w, r)
@@ -1507,12 +1507,12 @@ func TestRunUpdateCommand_EmptyDefaultsToYes(t *testing.T) {
 	os.Stderr = w
 	// Empty string should default to "yes" per AI.md PART 22
 	code := runUpdateCommand("", cfg, config.ConfigPath())
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	// Should fail because no CLI binary available for platform, but that's expected
 	_ = code
 	_ = buf
@@ -1530,12 +1530,12 @@ func TestRunUpdateCommand_CheckWithoutServer(t *testing.T) {
 	os.Stderr = w
 	// This will fail to reach GitHub in test env, which is expected
 	code := runUpdateCommand("check", cfg, config.ConfigPath())
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	// Expect non-zero since GitHub API won't be reachable in test
 	_ = code
 	_ = buf
@@ -1553,12 +1553,12 @@ func TestRunUpdateCommand_YesWithoutServer(t *testing.T) {
 	os.Stderr = w
 	// This will fail to reach GitHub in test env, which is expected
 	code := runUpdateCommand("yes", cfg, config.ConfigPath())
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldOut
 	os.Stderr = oldErr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	// Expect non-zero since GitHub API won't be reachable in test
 	_ = code
 	_ = buf

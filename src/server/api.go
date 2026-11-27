@@ -28,7 +28,7 @@ func init() {
 }
 
 // handleWhoisServers returns the list of supported WHOIS servers.
-// GET /api/v1/whois-servers
+// GET /api/{api_version}/whois-servers
 func (s *Server) handleWhoisServers(w http.ResponseWriter, r *http.Request) {
 	SendSuccess(w, map[string]interface{}{
 		"servers": whoisServerList,
@@ -37,7 +37,7 @@ func (s *Server) handleWhoisServers(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStats returns service statistics.
-// GET /api/v1/stats
+// GET /api/{api_version}/stats
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cacheStats, _ := s.cache.Stats(ctx)

@@ -35,6 +35,13 @@ type Cache interface {
 	Close() error
 }
 
+// RateLimitCache atomically evaluates a rolling-window request budget. It is
+// implemented by shared cache backends so multiple server instances use the
+// same counters without storing client identifiers in plaintext.
+type RateLimitCache interface {
+	AllowRateLimit(context.Context, string, int, time.Duration, bool) (bool, error)
+}
+
 // Stats represents cache statistics
 type Stats struct {
 	Hits        int64         `json:"hits"`

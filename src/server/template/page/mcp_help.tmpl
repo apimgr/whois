@@ -1,0 +1,67 @@
+{{define "page_head"}}
+<meta name="description" content="{{t .Lang "mcp.title"}} — {{.Name}}">
+<title>{{t .Lang "mcp.title"}} — {{.Name}}</title>
+{{end}}
+
+{{define "page_content"}}
+<main id="main-content" class="container container-md">
+  <header class="page-header">
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{path "/server/help"}}">{{t .Lang "mcp.back_help"}}</a></nav>
+    <h1 class="page-title">{{t .Lang "mcp.title"}}</h1>
+  </header>
+  <section class="section-card" id="overview" aria-labelledby="mcp-overview">
+    <h2 id="mcp-overview">{{t .Lang "mcp.overview_title"}}</h2>
+    <p>{{.Name}} {{t .Lang "mcp.overview_text"}}</p>
+  </section>
+  <section class="section-card" id="endpoint" aria-labelledby="mcp-endpoint">
+    <h2 id="mcp-endpoint">{{t .Lang "mcp.endpoint_title"}}</h2>
+    <p class="code-block"><code class="selectable">{{.URL}}</code> <button class="copy-btn" type="button" data-copy="{{.URL}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}">{{t .Lang "preferences.copy"}}</button></p>
+    <p>{{t .Lang "mcp.aliases"}}</p>
+    <p class="code-block"><a class="selectable" href="{{.APIAlias}}">{{.APIAlias}}</a> <button class="copy-btn" type="button" data-copy="{{.APIAlias}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}">{{t .Lang "preferences.copy"}}</button></p>
+    <p class="code-block"><a class="selectable" href="{{.RootAlias}}">{{.RootAlias}}</a> <button class="copy-btn" type="button" data-copy="{{.RootAlias}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}">{{t .Lang "preferences.copy"}}</button></p>
+  </section>
+  <section class="section-card" id="authentication" aria-labelledby="mcp-authentication">
+    <h2 id="mcp-authentication">{{t .Lang "mcp.auth_title"}}</h2>
+    <p>{{t .Lang "mcp.auth_text"}} <a href="{{path "/server/preferences/tokens"}}">/server/preferences/tokens</a>.</p>
+  </section>
+  <section class="section-card" id="connect" aria-labelledby="mcp-connect">
+    <h2 id="mcp-connect">{{t .Lang "mcp.connect_title"}}</h2>
+    <h3>{{t .Lang "mcp.claude_title"}}</h3>
+    <pre class="code-block"><code>{{.ClaudeCommand}}</code> <button class="copy-btn" type="button" data-copy="{{.ClaudeCommand}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></pre>
+    <h3>{{t .Lang "mcp.generic_title"}}</h3>
+    <pre class="code-block"><code>{{.ClientConfig}}</code> <button class="copy-btn" type="button" data-copy="{{.ClientConfig}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></pre>
+    <h3>{{t .Lang "mcp.verify_title"}}</h3>
+    <pre class="code-block"><code>{{.VerifyCommand}}</code> <button class="copy-btn" type="button" data-copy="{{.VerifyCommand}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></pre>
+  </section>
+  <section class="section-card" id="tools" aria-labelledby="mcp-tools">
+    <h2 id="mcp-tools">{{t .Lang "mcp.tools_title"}}</h2>
+    <p>{{t .Lang "mcp.tools_intro"}}</p>
+    <div class="table-wrapper"><table class="data-table"><thead><tr><th scope="col">{{t .Lang "mcp.tool_name"}}</th><th scope="col">{{t .Lang "mcp.tool_description"}}</th></tr></thead><tbody>
+      {{range .Tools}}<tr><td><code>{{.Name}}</code></td><td>{{markdownToHTML .Description}}</td></tr>{{end}}
+    </tbody></table></div>
+  </section>
+  <section class="section-card" id="limits" aria-labelledby="mcp-limits">
+    <h2 id="mcp-limits">{{t .Lang "mcp.limits_title"}}</h2>
+    <ul><li>{{t .Lang "mcp.limit_post"}}</li><li>{{t .Lang "mcp.limit_rate"}}</li><li>{{t .Lang "mcp.limit_origin"}}</li><li>{{t .Lang "mcp.limit_protocol"}} <code>2026-07-28</code>.</li></ul>
+  </section>
+  <section class="section-card" id="troubleshooting" aria-labelledby="mcp-troubleshooting">
+    <h2 id="mcp-troubleshooting">{{t .Lang "mcp.troubleshooting_title"}}</h2>
+    <div class="table-wrapper"><table class="data-table"><thead><tr><th scope="col">{{t .Lang "mcp.table_status"}}</th><th scope="col">{{t .Lang "mcp.table_cause"}}</th></tr></thead><tbody>
+      <tr><th scope="row">400</th><td>{{t .Lang "mcp.error_400"}}</td></tr>
+      <tr><th scope="row">401</th><td>{{t .Lang "mcp.error_401"}}</td></tr>
+      <tr><th scope="row">403</th><td>{{t .Lang "mcp.error_403"}}</td></tr>
+      <tr><th scope="row">405</th><td>{{t .Lang "mcp.error_405"}}</td></tr>
+    </tbody></table></div>
+  </section>
+  <section class="section-card" id="project" aria-labelledby="mcp-project">
+    <h2 id="mcp-project">{{t .Lang "mcp.project_title"}}</h2>
+    {{.Project}}
+  </section>
+</main>
+{{end}}
+
+{{define "page_scripts"}}
+
+{{end}}
+
+{{template "public.tmpl" .}}

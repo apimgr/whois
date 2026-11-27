@@ -40,7 +40,7 @@ func TestAddFileToTar_WriteDataError(t *testing.T) {
 	// Use a pipe: close the write-end after 512 bytes (one tar block = one header)
 	// so the data write fails.
 	pr, pw := io.Pipe()
-	defer pr.Close()
+	defer func() { _ = pr.Close() }()
 
 	// Drain the reader in a goroutine so WriteHeader can complete, then close
 	// the write-end to cause subsequent writes to fail.

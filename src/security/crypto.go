@@ -1,6 +1,8 @@
 package security
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -8,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -22,6 +25,61 @@ const (
 	Argon2KeyLen  = 32
 	SaltLen       = 16
 )
+
+const encryptedValuePrefix = "enc:v1:"
+
+// EncryptAESGCM encrypts plaintext with a 32-byte AES-256 key. The encoded
+// result stores the random nonce before the authenticated ciphertext.
+func EncryptAESGCM(key []byte, plaintext string) (string, error) {
+	if len(key) != 32 {
+		return "", errors.New("AES-256-GCM key must be 32 bytes")
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("create AES cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("create GCM: %w", err)
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", fmt.Errorf("generate encryption nonce: %w", err)
+	}
+	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return encryptedValuePrefix + base64.StdEncoding.EncodeToString(sealed), nil
+}
+
+// DecryptAESGCM authenticates and decrypts a value produced by EncryptAESGCM.
+func DecryptAESGCM(key []byte, encrypted string) (string, error) {
+	if len(key) != 32 {
+		return "", errors.New("AES-256-GCM key must be 32 bytes")
+	}
+	if !strings.HasPrefix(encrypted, encryptedValuePrefix) {
+		return "", errors.New("unsupported encrypted value format")
+	}
+	sealed, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(encrypted, encryptedValuePrefix))
+	if err != nil {
+		return "", fmt.Errorf("decode encrypted value: %w", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("create AES cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("create GCM: %w", err)
+	}
+	if len(sealed) < gcm.NonceSize()+gcm.Overhead() {
+		return "", errors.New("encrypted value is truncated")
+	}
+	nonce, ciphertext := sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", fmt.Errorf("authenticate encrypted value: %w", err)
+	}
+	return string(plaintext), nil
+}
 
 // HashPassword generates an Argon2id hash of the password
 func HashPassword(password string) (string, error) {
@@ -107,17 +165,17 @@ func GenerateToken(prefix string) (string, error) {
 		return "", errors.New("token prefix is required")
 	}
 
-	// Generate 32 bytes of random data (256 bits)
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return "", fmt.Errorf("generate random bytes: %w", err)
+	for i := range tokenBytes {
+		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			return "", fmt.Errorf("generate random token: %w", err)
+		}
+		tokenBytes[i] = alphabet[index.Int64()]
 	}
+	tokenStr := string(tokenBytes)
 
-	// Encode as hex
-	tokenStr := hex.EncodeToString(tokenBytes)
-
-	// Format: prefix_<hex>
-	// Examples: adm_abc123..., usr_def456..., org_ghi789...
 	return fmt.Sprintf("%s_%s", prefix, tokenStr), nil
 }
 

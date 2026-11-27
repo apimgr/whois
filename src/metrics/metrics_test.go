@@ -225,6 +225,11 @@ func TestNormalizePath(t *testing.T) {
 			input: "/api/v1/whois/domain/example.com",
 			want:  "/api/v1/whois/domain/:domain",
 		},
+		{
+			name:  "configured API version path",
+			input: "/api/v9/whois/domain/example.com",
+			want:  "/api/v9/whois/domain/:domain",
+		},
 		// WHOIS ASN path
 		{
 			name:  "whois asn path uppercase",
@@ -526,5 +531,20 @@ func TestMetricsConfigZeroValue(t *testing.T) {
 	c := New("zero_cfg_ns", cfg)
 	if c != nil {
 		t.Error("New() with zero-value MetricsConfig (Enabled=false) must return nil")
+	}
+}
+
+func TestRecordRateLimitUsesBoundedLabels(t *testing.T) {
+	c := New(uniqueNS(), MetricsConfig{Enabled: true})
+	c.RecordRateLimit("global", true)
+	c.RecordRateLimit("strict", false)
+	if got := testutil.ToFloat64(c.RateLimitRequests.WithLabelValues("global", "allowed")); got != 1 {
+		t.Fatalf("global allowed count = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(c.RateLimitRequests.WithLabelValues("per_ip", "limited")); got != 1 {
+		t.Fatalf("per-IP limited count = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(c.RateLimitBlocked.WithLabelValues("per_ip")); got != 1 {
+		t.Fatalf("per-IP blocked count = %v, want 1", got)
 	}
 }

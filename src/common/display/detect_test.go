@@ -166,10 +166,10 @@ func TestCanUseANSI(t *testing.T) {
 
 	// Clear NO_COLOR for tests
 	oldNoColor := os.Getenv("NO_COLOR")
-	os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("NO_COLOR")
 	defer func() {
 		if oldNoColor != "" {
-			os.Setenv("NO_COLOR", oldNoColor)
+			_ = os.Setenv("NO_COLOR", oldNoColor)
 		}
 	}()
 
@@ -184,8 +184,8 @@ func TestCanUseANSI(t *testing.T) {
 }
 
 func TestCanUseANSI_NoColor(t *testing.T) {
-	os.Setenv("NO_COLOR", "1")
-	defer os.Unsetenv("NO_COLOR")
+	_ = os.Setenv("NO_COLOR", "1")
+	defer func() { _ = os.Unsetenv("NO_COLOR") }()
 
 	env := DisplayEnv{TerminalType: "xterm-256color", IsTerminal: true}
 	if CanUseANSI(&env) {
@@ -215,18 +215,18 @@ func TestDetectDisplayEnv_SSH(t *testing.T) {
 	oldSSH := os.Getenv("SSH_CLIENT")
 	oldSSHTTY := os.Getenv("SSH_TTY")
 	defer func() {
-		os.Setenv("SSH_CLIENT", oldSSH)
-		os.Setenv("SSH_TTY", oldSSHTTY)
+		_ = os.Setenv("SSH_CLIENT", oldSSH)
+		_ = os.Setenv("SSH_TTY", oldSSHTTY)
 	}()
 
-	os.Setenv("SSH_CLIENT", "192.168.1.1 1234 22")
+	_ = os.Setenv("SSH_CLIENT", "192.168.1.1 1234 22")
 	env := DetectDisplayEnv()
 	if !env.IsSSH {
 		t.Error("IsSSH should be true when SSH_CLIENT is set")
 	}
 
-	os.Unsetenv("SSH_CLIENT")
-	os.Setenv("SSH_TTY", "/dev/pts/0")
+	_ = os.Unsetenv("SSH_CLIENT")
+	_ = os.Setenv("SSH_TTY", "/dev/pts/0")
 	env2 := DetectDisplayEnv()
 	if !env2.IsSSH {
 		t.Error("IsSSH should be true when SSH_TTY is set")
@@ -238,18 +238,18 @@ func TestDetectDisplayEnv_Screen(t *testing.T) {
 	oldSTY := os.Getenv("STY")
 	oldTMUX := os.Getenv("TMUX")
 	defer func() {
-		os.Setenv("STY", oldSTY)
-		os.Setenv("TMUX", oldTMUX)
+		_ = os.Setenv("STY", oldSTY)
+		_ = os.Setenv("TMUX", oldTMUX)
 	}()
 
-	os.Setenv("STY", "1234.pts-0.hostname")
+	_ = os.Setenv("STY", "1234.pts-0.hostname")
 	env := DetectDisplayEnv()
 	if !env.IsScreen {
 		t.Error("IsScreen should be true when STY is set")
 	}
 
-	os.Unsetenv("STY")
-	os.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	_ = os.Unsetenv("STY")
+	_ = os.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
 	env2 := DetectDisplayEnv()
 	if !env2.IsScreen {
 		t.Error("IsScreen should be true when TMUX is set")
@@ -259,9 +259,9 @@ func TestDetectDisplayEnv_Screen(t *testing.T) {
 // TestDetectDisplayEnv_Mosh verifies mosh detection.
 func TestDetectDisplayEnv_Mosh(t *testing.T) {
 	oldMOSH := os.Getenv("MOSH")
-	defer os.Setenv("MOSH", oldMOSH)
+	defer func() { _ = os.Setenv("MOSH", oldMOSH) }()
 
-	os.Setenv("MOSH", "1")
+	_ = os.Setenv("MOSH", "1")
 	env := DetectDisplayEnv()
 	if !env.IsMosh {
 		t.Error("IsMosh should be true when MOSH is set")
@@ -273,12 +273,12 @@ func TestDetectDisplayEnv_Wayland(t *testing.T) {
 	oldWayland := os.Getenv("WAYLAND_DISPLAY")
 	oldDisplay := os.Getenv("DISPLAY")
 	defer func() {
-		os.Setenv("WAYLAND_DISPLAY", oldWayland)
-		os.Setenv("DISPLAY", oldDisplay)
+		_ = os.Setenv("WAYLAND_DISPLAY", oldWayland)
+		_ = os.Setenv("DISPLAY", oldDisplay)
 	}()
 
-	os.Setenv("WAYLAND_DISPLAY", "wayland-0")
-	os.Unsetenv("DISPLAY")
+	_ = os.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	_ = os.Unsetenv("DISPLAY")
 	env := DetectDisplayEnv()
 	if !env.HasDisplay {
 		t.Error("HasDisplay should be true when WAYLAND_DISPLAY is set")
@@ -293,12 +293,12 @@ func TestDetectDisplayEnv_X11(t *testing.T) {
 	oldWayland := os.Getenv("WAYLAND_DISPLAY")
 	oldDisplay := os.Getenv("DISPLAY")
 	defer func() {
-		os.Setenv("WAYLAND_DISPLAY", oldWayland)
-		os.Setenv("DISPLAY", oldDisplay)
+		_ = os.Setenv("WAYLAND_DISPLAY", oldWayland)
+		_ = os.Setenv("DISPLAY", oldDisplay)
 	}()
 
-	os.Unsetenv("WAYLAND_DISPLAY")
-	os.Setenv("DISPLAY", ":0")
+	_ = os.Unsetenv("WAYLAND_DISPLAY")
+	_ = os.Setenv("DISPLAY", ":0")
 	env := DetectDisplayEnv()
 	if !env.HasDisplay {
 		t.Error("HasDisplay should be true when DISPLAY is set")
@@ -313,12 +313,12 @@ func TestDetectDisplayEnv_NoDisplay(t *testing.T) {
 	oldWayland := os.Getenv("WAYLAND_DISPLAY")
 	oldDisplay := os.Getenv("DISPLAY")
 	defer func() {
-		os.Setenv("WAYLAND_DISPLAY", oldWayland)
-		os.Setenv("DISPLAY", oldDisplay)
+		_ = os.Setenv("WAYLAND_DISPLAY", oldWayland)
+		_ = os.Setenv("DISPLAY", oldDisplay)
 	}()
 
-	os.Unsetenv("WAYLAND_DISPLAY")
-	os.Unsetenv("DISPLAY")
+	_ = os.Unsetenv("WAYLAND_DISPLAY")
+	_ = os.Unsetenv("DISPLAY")
 	env := DetectDisplayEnv()
 	// On non-macOS in CI: no display expected
 	_ = env.HasDisplay

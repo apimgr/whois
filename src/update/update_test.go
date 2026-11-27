@@ -114,12 +114,12 @@ func TestVerifyChecksum_Match(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 
 	if _, err := f.Write(content); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	if err := verifyChecksum(f.Name(), expected); err != nil {
 		t.Errorf("verifyChecksum with correct hash returned error: %v", err)
@@ -132,12 +132,12 @@ func TestVerifyChecksum_Mismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 
 	if _, err := f.Write(content); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	wrongChecksum := strings.Repeat("0", 64)
 	if err := verifyChecksum(f.Name(), wrongChecksum); err == nil {
@@ -160,8 +160,8 @@ func TestVerifyChecksum_EmptyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
-	f.Close()
-	defer os.Remove(f.Name())
+	_ = f.Close()
+	defer func() { _ = os.Remove(f.Name()) }()
 
 	if err := verifyChecksum(f.Name(), expected); err != nil {
 		t.Errorf("verifyChecksum on empty file with correct hash: %v", err)
@@ -178,11 +178,11 @@ func TestVerifyChecksum_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	if _, err := f.Write(content); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	err1 := verifyChecksum(f.Name(), expected)
 	err2 := verifyChecksum(f.Name(), expected)
@@ -210,7 +210,7 @@ func TestSetUpdateChannel_ValidChannels(t *testing.T) {
 			if err != nil {
 				t.Fatalf("MkdirTemp: %v", err)
 			}
-			defer os.RemoveAll(dir)
+			defer func() { _ = os.RemoveAll(dir) }()
 
 			yaml := "mode: production\nupdate:\n  branch: stable\n"
 			if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
@@ -238,7 +238,7 @@ func TestSetUpdateChannel_InvalidChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	yaml := "mode: production\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
@@ -256,7 +256,7 @@ func TestSetUpdateChannel_MissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	err = SetUpdateChannel(ChannelBeta, dir)
 	if err == nil {
@@ -270,7 +270,7 @@ func TestSetUpdateChannel_KeyNotPresentIsAppended(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	yaml := "mode: production\nport: 64500\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
@@ -296,7 +296,7 @@ func TestSetUpdateChannel_InPlaceReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	yaml := "mode: production\nupdate:\n  branch: stable\nport: 64500\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
@@ -330,7 +330,7 @@ func TestSetUpdateChannel_IdempotentSameChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	yaml := "mode: production\nupdate:\n  branch: stable\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.yml"), []byte(yaml), 0600); err != nil {
@@ -403,7 +403,7 @@ func TestGetLatestRelease_StableChannel(t *testing.T) {
 		}
 		release := buildTestRelease("v1.5.0", false, r.Host)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(release)
+		_ = json.NewEncoder(w).Encode(release)
 	}))
 	defer srv.Close()
 
@@ -432,7 +432,7 @@ func TestGetLatestRelease_BetaChannel(t *testing.T) {
 		}
 		releases := []Release{buildTestRelease("v2.0.0-beta.1", true, r.Host)}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(releases)
+		_ = json.NewEncoder(w).Encode(releases)
 	}))
 	defer srv.Close()
 
@@ -453,7 +453,7 @@ func TestGetLatestRelease_DailyChannel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		releases := []Release{buildTestRelease("v2.1.0-daily.20260101", true, r.Host)}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(releases)
+		_ = json.NewEncoder(w).Encode(releases)
 	}))
 	defer srv.Close()
 
@@ -505,7 +505,7 @@ func TestGetLatestRelease_NonOKStatus(t *testing.T) {
 func TestGetLatestRelease_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "not valid json {{{")
+		_, _ = fmt.Fprint(w, "not valid json {{{")
 	}))
 	defer srv.Close()
 
@@ -522,7 +522,7 @@ func TestGetLatestRelease_InvalidJSON(t *testing.T) {
 func TestGetLatestRelease_EmptyReleaseList(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "[]")
+		_, _ = fmt.Fprint(w, "[]")
 	}))
 	defer srv.Close()
 
@@ -554,15 +554,15 @@ func testServerForCheckForUpdates(t *testing.T, tag string, binaryContent []byte
 		case strings.Contains(r.URL.Path, "releases/latest"):
 			release := buildTestRelease(tag, false, srv.Listener.Addr().String())
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(release)
+			_ = json.NewEncoder(w).Encode(release)
 
 		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, checksumLine)
+			_, _ = fmt.Fprint(w, checksumLine)
 
 		case strings.HasSuffix(r.URL.Path, binaryName):
 			w.WriteHeader(http.StatusOK)
-			w.Write(binaryContent)
+			_, _ = w.Write(binaryContent)
 
 		default:
 			http.NotFound(w, r)
@@ -675,7 +675,7 @@ func TestCheckForUpdates_Non200Response(t *testing.T) {
 func TestCheckForUpdates_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "{invalid json}")
+		_, _ = fmt.Fprint(w, "{invalid json}")
 	}))
 	defer srv.Close()
 
@@ -706,7 +706,7 @@ func TestCheckForUpdates_NoBinaryAssetForPlatform(t *testing.T) {
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(release)
+			_ = json.NewEncoder(w).Encode(release)
 			return
 		}
 		http.NotFound(w, r)
@@ -752,7 +752,7 @@ func TestCheckForUpdates_ChecksumDownloadError(t *testing.T) {
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(release)
+			_ = json.NewEncoder(w).Encode(release)
 
 		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
 			// Return error status for checksum download
@@ -818,7 +818,7 @@ func TestDownloadBinary_HappyPath(t *testing.T) {
 	content := []byte("binary content here")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer srv.Close()
 
@@ -826,7 +826,7 @@ func TestDownloadBinary_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("downloadBinary: %v", err)
 	}
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -895,7 +895,7 @@ func TestFetchExpectedChecksum_Success(t *testing.T) {
 	expectedHash := hex.EncodeToString(h[:])
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s  caswhois-linux-amd64\n%s  caswhois-linux-arm64\n", expectedHash, expectedHash)
+		_, _ = fmt.Fprintf(w, "%s  caswhois-linux-amd64\n%s  caswhois-linux-arm64\n", expectedHash, expectedHash)
 	}))
 	defer srv.Close()
 
@@ -920,7 +920,7 @@ func TestFetchExpectedChecksum_BinaryModePrefix(t *testing.T) {
 	expectedHash := hex.EncodeToString(h[:])
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s *caswhois-linux-amd64\n", expectedHash)
+		_, _ = fmt.Fprintf(w, "%s *caswhois-linux-amd64\n", expectedHash)
 	}))
 	defer srv.Close()
 
@@ -941,7 +941,7 @@ func TestFetchExpectedChecksum_BinaryModePrefix(t *testing.T) {
 // checksums.txt does not contain a line for the requested asset name.
 func TestFetchExpectedChecksum_NoEntryForAsset(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "deadbeef  caswhois-darwin-amd64\n")
+		_, _ = fmt.Fprint(w, "deadbeef  caswhois-darwin-amd64\n")
 	}))
 	defer srv.Close()
 
@@ -1009,7 +1009,7 @@ func TestReplaceBinary_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	currentPath := filepath.Join(dir, "caswhois")
 	newBinaryPath := filepath.Join(dir, "caswhois-new")
@@ -1058,7 +1058,7 @@ func TestReplaceBinary_CurrentPathMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	newBinaryPath := filepath.Join(dir, "caswhois-new")
 	if err := os.WriteFile(newBinaryPath, []byte("new binary"), 0755); err != nil {
@@ -1077,7 +1077,7 @@ func TestReplaceBinary_NewPathMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	currentPath := filepath.Join(dir, "caswhois")
 	if err := os.WriteFile(currentPath, []byte("old binary"), 0755); err != nil {
@@ -1102,7 +1102,7 @@ func TestReplaceBinary_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	currentPath := filepath.Join(dir, "caswhois")
 	if err := os.WriteFile(currentPath, []byte("v1"), 0755); err != nil {
@@ -1217,7 +1217,7 @@ func TestCheckCLIUpdates_NewerVersionAvailable(t *testing.T) {
 			CLIMinVersion: "v1.0.0",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -1248,7 +1248,7 @@ func TestCheckCLIUpdates_AlreadyUpToDate(t *testing.T) {
 			CLIMinVersion: "v1.0.0",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -1284,7 +1284,7 @@ func TestCheckCLIUpdates_NoPlatformBinary(t *testing.T) {
 			CLIMinVersion: "v1.0.0",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -1300,7 +1300,7 @@ func TestCheckCLIUpdates_NoPlatformBinary(t *testing.T) {
 func TestCheckCLIUpdates_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "not valid json {{{")
+		_, _ = fmt.Fprint(w, "not valid json {{{")
 	}))
 	defer srv.Close()
 
@@ -1324,7 +1324,7 @@ func TestPerformCLIUpdate_AlreadyUpToDate(t *testing.T) {
 			CLIMinVersion: "v1.0.0",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 

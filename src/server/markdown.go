@@ -98,6 +98,21 @@ func markdownToHTML(src string) template.HTML {
 	return template.HTML(contentSanitizePolicy.Sanitize(out.String()))
 }
 
+// markdownToHTMLSection keeps operator-provided Markdown below the page/card
+// heading level so configured content cannot add a second page title or card
+// heading to the shared server-page shell.
+func markdownToHTMLSection(src string) template.HTML {
+	shifted := mdHeadingPattern.ReplaceAllStringFunc(src, func(match string) string {
+		parts := mdHeadingPattern.FindStringSubmatch(match)
+		level := len(parts[1])
+		if level < 3 {
+			level = 3
+		}
+		return strings.Repeat("#", level) + " " + parts[2]
+	})
+	return markdownToHTML(shifted)
+}
+
 // renderMarkdownLists groups consecutive "- item"/"* item" lines into <ul><li>…</li></ul>.
 func renderMarkdownLists(src string) string {
 	lines := strings.Split(src, "\n")

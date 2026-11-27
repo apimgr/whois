@@ -216,7 +216,7 @@ type consentBannerData struct {
 
 // consentBannerTmpl is the embedded cookie-consent banner partial
 // (AI.md PART 16 — Cookie Consent Banner, HTML markup + Banner styles).
-var consentBannerTmpl = mustParseTemplate("consent_banner", "consent_banner.html")
+var consentBannerTmpl = mustParsePartial("consent_banner", "partial/consent_banner.tmpl")
 
 // consentBannerHTML renders the cookie consent banner markup, or an empty
 // string when the visitor already has a valid cookie_consent cookie
