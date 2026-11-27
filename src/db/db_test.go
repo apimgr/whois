@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -49,6 +50,114 @@ func TestDefaultPoolConfig(t *testing.T) {
 	}
 	if cfg.MaxIdleTime != 1*time.Minute {
 		t.Errorf("MaxIdleTime: got %v, want 1m", cfg.MaxIdleTime)
+	}
+}
+
+func TestExportAndRestoreAppSecrets(t *testing.T) {
+	database := openTempDB(t)
+	ctx := context.Background()
+	if err := database.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM app_secrets`)
+		return err
+	}); err != nil {
+		t.Fatalf("clear generated secrets for empty-store restore: %v", err)
+	}
+	want := map[string]string{"cookie_signing_key": "encoded-key", "encryption_key_previous_until": "2030-01-01T00:00:00Z"}
+	if err := database.RestoreAppSecretsIfEmpty(ctx, want); err != nil {
+		t.Fatalf("seed secrets: %v", err)
+	}
+	got, err := database.ExportAppSecrets(ctx)
+	if err != nil {
+		t.Fatalf("export secrets: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("exported %d secrets, want %d", len(got), len(want))
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Errorf("secret %q = %q, want %q", name, got[name], value)
+		}
+	}
+	if err := database.RestoreAppSecretsIfEmpty(ctx, map[string]string{"extra": "must-not-overwrite"}); err != nil {
+		t.Fatalf("restore into nonempty store: %v", err)
+	}
+	got, err = database.ExportAppSecrets(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := got["extra"]; exists {
+		t.Fatal("restore modified a nonempty secrets store")
+	}
+}
+
+func TestCopySQLiteTablePreservesValues(t *testing.T) {
+	ctx := context.Background()
+	source, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "source.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = source.Close() }()
+	if _, err := source.ExecContext(ctx, `CREATE TABLE "odd table" ("key" TEXT PRIMARY KEY, value BLOB)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.ExecContext(ctx, `INSERT INTO "odd table" VALUES (?, ?)`, "row-1", []byte{0, 1, 2}); err != nil {
+		t.Fatal(err)
+	}
+	target, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "target.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = target.Close() }()
+	if _, err := target.ExecContext(ctx, `CREATE TABLE "odd table" ("key" TEXT PRIMARY KEY, value BLOB)`); err != nil {
+		t.Fatal(err)
+	}
+	targetDB := &DB{Driver: "sqlite", readDB: target, writeDB: target}
+	if err := copySQLiteTable(ctx, source, targetDB, "sqlite", "odd table"); err != nil {
+		t.Fatalf("copy SQLite table: %v", err)
+	}
+	var key string
+	var value []byte
+	if err := target.QueryRowContext(ctx, `SELECT "key", value FROM "odd table"`).Scan(&key, &value); err != nil {
+		t.Fatal(err)
+	}
+	if key != "row-1" || !bytes.Equal(value, []byte{0, 1, 2}) {
+		t.Fatalf("copied row = (%q, %v)", key, value)
+	}
+}
+
+func TestSnapshotSQLiteIsConsistent(t *testing.T) {
+	dir := t.TempDir()
+	database, err := New(context.Background(), &DatabaseConfig{Driver: "sqlite", Path: dir, Pool: DefaultPoolConfig()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	ctx := context.Background()
+	if err := database.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `CREATE TABLE snapshot_fixture(value TEXT)`)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO snapshot_fixture(value) VALUES('stable')`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(t.TempDir(), "snapshot.db")
+	if err := SnapshotSQLite(ctx, filepath.Join(dir, "server.db"), destination); err != nil {
+		t.Fatalf("SnapshotSQLite: %v", err)
+	}
+	copyDB, err := sql.Open("sqlite", destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = copyDB.Close() }()
+	var value string
+	if err := copyDB.QueryRow(`SELECT value FROM snapshot_fixture`).Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	if value != "stable" {
+		t.Fatalf("snapshot value = %q", value)
 	}
 }
 

@@ -46,7 +46,11 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 
 ## Server endpoints
 
-`GET /api/autodiscover` is a public, unversioned discovery endpoint. It returns the server's configured API version and supported versions; clients use that value to build versioned request paths.
+`GET https://caswhois.apimgr.dev/api/autodiscover` is a public, unversioned
+discovery endpoint. It returns the server's configured API version and
+supported versions; clients use that value to build versioned request paths.
+For a self-hosted service, replace the official origin with your server's
+public URL.
 
 | Method | Path | Access | Purpose |
 |--------|------|--------|---------|
@@ -95,17 +99,21 @@ unknown or invalid values are returned in the `ignored` list. Updating a
 preference requires the visitor to have granted preferences consent. Sync links contain the selected preferences and should be shared only with
 the intended recipient.
 
-The browser pages use unversioned paths such as `/server/healthz` and
-`/server/contact`; their API counterparts use the versioned prefix shown in
-the table. `/api/healthz` is a direct health alias. `/api/swagger` is an alias
-for the OpenAPI document. GraphQL is available at `/api/v1/server/graphql`
-and the `/api/graphql` alias. The API response does not honor cookies as
-credentials.
+The browser pages use unversioned paths such as
+`https://caswhois.apimgr.dev/server/healthz` and
+`https://caswhois.apimgr.dev/server/contact`; their API counterparts use the
+versioned prefix shown in the table. `https://caswhois.apimgr.dev/api/healthz`
+is a direct health alias. `https://caswhois.apimgr.dev/api/swagger` is an alias
+for the OpenAPI document. GraphQL is available at
+`https://caswhois.apimgr.dev/api/v1/server/graphql` and the
+`https://caswhois.apimgr.dev/api/graphql` alias. The API response does not
+honor cookies as credentials.
 
 ### Contact and security reports
 
-`GET /api/v1/server/contact` returns the public form description, available
-report types, a CAPTCHA descriptor, and a signed `form_token`. Submit a report
+`GET https://caswhois.apimgr.dev/api/v1/server/contact` returns the public form
+description, available report types, a CAPTCHA descriptor, and a signed
+`form_token`. Submit a report
 with `step=submit` first; that response contains a review summary and a
 single-use `review_token`, and does not deliver the report. Repeat the report
 fields with `step=confirm`, the token, and `confirmed=true` to complete the
@@ -164,7 +172,7 @@ other non-interactive HTTP tools receive text by default; send
 - GraphQL UI: `/server/docs/graphql`
 - GraphQL POST: `/api/v1/server/graphql` (also `/api/graphql`)
 - GraphQL query GET: the same endpoints with `query`, optional JSON `variables`, and `operationName` parameters; GET accepts queries only
-- Optional security public key: `GET /.well-known/pgp-key.asc` (404 without a configured keypair)
+- Optional security public key: `GET https://caswhois.apimgr.dev/.well-known/pgp-key.asc` (404 without a configured keypair)
 
 ## Command line client
 

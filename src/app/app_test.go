@@ -1390,20 +1390,37 @@ func TestRun_Update_Branch_NoArg(t *testing.T) {
 	})
 }
 
-// TestRun_Maintenance_Backup_Fails verifies --maintenance backup returns 1 when backup fails.
-// CASWHOIS_BACKUP_PASSWORD is set to avoid blocking on stdin during testing.
-func TestRun_Maintenance_Backup_Fails(t *testing.T) {
-	t.Setenv("CASWHOIS_BACKUP_PASSWORD", "testpass")
-	captureStderr(t, func() {
-		code := runCLI([]string{"--maintenance", "backup"})
-		if code != 1 {
-			t.Errorf("runCLI(--maintenance backup) = %d, want 1", code)
-		}
+// TestRun_Maintenance_BackupWithoutLocalDatabase verifies an optional SQLite
+// database does not prevent a configuration-only backup.
+func TestRun_Maintenance_BackupWithoutLocalDatabase(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	configYAML := []byte("server:\n  maintenance:\n    cleanup:\n      disk_threshold: 100\n")
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), configYAML, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CONFIG_DIR", configDir)
+	t.Setenv("DATA_DIR", filepath.Join(dir, "data"))
+	t.Setenv("DATABASE_DIR", filepath.Join(dir, "database"))
+	t.Setenv("BACKUP_DIR", filepath.Join(dir, "backups"))
+	code := 0
+	stderr := captureStderr(t, func() {
+		code = runCLI([]string{"--config", configDir, "--maintenance", "backup"})
 	})
+	if code != 0 {
+		t.Errorf("runCLI(--config %s --maintenance backup) = %d, want 0; stderr: %s", configDir, code, stderr)
+	}
 }
 
 // TestRun_Maintenance_Restore_NoArg verifies --maintenance 'restore' without a file returns 1.
 func TestRun_Maintenance_Restore_NoArg(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CONFIG_DIR", filepath.Join(dir, "config"))
+	t.Setenv("DATA_DIR", filepath.Join(dir, "data"))
+	t.Setenv("BACKUP_DIR", filepath.Join(dir, "backups"))
 	captureStderr(t, func() {
 		code := runCLI([]string{"--maintenance", "restore"})
 		if code != 1 {

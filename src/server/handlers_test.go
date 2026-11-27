@@ -21,9 +21,13 @@ import (
 // checks return accurate status rather than hard-coded strings.
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
+	cfg := config.Default()
+	dataDir := t.TempDir()
+	cfg.Database.Dir = dataDir
+	cfg.LogDir = t.TempDir()
 	database, err := db.New(context.Background(), &db.DatabaseConfig{
 		Driver: "sqlite",
-		Path:   t.TempDir(),
+		Path:   dataDir,
 	})
 	if err != nil {
 		t.Fatalf("newTestServer: create db: %v", err)
@@ -35,7 +39,6 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatalf("newTestServer: create scheduler: %v", schedErr)
 	}
 
-	cfg := config.Default()
 	readLimit := ratelimit.New(cfg.RateLimit.Read.Requests, time.Duration(cfg.RateLimit.Read.Window)*time.Second)
 	writeLimit := ratelimit.New(cfg.RateLimit.Write.Requests, time.Duration(cfg.RateLimit.Write.Window)*time.Second)
 	healthLimit := ratelimit.New(cfg.RateLimit.Health.Requests, time.Duration(cfg.RateLimit.Health.Window)*time.Second)

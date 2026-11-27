@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/apimgr/whois/src/common/constants"
@@ -143,13 +144,20 @@ type TokensConfig struct {
 
 // ContactWebhooksConfig holds webhook delivery URLs for a contact role (AI.md PART 12).
 type ContactWebhooksConfig struct {
-	Telegram   string `yaml:"telegram"`
-	Discord    string `yaml:"discord"`
-	Slack      string `yaml:"slack"`
-	Mattermost string `yaml:"mattermost"`
-	Pushover   string `yaml:"pushover"`
-	Gotify     string `yaml:"gotify"`
-	Generic    string `yaml:"generic"`
+	Telegram         string `yaml:"telegram"`
+	TelegramSecret   string `yaml:"telegram_secret"`
+	Discord          string `yaml:"discord"`
+	DiscordSecret    string `yaml:"discord_secret"`
+	Slack            string `yaml:"slack"`
+	SlackSecret      string `yaml:"slack_secret"`
+	Mattermost       string `yaml:"mattermost"`
+	MattermostSecret string `yaml:"mattermost_secret"`
+	Pushover         string `yaml:"pushover"`
+	PushoverSecret   string `yaml:"pushover_secret"`
+	Gotify           string `yaml:"gotify"`
+	GotifySecret     string `yaml:"gotify_secret"`
+	Generic          string `yaml:"generic"`
+	GenericSecret    string `yaml:"generic_secret"`
 }
 
 // ContactRoleConfig holds the email address and webhooks for a single contact role.
@@ -346,6 +354,14 @@ type BackupConfig struct {
 	Retention  BackupRetentionConfig  `yaml:"retention"`
 }
 
+// RestoreConfig contains operator restore extraction limits (AI.md PART 21).
+type RestoreConfig struct {
+	MaxArchiveSize  string `yaml:"max_archive_size"`
+	MaxExpandedSize string `yaml:"max_expanded_size"`
+	MaxFiles        int    `yaml:"max_files"`
+	MaxPathLength   int    `yaml:"max_path_length"`
+}
+
 // ComplianceConfig holds compliance mode settings (AI.md PART 21).
 type ComplianceConfig struct {
 	// Enabled activates compliance mode (HIPAA, SOC2, etc.) — requires encrypted backups.
@@ -451,8 +467,34 @@ type PrivacyConfig struct {
 	Consent    ConsentConfig    `yaml:"consent"`
 	Cookies    CookieCategories `yaml:"cookies"`
 	ThirdParty ThirdPartyConfig `yaml:"third_party"`
-	Content    PrivacyContent   `yaml:"content"`
 }
+
+const (
+	privacyDataUsage = `**Your data is used solely to:**
+
+- **Provide the service:** Authentication, core functionality
+- **Improve the experience:** Performance optimization, bug fixes, feature improvements
+- **Ensure security:** Prevent abuse, detect fraud, protect the service
+- **Communicate:** Service updates, security alerts, and (with consent) product news
+
+**Your data is NEVER:**
+- Sold to third parties
+- Used for targeted advertising
+- Shared without your explicit consent (except as required by law)`
+
+	privacyDataUsageIfSold = `**Your data may be used to:**
+
+- **Provide the service:** Authentication, core functionality
+- **Improve the experience:** Performance optimization, bug fixes, feature improvements
+- **Ensure security:** Prevent abuse, detect fraud, protect the service
+- **Communicate:** Service updates, security alerts, and (with consent) product news
+- **Third-party sharing:** Your data may be shared with or sold to third parties for analytics, advertising, or other purposes as described below
+
+**Your rights:**
+- You can opt out of data sales with the CCPA opt-out on the preferences page (/server/preferences)
+- You can delete the resources you created at any time with your owner token, and request deletion of other data through the contact details on the privacy page
+- See "Your Rights" section below for details`
+)
 
 // DataPolicy controls data handling and CCPA compliance (AI.md PART 12).
 type DataPolicy struct {
@@ -533,17 +575,6 @@ type ThirdPartyService struct {
 	PolicyURL string `yaml:"policy_url"`
 }
 
-// PrivacyContent holds the Markdown body sections of the privacy page,
-// with sold/not-sold variants for data usage (AI.md PART 12).
-type PrivacyContent struct {
-	DataCollection string `yaml:"data_collection"`
-	// DataUsage is shown when Data.Sold is false.
-	DataUsage string `yaml:"data_usage"`
-	// DataUsageIfSold is shown when Data.Sold is true.
-	DataUsageIfSold string `yaml:"data_usage_if_sold"`
-	DataSecurity    string `yaml:"data_security"`
-}
-
 // GetConsentMessage returns the banner message appropriate for the Sold setting.
 func (p *PrivacyConfig) GetConsentMessage() string {
 	if p.Data.Sold {
@@ -566,9 +597,9 @@ func (p *PrivacyConfig) GetAnalyticsDescription() string {
 // appropriate for the Sold setting.
 func (p *PrivacyConfig) GetDataUsageContent() string {
 	if p.Data.Sold {
-		return p.Content.DataUsageIfSold
+		return privacyDataUsageIfSold
 	}
-	return p.Content.DataUsage
+	return privacyDataUsage
 }
 
 // IsCCPAApplicable returns true if CCPA "Do Not Sell" disclosure is required.
@@ -594,22 +625,8 @@ func (t *TrackingConfig) TypeName() string {
 // PagesConfig holds per-page content overrides for the standard /server/*
 // content pages (AI.md PART 16 — Standard Pages → Configuration).
 type PagesConfig struct {
-	About   AboutPageConfig   `yaml:"about"`
-	Privacy PrivacyPageConfig `yaml:"privacy"`
 	Contact ContactPageConfig `yaml:"contact"`
 	Help    HelpPageConfig    `yaml:"help"`
-	Terms   TermsPageConfig   `yaml:"terms"`
-}
-
-// AboutPageConfig holds additional Markdown content for the about page.
-type AboutPageConfig struct {
-	Content string `yaml:"content"`
-}
-
-// PrivacyPageConfig holds a full Markdown override for the privacy policy page.
-// Empty uses the default template built from PrivacyConfig.
-type PrivacyPageConfig struct {
-	Content string `yaml:"content"`
 }
 
 // ContactPageConfig controls the /server/contact form.
@@ -640,14 +657,8 @@ type AntispamConfig struct {
 
 // HelpPageConfig holds project-specific Markdown content for the help page.
 type HelpPageConfig struct {
-	Content string `yaml:"content"`
+	Content any    `yaml:"content"`
 	MCP     string `yaml:"mcp"`
-}
-
-// TermsPageConfig holds a full Markdown override for the terms of service page.
-// Empty uses the default template.
-type TermsPageConfig struct {
-	Content string `yaml:"content"`
 }
 
 // CacheConfig holds cache backend settings (AI.md PART 12 — server.cache.*).
@@ -666,6 +677,9 @@ type CacheConfig struct {
 	DB            int    `yaml:"db"`
 	TLS           bool   `yaml:"tls"`
 	TLSSkipVerify bool   `yaml:"tls_skip_verify"`
+	TLSCA         string `yaml:"tls_ca"`
+	TLSCert       string `yaml:"tls_cert"`
+	TLSKey        string `yaml:"tls_key"`
 	PoolSize      int    `yaml:"pool_size"`
 	MinIdle       int    `yaml:"min_idle"`
 	Timeout       string `yaml:"timeout"`
@@ -765,7 +779,9 @@ type GeoIPConfig struct {
 type TLSConfig struct {
 	// Enabled activates TLS. When true, the server requests a cert on startup if
 	// none is found at the certificate lookup paths (PART 15).
-	Enabled bool `yaml:"enabled"`
+	Enabled bool   `yaml:"enabled"`
+	Cert    string `yaml:"cert"`
+	Key     string `yaml:"key"`
 	// Domain overrides the FQDN used for the certificate (defaults to server.fqdn).
 	Domain string `yaml:"domain"`
 	// Email is the ACME account contact email required for Let's Encrypt registration.
@@ -1015,6 +1031,8 @@ type ServerConfig struct {
 
 	// Backup settings (AI.md PART 21 — server.backup.*)
 	Backup BackupConfig `yaml:"backup"`
+	// Restore limits protect operator initiated disaster recovery (AI.md PART 21).
+	Restore RestoreConfig `yaml:"restore"`
 
 	// Compliance settings (AI.md PART 21 — server.compliance.*)
 	Compliance ComplianceConfig `yaml:"compliance"`
@@ -1207,6 +1225,12 @@ func Default() *ServerConfig {
 				MaxTotalSize: "10%",
 			},
 		},
+		Restore: RestoreConfig{
+			MaxArchiveSize:  "20GB",
+			MaxExpandedSize: "50GB",
+			MaxFiles:        1000000,
+			MaxPathLength:   4096,
+		},
 		Compliance: ComplianceConfig{Enabled: false},
 		Update: UpdateConfig{
 			Branch:      "stable",
@@ -1271,7 +1295,7 @@ func Default() *ServerConfig {
 				},
 			},
 			Retention: RetentionPolicy{
-				Period:            "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months.",
+				Period:            "Resources you create are kept until they expire or you delete them with your owner token. Preferences are stored only in cookies in your browser. Operational logs are kept for up to 30 days.",
 				ExportAvailable:   true,
 				DeletionAvailable: true,
 			},
@@ -1377,16 +1401,13 @@ func Default() *ServerConfig {
 			URL:  "",
 		},
 		Pages: PagesConfig{
-			About:   AboutPageConfig{Content: ""},
-			Privacy: PrivacyPageConfig{Content: ""},
 			Contact: ContactPageConfig{
 				Enabled:        true,
 				Captcha:        "simple",
 				Antispam:       AntispamConfig{Honeypot: true, MinFillSeconds: 3, MaxAgeSeconds: 43200, PerIP: 5, PerEmail: 3, Global: 60, Window: "1h", MaxLinks: 10, RejectMarkup: true, BlockedWords: []string{}, BlockedEmailDomains: []string{}},
 				SuccessMessage: "Thank you for your message. We'll respond soon.",
 			},
-			Help:  HelpPageConfig{Content: ""},
-			Terms: TermsPageConfig{Content: ""},
+			Help: HelpPageConfig{Content: ""},
 		},
 		Logs: DefaultLogsConfig(),
 		Scheduler: SchedulerConfig{
@@ -1565,6 +1586,15 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 			return nil, fmt.Errorf("persist encryption key: %w", saveErr)
 		}
 	}
+	webhookSecretsChanged, err := ensureWebhookSecrets(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if webhookSecretsChanged {
+		if saveErr := cfg.SaveSecrets(configDir); saveErr != nil {
+			return nil, fmt.Errorf("persist contact webhook secrets: %w", saveErr)
+		}
+	}
 
 	// Validate paths
 	if err := cfg.Validate(); err != nil {
@@ -1572,6 +1602,40 @@ func LoadServerConfig(configDir string) (*ServerConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func ensureWebhookSecrets(cfg *ServerConfig) (bool, error) {
+	if cfg == nil {
+		return false, nil
+	}
+	roles := []*ContactRoleConfig{&cfg.Contact.Admin, &cfg.Contact.Security, &cfg.Contact.Abuse, &cfg.Contact.General}
+	changed := false
+	for _, role := range roles {
+		webhooks := &role.Webhooks
+		for _, item := range []struct {
+			url    *string
+			secret *string
+		}{
+			{&webhooks.Telegram, &webhooks.TelegramSecret},
+			{&webhooks.Discord, &webhooks.DiscordSecret},
+			{&webhooks.Slack, &webhooks.SlackSecret},
+			{&webhooks.Mattermost, &webhooks.MattermostSecret},
+			{&webhooks.Pushover, &webhooks.PushoverSecret},
+			{&webhooks.Gotify, &webhooks.GotifySecret},
+			{&webhooks.Generic, &webhooks.GenericSecret},
+		} {
+			if strings.TrimSpace(*item.url) == "" || strings.TrimSpace(*item.secret) != "" {
+				continue
+			}
+			secret, err := GenerateWebhookSecret()
+			if err != nil {
+				return false, fmt.Errorf("generate contact webhook secret: %w", err)
+			}
+			*item.secret = secret
+			changed = true
+		}
+	}
+	return changed, nil
 }
 
 func yamlHasI2PEnabled(data []byte) bool {
@@ -1638,6 +1702,30 @@ func (c *ServerConfig) Validate() error {
 	if c.Backup.Retention.KeepYearly < 0 {
 		c.Backup.Retention.KeepYearly = 0
 	}
+	if strings.TrimSpace(c.Restore.MaxArchiveSize) == "" {
+		c.Restore.MaxArchiveSize = "20GB"
+	} else if _, err := parseByteSize(c.Restore.MaxArchiveSize); err != nil {
+		fmt.Printf("WARN: invalid restore.max_archive_size %q — using 20GB\n", c.Restore.MaxArchiveSize)
+		c.Restore.MaxArchiveSize = "20GB"
+	}
+	if strings.TrimSpace(c.Restore.MaxExpandedSize) == "" {
+		c.Restore.MaxExpandedSize = "50GB"
+	} else if _, err := parseByteSize(c.Restore.MaxExpandedSize); err != nil {
+		fmt.Printf("WARN: invalid restore.max_expanded_size %q — using 50GB\n", c.Restore.MaxExpandedSize)
+		c.Restore.MaxExpandedSize = "50GB"
+	}
+	if c.Restore.MaxFiles < 1 {
+		if c.Restore.MaxFiles < 0 {
+			fmt.Printf("WARN: invalid restore.max_files %d — using 1000000\n", c.Restore.MaxFiles)
+		}
+		c.Restore.MaxFiles = 1000000
+	}
+	if c.Restore.MaxPathLength < 1 {
+		if c.Restore.MaxPathLength < 0 {
+			fmt.Printf("WARN: invalid restore.max_path_length %d — using 4096\n", c.Restore.MaxPathLength)
+		}
+		c.Restore.MaxPathLength = 4096
+	}
 
 	// Compliance mode validation
 	// Compliance mode prompts for backup encryption when a backup is created.
@@ -1656,6 +1744,32 @@ func (c *ServerConfig) Validate() error {
 	}
 
 	return nil
+}
+
+func parseByteSize(value string) (int64, error) {
+	value = strings.TrimSpace(strings.ToUpper(value))
+	units := []struct {
+		suffix string
+		factor int64
+	}{
+		{"TB", 1 << 40}, {"GB", 1 << 30}, {"MB", 1 << 20}, {"KB", 1 << 10},
+		{"T", 1 << 40}, {"G", 1 << 30}, {"M", 1 << 20}, {"K", 1 << 10}, {"B", 1},
+	}
+	for _, unit := range units {
+		if strings.HasSuffix(value, unit.suffix) {
+			number := strings.TrimSpace(strings.TrimSuffix(value, unit.suffix))
+			parsed, err := strconv.ParseInt(number, 10, 64)
+			if err != nil || parsed < 1 || parsed > int64(^uint64(0)>>1)/unit.factor {
+				return 0, fmt.Errorf("invalid size %q", value)
+			}
+			return parsed * unit.factor, nil
+		}
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed < 1 {
+		return 0, fmt.Errorf("invalid size %q", value)
+	}
+	return parsed, nil
 }
 
 // APIBasePath returns the API base path (e.g., "/api/v1").

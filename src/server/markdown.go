@@ -22,6 +22,7 @@ func newContentSanitizePolicy() *bluemonday.Policy {
 	p.AllowElements("p", "br", "strong", "em", "u", "s", "small", "code", "pre", "blockquote")
 	p.AllowElements("h1", "h2", "h3", "h4", "h5", "h6")
 	p.AllowElements("ul", "ol", "li")
+	p.AllowElements("table", "thead", "tbody", "tr", "th", "td", "hr", "dl", "dt", "dd", "sup", "sub")
 	p.AllowAttrs("href", "title", "target", "rel").OnElements("a")
 	p.AllowURLSchemes("https", "http", "mailto")
 	p.AllowAttrs("class", "id").Globally()

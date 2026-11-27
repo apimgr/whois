@@ -2,17 +2,22 @@
 
 ## Autodiscovery
 
-`GET /api/autodiscover` provides service metadata and the client release information used by the companion CLI updater.
+`GET https://caswhois.apimgr.dev/api/autodiscover` provides service metadata
+and the client release information used by the companion CLI updater. For a
+self-hosted service, replace the official origin with your server's public URL.
 
 ```bash
-curl https://whois.example.net/api/autodiscover
+curl -q -LSsf https://caswhois.apimgr.dev/api/autodiscover
 ```
 
 ## Health checks
 
-The health handler is available at `/server/healthz` and
-`/api/v1/server/healthz`. `/api/healthz` is an unversioned alias; `/healthz`
-is available when enabled in configuration. Browser requests to the web route
+The health handler is available at
+`https://caswhois.apimgr.dev/server/healthz` and
+`https://caswhois.apimgr.dev/api/v1/server/healthz`.
+`https://caswhois.apimgr.dev/api/healthz` is an unversioned alias;
+`https://caswhois.apimgr.dev/healthz` is available when enabled in
+configuration. Browser requests to the web route
 render HTML; send `Accept: application/json` or `Accept: text/plain` for
 machine-readable JSON or text. Frontend text responses use the human-readable
 health layout; API text responses use dotted keys. API JSON is the default.
@@ -41,20 +46,22 @@ operator credentials in scrape configuration.
 
 | Path | Purpose |
 |------|---------|
-| `/.well-known/security.txt` | Security disclosure contacts |
-| `/.well-known/llms.txt` and `/llms.txt` | Machine-readable service guidance |
-| `/sitemap.xml` | Public page sitemap |
-| `/robots.txt` | Crawler policy |
+| `https://caswhois.apimgr.dev/.well-known/security.txt` | Security disclosure contacts |
+| `https://caswhois.apimgr.dev/.well-known/llms.txt` and `https://caswhois.apimgr.dev/llms.txt` | Machine-readable service guidance |
+| `https://caswhois.apimgr.dev/sitemap.xml` | Public page sitemap |
+| `https://caswhois.apimgr.dev/robots.txt` | Crawler policy |
 
 ## API documentation
 
-- Swagger UI: `/server/docs/swagger`
-- OpenAPI JSON: `/api/v1/server/swagger` and `/api/swagger`
-- GraphiQL: `/server/docs/graphql`
-- GraphQL POST: `/api/v1/server/graphql` and `/api/graphql`
+- Swagger UI: `https://caswhois.apimgr.dev/server/docs/swagger`
+- OpenAPI JSON: `https://caswhois.apimgr.dev/api/v1/server/swagger` and `https://caswhois.apimgr.dev/api/swagger`
+- GraphiQL: `https://caswhois.apimgr.dev/server/docs/graphql`
+- GraphQL POST: `https://caswhois.apimgr.dev/api/v1/server/graphql` and `https://caswhois.apimgr.dev/api/graphql`
 - GraphQL query GET: those same paths with `query`, optional JSON `variables`, and `operationName` parameters; GET is query-only
-- Token validation: `GET /api/v1/server/auth/check` with a bearer token; the response reports only its kind
-- Optional PGP key: `GET /.well-known/pgp-key.asc` (404 when no keypair exists)
+- Token validation: `GET https://caswhois.apimgr.dev/api/v1/server/auth/check`
+  with a bearer token; the response reports only its kind
+- Optional PGP key: `GET https://caswhois.apimgr.dev/.well-known/pgp-key.asc`
+  (404 when no keypair exists)
 
 ## Progressive web app
 

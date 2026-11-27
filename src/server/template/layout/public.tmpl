@@ -3,11 +3,11 @@
 <html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
 <head>{{template "head" .}}</head>
 <body data-toast-duration="{{.ToastDuration}}" data-toast-warning-duration="{{.ToastWarningDuration}}">
-<a class="skip-link" href="#main-content">{{t .Lang "common.skip_to_content"}}</a>
-<a class="skip-link" href="#navigation">{{t .Lang "common.skip_to_nav"}}</a>
+<a class="skip-link" href="#main-content">{{t .Lang "nav.skip_to_content"}}</a>
+<a class="skip-link" href="#navigation">{{t .Lang "nav.skip_to_nav"}}</a>
 {{if ne .CurrentPath "/server/preferences"}}{{.ConsentBannerHTML}}{{end}}
 {{.AnnouncementsHTML}}
-<div id="toast-container" aria-label="Notifications" aria-live="polite"></div>
+<div id="toast-container" data-js-toast-container role="status" aria-live="polite" aria-atomic="true"></div>
 {{template "site_header" .}}
 {{template "page_content" .}}
 {{template "public_footer" .}}

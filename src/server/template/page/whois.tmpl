@@ -4,66 +4,44 @@
 {{end}}
 
 {{define "page_content"}}
-{{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
-
 <main id="main-content">
-  <div class="container container-md">
-    <header class="page-header"><h1 class="page-title">{{t .Lang "whois.title"}}: {{.Query}}</h1></header>
-
-    <form id="whois-form" class="search-form-wrap mb-lg" action="{{path "/whois"}}" method="GET" novalidate data-api-base="{{.APIBase}}">
-      <div class="search-row">
-        <label for="q" class="sr-only">{{t .Lang "whois.query_label"}}</label>
-        <input
-          id="q" name="q" type="text"
-          class="search-input"
-          placeholder="{{t .Lang "whois.placeholder"}}"
-          autocomplete="off" autocorrect="off" autocapitalize="none"
-          spellcheck="false"
-          value="{{.Query}}"
-          aria-label="{{t .Lang "whois.query_label"}}"
-        >
-        <button type="submit" class="btn-primary">{{t .Lang "whois.button"}}</button>
-      </div>
-    </form>
-
-    {{if .Err}}
-    <div class="state-box state-error" role="alert">{{.Err}}</div>
-    {{else if .Result}}
-    <section class="section-card" aria-labelledby="whois-result-heading">
-      <h2 id="whois-result-heading">{{t .Lang "common.details"}}</h2>
-      <div class="result-meta mb-md">
-        <div class="meta-item">
-          <div class="meta-label">{{t .Lang "whois.result_query"}}</div>
-          <div class="meta-value long-string">{{.Result.Query}}</div>
+  <div class="container container-sm">
+    {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+    <header class="page-header">
+      <h1 class="page-title">{{t .Lang "whois.title"}}</h1>
+      <p class="page-lead"><span class="visually-hidden">{{t .Lang "whois.query_label"}} </span><span class="long-string">{{.Query}}</span></p>
+    </header>
+    <section class="section-card" aria-labelledby="lookup-heading">
+      <h2 id="lookup-heading">{{t .Lang "whois.query_label"}}</h2>
+      <form id="whois-form" class="stack" action="{{path "/whois"}}" method="GET" novalidate data-api-base="{{.APIBase}}">
+        <div class="form-group">
+          <label class="form-group-label" for="q">{{t .Lang "whois.query_label"}}</label>
+          <input id="q" name="q" type="text" class="input" placeholder="{{t .Lang "whois.placeholder"}}"
+            autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" value="{{.Query}}">
         </div>
-        <div class="meta-item">
-          <div class="meta-label">{{t .Lang "whois.result_type"}}</div>
-          <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">{{t .Lang "whois.result_server"}}</div>
-          <div class="meta-value long-string">{{.Result.Server}}</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-label">{{t .Lang "whois.result_timestamp"}}</div>
-          <div class="meta-value">
-            <time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time>
-          </div>
-        </div>
-      </div>
-      <pre class="whois-raw" aria-label="{{t .Lang "whois.result_raw"}}">{{.Result.Raw}}</pre>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">{{t .Lang "whois.button"}}</button></div>
+      </form>
     </section>
+    {{if .Err}}
+      <div class="alert alert-error" role="alert">{{.Err}}</div>
+    {{else if .Result}}
+      <section class="section-card" aria-labelledby="whois-result-heading">
+        <h2 id="whois-result-heading">{{t .Lang "common.details"}}</h2>
+        <dl class="info-list">
+          <dt class="info-label">{{t .Lang "whois.result_query"}}</dt><dd class="info-value long-string">{{.Result.Query}}</dd>
+          <dt class="info-label">{{t .Lang "whois.result_type"}}</dt><dd class="info-value"><span class="badge badge-info">{{.Result.Type}}</span></dd>
+          <dt class="info-label">{{t .Lang "whois.result_server"}}</dt><dd class="info-value long-string">{{.Result.Server}}</dd>
+          <dt class="info-label">{{t .Lang "whois.result_timestamp"}}</dt><dd class="info-value"><time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time></dd>
+        </dl>
+        <pre class="code-block" aria-label="{{t .Lang "whois.result_raw"}}">{{.Result.Raw}}</pre>
+      </section>
     {{else if .Query}}
-    <div class="state-box state-error" role="alert">{{t .Lang "whois.no_result"}}</div>
+      <div class="alert alert-error" role="alert">{{t .Lang "whois.no_result"}}</div>
     {{end}}
-
-    <p class="mt-md"><a href="{{path "/"}}">{{t .Lang "whois.new_lookup"}}</a></p>
+    <p><a href="{{path "/"}}">{{t .Lang "whois.new_lookup"}}</a></p>
   </div>
 </main>
 {{end}}
 
-{{define "page_scripts"}}
-
-{{end}}
-
+{{define "page_scripts"}}{{end}}
 {{template "public.tmpl" .}}

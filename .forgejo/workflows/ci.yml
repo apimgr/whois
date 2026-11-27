@@ -126,7 +126,7 @@ jobs:
       - name: Reject committed .env files
         run: |
           set -euo pipefail
-          ENV_FILES=$(find . -path ./.git -prune -o -name '.env' -print -o -name '*.env' -print || true)
+          ENV_FILES=$(git ls-files | grep -E '(^|/)\.env([^/]*)$' || true)
           if [ -n "$ENV_FILES" ]; then
             echo "Committed .env file(s) found (forbidden):"
             echo "$ENV_FILES"
@@ -154,15 +154,7 @@ jobs:
       - name: govulncheck
         run: govulncheck ./...
       - name: Reject copyleft licenses
-        run: |
-          set -euo pipefail
-          command -v go-licenses >/dev/null
-          LICENSES=$(go-licenses csv ./...)
-          if echo "$LICENSES" | grep -iE 'GPL|AGPL|LGPL'; then
-            echo "Forbidden copyleft license detected."
-            exit 1
-          fi
-          echo "No GPL/LGPL/AGPL dependencies detected."
+        run: bash scripts/verify-licenses.sh
 
   build:
     name: Build

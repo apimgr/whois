@@ -1,4 +1,4 @@
-<div id="cookie-consent" class="cookie-banner" data-sold="{{if .DataSold}}true{{else}}false{{end}}">
+<aside id="cookie-consent" class="cookie-banner" role="region" aria-label="{{.Message}}" data-sold="{{if .DataSold}}true{{else}}false{{end}}">
   <div class="cookie-banner-content">
     <span class="cookie-message">
       {{.Message}} - <a href="{{.PolicyURL}}" class="policy-link">{{.PolicyText}}</a>
@@ -7,49 +7,41 @@
       <form method="post" action="{{path "/server/consent"}}">
         <input type="hidden" name="choice" value="decline">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-decline">{{.DeclineText}}</button>
+        <button type="submit" class="btn btn-decline">{{.DeclineText}}</button>
       </form>
       <form method="post" action="{{path "/server/consent"}}">
         <input type="hidden" name="choice" value="accept">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-accept">{{.AcceptText}}</button>
+        <button type="submit" class="btn btn-accept">{{.AcceptText}}</button>
       </form>
       {{if .ShowPreferences}}
-      <button type="button" class="btn-decline" data-action="cookie-preferences">{{.PreferencesText}}</button>
+      <button type="button" class="btn btn-decline" data-action="cookie-preferences">{{.PreferencesText}}</button>
       {{end}}
     </div>
   </div>
-</div>
+</aside>
 {{if .ShowPreferences}}
-<dialog id="cookie-preferences-modal" class="cookie-preferences-modal">
-  <form method="post" action="{{path "/server/consent"}}" id="cookie-preferences-form">
-    <h2>{{.PreferencesHeading}}</h2>
+<dialog id="cookie-preferences-modal" class="modal" aria-labelledby="cookie-preferences-heading">
+  <form method="post" action="{{path "/server/consent"}}" id="cookie-preferences-form" class="modal-body">
+    <h2 id="cookie-preferences-heading">{{.PreferencesHeading}}</h2>
     <input type="hidden" name="choice" value="save">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <div class="cookie-pref-row">
-      <div class="cookie-pref-label">
-        <strong>{{.EssentialLabel}}</strong>
-        <p>{{.EssentialDesc}}</p>
-      </div>
-      <span class="cookie-pref-always-on">{{.AlwaysOnText}}</span>
+    <div class="form-group">
+      <strong class="form-group-label">{{.EssentialLabel}}</strong>
+      <p class="form-group-help">{{.EssentialDesc}}</p>
+      <span class="badge badge-neutral">{{.AlwaysOnText}}</span>
     </div>
-    <div class="cookie-pref-row">
-      <div class="cookie-pref-label">
-        <label for="pref-preferences"><strong>{{.PreferencesLabel}}</strong></label>
-        <p>{{.PreferencesDesc}}</p>
-      </div>
-      <input type="checkbox" id="pref-preferences" name="preferences" checked>
+    <div class="form-group">
+      <p class="form-group-help">{{.PreferencesDesc}}</p>
+      <label class="check"><input type="checkbox" id="pref-preferences" name="preferences" checked><span class="check-box"></span><span class="check-label">{{.PreferencesLabel}}</span></label>
     </div>
-    <div class="cookie-pref-row">
-      <div class="cookie-pref-label">
-        <label for="pref-analytics"><strong>{{.AnalyticsLabel}}</strong></label>
-        <p>{{.AnalyticsDesc}}</p>
-      </div>
-      <input type="checkbox" id="pref-analytics" name="analytics" checked>
+    <div class="form-group">
+      <p class="form-group-help">{{.AnalyticsDesc}}</p>
+      <label class="check"><input type="checkbox" id="pref-analytics" name="analytics" checked><span class="check-box"></span><span class="check-label">{{.AnalyticsLabel}}</span></label>
     </div>
-    <div class="cookie-pref-actions">
-      <button type="button" class="btn-decline" data-action="cookie-preferences-close">{{.CloseText}}</button>
-      <button type="submit" class="btn-accept">{{.SavePreferencesText}}</button>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-decline" data-action="cookie-preferences-close">{{.CloseText}}</button>
+      <button type="submit" class="btn btn-accept">{{.SavePreferencesText}}</button>
     </div>
   </form>
 </dialog>

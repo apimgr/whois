@@ -33,7 +33,7 @@ func TestAccentStylesheetValidatesAndMaintainsContrast(t *testing.T) {
 	}
 }
 
-func TestAccentCSSHandlerAndPageLink(t *testing.T) {
+func TestAccentTokensUseCommonStylesheet(t *testing.T) {
 	s := newTestServer(t)
 	s.config.Web.UI.Accent = "#0969da"
 	handler := s.setupRoutes()
@@ -42,23 +42,24 @@ func TestAccentCSSHandlerAndPageLink(t *testing.T) {
 	pageRequest.Header.Set("Accept", "text/html")
 	handler.ServeHTTP(page, pageRequest)
 	pageBody := page.Body.String()
+	commonCSS := strings.Index(pageBody, "/static/css/common.css?")
+	componentsCSS := strings.Index(pageBody, "/static/css/components.css?")
 	publicCSS := strings.Index(pageBody, "/static/css/public.css?")
-	accentCSS := strings.Index(pageBody, "/static/css/accent.css?")
-	if page.Code != http.StatusOK || publicCSS < 0 || accentCSS <= publicCSS {
-		t.Fatalf("page status/order = %d/%d/%d", page.Code, publicCSS, accentCSS)
+	if page.Code != http.StatusOK || commonCSS < 0 || componentsCSS <= commonCSS || publicCSS <= componentsCSS || strings.Contains(pageBody, "accent.css") || strings.Contains(pageBody, "notifications.css") {
+		t.Fatalf("page stylesheet links/order are invalid: %d/%d/%d", commonCSS, componentsCSS, publicCSS)
 	}
 
 	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/static/css/accent.css", nil)
+	request := httptest.NewRequest(http.MethodGet, "/static/css/common.css", nil)
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "--color-primary:") || !strings.Contains(response.Body.String(), "html.theme-light") {
-		t.Fatalf("accent CSS response = %d %q", response.Code, response.Body.String())
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "@layer tokens") || !strings.Contains(response.Body.String(), "--color-primary:") || !strings.Contains(response.Body.String(), "html.theme-light") {
+		t.Fatalf("common CSS accent tokens = %d %q", response.Code, response.Body.String())
 	}
 	if response.Header().Get("ETag") == "" || response.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("accent CSS cache headers = %#v", response.Header())
 	}
 
-	conditional := httptest.NewRequest(http.MethodGet, "/static/css/accent.css", nil)
+	conditional := httptest.NewRequest(http.MethodGet, "/static/css/common.css", nil)
 	conditional.Header.Set("If-None-Match", response.Header().Get("ETag"))
 	conditionalResponse := httptest.NewRecorder()
 	handler.ServeHTTP(conditionalResponse, conditional)
@@ -67,13 +68,8 @@ func TestAccentCSSHandlerAndPageLink(t *testing.T) {
 	}
 }
 
-func TestAccentCSSHandlerOmitsInvalidConfiguration(t *testing.T) {
-	s := newTestServer(t)
-	s.config.Web.UI.Accent = "not-a-color"
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/static/css/accent.css", nil)
-	s.handleAccentCSS(response, request)
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("invalid accent CSS status = %d, want 404", response.Code)
+func TestAccentTokensIgnoreInvalidConfiguration(t *testing.T) {
+	if got := accentTokenCSS("not-a-color"); got != "" {
+		t.Fatalf("invalid accent tokens = %q", got)
 	}
 }

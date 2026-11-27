@@ -15,35 +15,28 @@
         <p>{{t .Lang "privacy.last_updated"}}: {{.Footer.BuildDatetime}}</p>
       </header>
 
-      {{ if .Content }}
-      <section id="privacy-override" class="section-card" aria-labelledby="privacy-override-heading">
-        <h2 id="privacy-override-heading">{{t .Lang "common.details"}}</h2>
-        {{ .Content | markdownToHTMLSection }}
-      </section>
-      {{ else }}
-
       <section id="summary" class="section-card" aria-labelledby="summary-heading">
         <h2 id="summary-heading">{{t .Lang "privacy.summary_heading"}}</h2>
-        <div class="key-points">
-          <div class="key-point">
+          <div class="stack">
+          <div class="alert alert-info">
             <span class="icon" aria-hidden="true">&#128274;</span>
             <strong>{{t .Lang "privacy.point_stored_title"}}</strong>
             <p>{{t .Lang "privacy.point_stored_desc"}}</p>
           </div>
           {{ if .DataSold }}
-          <div class="key-point key-point-warning">
+          <div class="alert alert-warning">
             <span class="icon" aria-hidden="true">&#9888;&#65039;</span>
             <strong>{{t .Lang "privacy.point_sold_title"}}</strong>
             <p>{{t .Lang "privacy.point_sold_desc"}} <a href="#ccpa-opt-out">{{t .Lang "privacy.point_sold_link"}}</a>.</p>
           </div>
           {{ else }}
-          <div class="key-point">
+          <div class="alert alert-info">
             <span class="icon" aria-hidden="true">&#128683;</span>
             <strong>{{t .Lang "privacy.point_not_sold_title"}}</strong>
             <p>{{t .Lang "privacy.point_not_sold_desc"}}</p>
           </div>
           {{ end }}
-          <div class="key-point">
+          <div class="alert alert-info">
             <span class="icon" aria-hidden="true">&#127918;&#65039;</span>
             <strong>{{t .Lang "privacy.point_control_title"}}</strong>
             <p>{{t .Lang "privacy.point_control_desc"}}</p>
@@ -69,7 +62,7 @@
         <p>{{t .Lang "privacy.cookies_analytics_none"}}</p>
         {{ end }}
 
-        <div class="manage-cookies">
+        <div class="form-actions">
           <button type="button" data-action="cookie-preferences">{{t .Lang "privacy.manage_cookies_button"}}</button>
         </div>
       </section>
@@ -160,12 +153,12 @@
           <li><strong>{{t .Lang "privacy.rights_deletion_title"}}:</strong> {{t .Lang "privacy.rights_deletion_desc"}}</li>
           {{ end }}
           <li><strong>{{t .Lang "privacy.rights_correction_title"}}:</strong> {{t .Lang "privacy.rights_correction_desc"}}</li>
-          <li><strong>{{t .Lang "privacy.rights_cookie_control_title"}}:</strong> <button type="button" class="link-button" data-action="cookie-preferences">{{t .Lang "privacy.rights_cookie_control_desc"}}</button></li>
+          <li><strong>{{t .Lang "privacy.rights_cookie_control_title"}}:</strong> <button type="button" class="btn btn-ghost btn-sm" data-action="cookie-preferences">{{t .Lang "privacy.rights_cookie_control_desc"}}</button></li>
         </ul>
       </section>
 
       {{ if .DataSold }}
-      <section id="ccpa-opt-out" class="section-card ccpa-section" aria-labelledby="ccpa-heading">
+      <section id="ccpa-opt-out" class="section-card" aria-labelledby="ccpa-heading">
         <h2 id="ccpa-heading">{{t .Lang "privacy.ccpa_heading"}}</h2>
         <p>{{t .Lang "privacy.ccpa_intro"}}</p>
         <ul>
@@ -175,37 +168,37 @@
           <li><strong>{{t .Lang "privacy.ccpa_right_nondiscrimination_title"}}</strong> {{t .Lang "privacy.ccpa_right_nondiscrimination_desc"}}</li>
         </ul>
 
-        <div class="ccpa-opt-out-box">
+        <div class="stack">
           <h3>{{t .Lang "privacy.ccpa_box_heading"}}</h3>
           <p>{{t .Lang "privacy.ccpa_box_desc"}}</p>
           {{ if .CCPAOptedOut }}
-          <div class="ccpa-status opted-out">
+          <div class="status-banner status-ok">
             <span class="status-icon" aria-hidden="true">&#10003;</span>
             <span>{{t .Lang "privacy.ccpa_opted_out_status"}}</span>
           </div>
           <form method="post" action="{{path "/server/ccpa"}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="choice" value="opt-in">
-            <button type="submit" class="btn-secondary">{{t .Lang "privacy.ccpa_opt_in_button"}}</button>
+            <button type="submit" class="btn btn-secondary">{{t .Lang "privacy.ccpa_opt_in_button"}}</button>
           </form>
           {{ else }}
           <form method="post" action="{{path "/server/ccpa"}}">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="choice" value="opt-out">
-            <button type="submit" class="btn-primary btn-ccpa-opt-out">{{t .Lang "privacy.ccpa_opt_out_button"}}</button>
+            <button type="submit" class="btn btn-primary">{{t .Lang "privacy.ccpa_opt_out_button"}}</button>
           </form>
           {{ end }}
         </div>
 
-        <p class="ccpa-note">{{t .Lang "privacy.ccpa_note"}}</p>
+        <p>{{t .Lang "privacy.ccpa_note"}}</p>
       </section>
       {{ end }}
+      {{if $privacy := operatorHTML "privacy"}}<section id="operator-extension" class="section-card" aria-labelledby="operator-extension-heading"><h2 id="operator-extension-heading">{{t .Lang "common.details"}}</h2>{{$privacy}}</section>{{end}}
 
       <section id="contact" class="section-card" aria-labelledby="contact-heading">
         <h2 id="contact-heading">{{t .Lang "privacy.contact_heading"}}</h2>
         <p>{{t .Lang "privacy.contact_intro"}} <a href="{{path "/server/dpo"}}">{{t .Lang "privacy.contact_link"}}</a>.</p>
       </section>
-      {{ end }}
     </article>
   </div>
 </main>

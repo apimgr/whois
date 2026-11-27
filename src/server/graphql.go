@@ -13,18 +13,38 @@ import (
 	"github.com/apimgr/whois/src/whois"
 )
 
-// handleGraphQL handles GraphQL POST requests.
+// handleGraphQL handles GraphQL POST requests and query-only GET requests.
 // Routes: /api/graphql, /api/{api_version}/server/graphql (AI.md PART 14)
 func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		s.writeGraphQLError(w, http.StatusMethodNotAllowed, "GraphQL endpoint only accepts POST requests")
-		return
-	}
-
 	var req graphql.GraphQLRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeGraphQLError(w, http.StatusBadRequest, "Invalid JSON request body")
+	switch r.Method {
+	case http.MethodGet:
+		req.Query = r.URL.Query().Get("query")
+		req.OperationName = r.URL.Query().Get("operationName")
+		if raw := r.URL.Query().Get("variables"); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &req.Variables); err != nil || req.Variables == nil {
+				s.writeGraphQLError(w, http.StatusBadRequest, "variables must be a JSON object")
+				return
+			}
+		}
+		if strings.TrimSpace(req.Query) == "" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("Usage: GET this endpoint with a query parameter.\n"))
+			return
+		}
+		if graphQLHasMutation(req.Query) {
+			s.writeGraphQLError(w, http.StatusBadRequest, "GET requests may contain queries only")
+			return
+		}
+	case http.MethodPost:
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeGraphQLError(w, http.StatusBadRequest, "Invalid JSON request body")
+			return
+		}
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		s.writeGraphQLError(w, http.StatusMethodNotAllowed, "GraphQL endpoint accepts GET and POST requests")
 		return
 	}
 
@@ -35,6 +55,45 @@ func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 
 	resp := s.executeGraphQL(r.Context(), req)
 	graphql.WriteResponse(w, http.StatusOK, resp)
+}
+
+// graphQLHasMutation recognizes mutation operation definitions while ignoring
+// comments and quoted strings, so ordinary fields named "mutation" are allowed.
+func graphQLHasMutation(query string) bool {
+	for i := 0; i < len(query); {
+		switch query[i] {
+		case '#':
+			for i < len(query) && query[i] != '\n' {
+				i++
+			}
+		case '"':
+			i++
+			for i < len(query) {
+				if query[i] == '\\' {
+					i += 2
+					continue
+				}
+				if query[i] == '"' {
+					i++
+					break
+				}
+				i++
+			}
+		default:
+			if query[i] == '_' || query[i] >= 'A' && query[i] <= 'Z' || query[i] >= 'a' && query[i] <= 'z' {
+				start := i
+				for i < len(query) && (query[i] == '_' || query[i] >= 'A' && query[i] <= 'Z' || query[i] >= 'a' && query[i] <= 'z' || query[i] >= '0' && query[i] <= '9') {
+					i++
+				}
+				if query[start:i] == "mutation" {
+					return true
+				}
+			} else {
+				i++
+			}
+		}
+	}
+	return false
 }
 
 // executeGraphQL validates and runs a GraphQL request against the graphql

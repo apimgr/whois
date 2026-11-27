@@ -20,8 +20,24 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 	for _, route := range []struct {
 		path, operationID string
 		handler           http.Handler
-	}{{"/debug/pprof", "debugPprofIndex", http.HandlerFunc(pprof.Index)}, {"/debug/pprof/", "debugPprofIndexSlash", http.HandlerFunc(pprof.Index)}, {"/debug/pprof/cmdline", "debugPprofCmdline", http.HandlerFunc(pprof.Cmdline)}, {"/debug/pprof/profile", "debugPprofProfile", http.HandlerFunc(pprof.Profile)}, {"/debug/pprof/symbol", "debugPprofSymbol", http.HandlerFunc(pprof.Symbol)}, {"/debug/pprof/trace", "debugPprofTrace", http.HandlerFunc(pprof.Trace)}, {"/debug/pprof/heap", "debugPprofHeap", pprof.Handler("heap")}, {"/debug/pprof/goroutine", "debugPprofGoroutine", pprof.Handler("goroutine")}, {"/debug/pprof/allocs", "debugPprofAllocs", pprof.Handler("allocs")}, {"/debug/pprof/block", "debugPprofBlock", pprof.Handler("block")}, {"/debug/pprof/mutex", "debugPprofMutex", pprof.Handler("mutex")}, {"/debug/pprof/threadcreate", "debugPprofThreadCreate", pprof.Handler("threadcreate")}, {"/debug/vars", "debugVars", expvar.Handler()}, {"/debug/config", "debugConfig", http.HandlerFunc(s.handleDebugConfig)}, {"/debug/routes", "debugRoutes", http.HandlerFunc(s.handleDebugRoutes)}, {"/debug/cache", "debugCache", http.HandlerFunc(s.handleDebugCache)}, {"/debug/db", "debugDB", http.HandlerFunc(s.handleDebugDB)}, {"/debug/scheduler", "debugScheduler", http.HandlerFunc(s.handleDebugScheduler)}, {"/debug/memory", "debugMemory", http.HandlerFunc(s.handleDebugMemory)}, {"/debug/goroutines", "debugGoroutines", http.HandlerFunc(s.handleDebugGoroutines)}, {"/debug/error500", "debugError500", http.HandlerFunc(s.handleDebugError500)}} {
+	}{{"/debug/pprof", "debugPprofIndex", http.HandlerFunc(pprof.Index)}, {"/debug/pprof/", "debugPprofIndexSlash", http.HandlerFunc(pprof.Index)}, {"/debug/pprof/cmdline", "debugPprofCmdline", http.HandlerFunc(pprof.Cmdline)}, {"/debug/pprof/profile", "debugPprofProfile", http.HandlerFunc(pprof.Profile)}, {"/debug/pprof/symbol", "debugPprofSymbol", http.HandlerFunc(pprof.Symbol)}, {"/debug/pprof/trace", "debugPprofTrace", http.HandlerFunc(pprof.Trace)}, {"/debug/pprof/heap", "debugPprofHeap", pprof.Handler("heap")}, {"/debug/pprof/goroutine", "debugPprofGoroutine", pprof.Handler("goroutine")}, {"/debug/pprof/allocs", "debugPprofAllocs", pprof.Handler("allocs")}, {"/debug/pprof/block", "debugPprofBlock", pprof.Handler("block")}, {"/debug/pprof/mutex", "debugPprofMutex", pprof.Handler("mutex")}, {"/debug/pprof/threadcreate", "debugPprofThreadCreate", pprof.Handler("threadcreate")}, {"/debug/vars", "debugVars", expvar.Handler()}, {"/debug/config", "debugConfig", http.HandlerFunc(s.handleDebugConfig)}, {"/debug/routes", "debugRoutes", http.HandlerFunc(s.handleDebugRoutes)}, {"/debug/cache", "debugCache", http.HandlerFunc(s.handleDebugCache)}, {"/debug/db", "debugDB", http.HandlerFunc(s.handleDebugDB)}, {"/debug/scheduler", "debugScheduler", http.HandlerFunc(s.handleDebugScheduler)}, {"/debug/memory", "debugMemory", http.HandlerFunc(s.handleDebugMemory)}, {"/debug/goroutines", "debugGoroutines", http.HandlerFunc(s.handleDebugGoroutines)}, {"/debug/error500", "debugError500", http.HandlerFunc(s.handleDebugError500)}, {"/debug/components", "debugComponents", http.HandlerFunc(s.handleDebugComponentsPage)}} {
 		s.addContractRoute(r, swagger.Route{Method: http.MethodGet, Path: route.path, OperationID: route.operationID, Summary: "Debug diagnostics", Auth: "operator", Internal: true, DebugOnly: true, Handler: s.requireOperatorToken(route.handler)})
+	}
+}
+
+var debugComponentsTmpl = mustParseTemplate("debug_components", "page/debug_components.tmpl")
+
+func (s *Server) handleDebugComponentsPage(w http.ResponseWriter, r *http.Request) {
+	data := s.newPageData(w, r)
+	if theme := r.URL.Query().Get("theme"); theme == "dark" || theme == "light" || theme == "auto" {
+		data.Theme = theme
+	}
+	if direction := r.URL.Query().Get("dir"); direction == "ltr" || direction == "rtl" {
+		data.Dir = direction
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderTemplate(debugComponentsTmpl, w, r, data); err != nil {
+		writeRequestError(w, r, http.StatusInternalServerError)
 	}
 }
 

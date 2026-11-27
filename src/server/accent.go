@@ -1,11 +1,9 @@
 package server
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
-	"net/http"
 	"strconv"
 	"strings"
 )
@@ -37,30 +35,19 @@ func parseHexColor(value string) (rgbColor, bool) {
 	return rgbColor{float64(decoded[0]) / 255, float64(decoded[1]) / 255, float64(decoded[2]) / 255}, true
 }
 
-func (s *Server) handleAccentCSS(w http.ResponseWriter, r *http.Request) {
-	base, ok := parseHexColor(s.config.Web.UI.Accent)
+func accentTokenCSS(configured string) string {
+	base, ok := parseHexColor(configured)
 	if !ok {
-		http.NotFound(w, r)
-		return
+		return ""
 	}
 	dark := accentWithContrast(base, rgbColor{40.0 / 255, 42.0 / 255, 54.0 / 255}, true)
 	light := accentWithContrast(base, rgbColor{1, 1, 1}, false)
-	body := fmt.Sprintf(`:root{--color-primary:%s;--color-primary-bg:rgba(%s,.15)}
+	return fmt.Sprintf(`@layer tokens {
+:root,html.theme-dark{--color-primary:%s;--color-primary-bg:rgba(%s,.15)}
 html.theme-light{--color-primary:%s;--color-primary-bg:rgba(%s,.12)}
 @media(prefers-color-scheme:light){html.theme-auto{--color-primary:%s;--color-primary-bg:rgba(%s,.12)}}
+}
 `, colorHex(dark), colorRGB(dark), colorHex(light), colorRGB(light), colorHex(light), colorRGB(light))
-	content := []byte(body)
-	sum := sha256.Sum256(content)
-	etag := `"` + hex.EncodeToString(sum[:]) + `"`
-	w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("ETag", etag)
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(content)
 }
 
 func accentWithContrast(color, background rgbColor, lighten bool) rgbColor {

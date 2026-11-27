@@ -20,6 +20,7 @@ The main server binary. All flags are optional; defaults are loaded from `server
 | `--i2p[=BOOL]` | bool | config-dependent | Enable the I2P eepsite; accepts `--i2p=false` to disable it |
 | `--daemon` | — | — | Detach from terminal (not applicable in containers) |
 | `--debug` | — | — | Enable debug logging |
+| `--yes` | — | — | Skip supported maintenance confirmations in controlled scripts |
 | `--color` | string | auto | Colour output: `auto`, `yes`, or `no` (`--no-color` is an alias for `no`) |
 | `--lang` | string | auto | Language for output; falls back to English when no supported `LANG` value is found |
 | `--shell` | string | — | Shell integration: `completions` or `init`, optionally followed by `bash`, `zsh`, or `fish` |
@@ -63,7 +64,7 @@ caswhois --maintenance <cmd>
 | Command | Description |
 |---------|-------------|
 | `backup [FILENAME]` | Create and verify a backup in the configured backup directory using the configured encryption password; an optional filename must be a basename with the matching archive suffix |
-| `backup test [FILE]` | Verify an existing full or incremental backup; defaults to the newest backup and verifies an incremental with its base |
+| `backup test [FILE]` | Verify the selected backup and any present daily/hourly incrementals with their bases; defaults to the newest full backup |
 | `restore [FILE]` | Restore the selected full or incremental archive, or the newest full when omitted; asks for typed confirmation |
 | `mode production\|development` | Change the configured server mode |
 | `setup` | Reset server configuration to defaults (root only) |
@@ -136,7 +137,11 @@ To print the shell's initialization command instead, use `caswhois --shell init 
 
 `caswhois-cli` supports `domain`, `ip`, `asn`, `lookup`, and `validate` commands, or a query directly for automatic type detection. `--server URL` selects the server; `--token` or `--token-file` supplies an API token when an endpoint requires one. Output formats are `json`, `table`, and `plain`. See `caswhois-cli --help` for the flags and environment variables accepted by the installed version.
 
-The client reads the server's API version from `/api/autodiscover` on its first lookup or validation request, then uses that version for the lifetime of the client process.
+The client reads the server's API version from
+`https://caswhois.apimgr.dev/api/autodiscover` on its first lookup or
+validation request, then uses that version for the lifetime of the client
+process. For another server, the client uses the origin supplied with
+`--server` or `CASWHOIS_SERVER`.
 
 ## Version Output
 
@@ -144,7 +149,7 @@ The client reads the server's API version from `/api/autodiscover` on its first 
 caswhois version 0.1.0
 Commit: abc1234
 Built:  2026-05-30T00:00:00Z
-Site:   https://github.com/apimgr/whois
+Site:   https://caswhois.apimgr.dev
 ```
 
 ## Environment Variables
@@ -160,12 +165,16 @@ Site:   https://github.com/apimgr/whois
 | `DEBUG` | Enable debug mode when set to `1`, `true`, or `yes` |
 | `CONFIG_DIR` | Override config directory |
 | `DATA_DIR` | Override data directory |
+| `CACHE_DIR` | Override cache directory |
 | `LOG_DIR` | Override log directory |
 | `BACKUP_DIR` | Override backup directory |
+| `PID_FILE` | Override PID file path |
+| `DOMAIN` | Set the public hostname list used for generated links and host validation |
+| `CASWHOIS_CONFIG_DIR` | Select the config directory used to persist update-channel changes |
 | `APPLICATION_NAME` | Override the displayed application name |
 | `APPLICATION_TAGLINE` | Override the displayed application tagline |
 | `DATABASE_URL` | Remote libsql/Turso connection string |
-| `DATABASE_DRIVER` | Override driver (`sqlite`) |
+| `DATABASE_DRIVER` | Override database driver (`sqlite`, `libsql`, or `turso`) |
 | `DATABASE_DIR` | Override SQLite directory |
 | `SMTP_HOST` | SMTP server name |
 | `SMTP_PORT` | SMTP server port |
@@ -174,6 +183,11 @@ Site:   https://github.com/apimgr/whois
 | `SMTP_TLS` | SMTP TLS mode: `auto`, `starttls`, `tls`, `none` |
 | `SMTP_FROM_NAME` | Sender display name |
 | `SMTP_FROM_EMAIL` | Sender email address |
+| `LANG` | Select the output language when it matches a supported locale |
+
+The companion client also accepts `CASWHOIS_SERVER` (server URL),
+`CASWHOIS_TOKEN` (bearer token), and `CASWHOIS_FORMAT` (`json`, `table`, or
+`plain`). It also respects `NO_COLOR`.
 
 ## OS-Specific Default Paths
 
@@ -197,6 +211,9 @@ Site:   https://github.com/apimgr/whois
 
 | Purpose | Path |
 |---------|------|
-| Config | `/config/` |
-| Data | `/data/` |
-| Logs | `/data/logs/` |
+| Config | `/config/caswhois/` |
+| Data | `/data/caswhois/` |
+| Cache | `/cache/caswhois/` |
+| Logs | `/data/log/caswhois/` |
+| Backups | `/data/backups/caswhois/` |
+| SQLite database | `/data/db/sqlite/` |

@@ -360,7 +360,7 @@ Project guides are available in the [ReadTheDocs documentation](https://apimgr-c
 ```bash
 # Clone repository
 git clone https://github.com/apimgr/whois.git
-cd caswhois
+cd whois
 
 # Quick development build (to temp directory)
 make dev
@@ -425,9 +425,15 @@ caswhois/
 
 ## Disclaimer
 
-This software is provided "as is" without warranty of any kind, express or implied. The authors and contributors are not responsible for any damages or losses arising from the use of this software.
+This software is provided "as is" without warranty of any kind. Use it at your own risk.
 
-WHOIS data is provided by upstream WHOIS servers. This service is a tool for querying publicly available WHOIS information. Users are responsible for complying with applicable laws and the terms of service of upstream WHOIS providers.
+- **No Warranty**: The authors are not responsible for damages, data loss, or issues arising from use of this software.
+- **Not Professional Advice**: This software does not provide legal, financial, medical, or other professional advice.
+- **Third-Party Services**: WHOIS data comes from upstream providers; their terms apply, and users are responsible for complying with those terms and applicable laws.
+- **Security**: The project follows security practices, but no software is guaranteed to be free of vulnerabilities.
+- **Production Use**: Evaluate the software thoroughly before deploying it in production.
+
+By using this software, you acknowledge that you have read and understood this disclaimer.
 
 ---
 

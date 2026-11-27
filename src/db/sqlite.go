@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -77,6 +78,51 @@ func NewSQLite(ctx context.Context, cfg *DatabaseConfig) (*DB, error) {
 	}
 
 	return database, nil
+}
+
+// SnapshotSQLite writes a transactionally consistent SQLite database copy using VACUUM INTO.
+func SnapshotSQLite(ctx context.Context, sourcePath, destinationPath string) error {
+	info, err := os.Lstat(sourcePath)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("SQLite source is not a regular file")
+	}
+	if _, err := os.Lstat(destinationPath); err == nil {
+		return fmt.Errorf("snapshot destination already exists")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	absSource, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return err
+	}
+	absDestination, err := filepath.Abs(destinationPath)
+	if err != nil {
+		return err
+	}
+	dsn := "file:" + (&url.URL{Path: filepath.ToSlash(absSource)}).EscapedPath() + "?_pragma=busy_timeout(10000)"
+	connection, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return err
+	}
+	connection.SetMaxOpenConns(1)
+	_, snapshotErr := connection.ExecContext(ctx, "VACUUM INTO ?", absDestination)
+	closeErr := connection.Close()
+	if snapshotErr != nil {
+		_ = os.Remove(absDestination)
+		return fmt.Errorf("create SQLite snapshot: %w", snapshotErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(absDestination)
+		return fmt.Errorf("close SQLite snapshot source: %w", closeErr)
+	}
+	if err := os.Chmod(absDestination, 0600); err != nil {
+		_ = os.Remove(absDestination)
+		return err
+	}
+	return nil
 }
 
 // ensureSchema creates all tables if they don't exist (idempotent)

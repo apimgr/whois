@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -1678,7 +1679,15 @@ func TestRunBackupSuccess(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "server.yml"), []byte("server:\n  address: :64001\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dataDir, "server.db"), []byte("fake db"), 0644); err != nil {
+	database, err := sql.Open("sqlite", filepath.Join(dataDir, "server.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`CREATE TABLE fixture (value TEXT)`); err != nil {
+		_ = database.Close()
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1686,13 +1695,25 @@ func TestRunBackupSuccess(t *testing.T) {
 	s.config.ConfigDir = cfgDir
 	s.config.Database.Dir = dataDir
 	s.config.Backup.Dir = backupDir
+	// This success-path test uses a temporary directory on the host filesystem,
+	// whose current usage is outside the test's control.
+	s.config.Maintenance.Cleanup.DiskThreshold = 100
 
 	filename, err := s.runBackup("test")
 	if err != nil {
 		t.Fatalf("runBackup: %v", err)
 	}
-	if !strings.HasPrefix(filename, "test-") {
-		t.Errorf("runBackup: filename = %q, want prefix 'test-'", filename)
+	if !strings.Contains(filename, "_backup_") || !strings.HasSuffix(filename, ".tar.gz") {
+		t.Errorf("runBackup: filename = %q, want timestamped unencrypted backup name", filename)
+	}
+	for _, prefix := range []string{"backup-daily", "backup-hourly"} {
+		if _, err := s.runBackup(prefix); err != nil {
+			t.Errorf("runBackup(%q): %v", prefix, err)
+		}
+		incremental := filepath.Join(backupDir, constants.InternalName+"-"+strings.TrimPrefix(prefix, "backup-")+".tar.gz")
+		if _, err := os.Stat(incremental); err != nil {
+			t.Errorf("verified %s incremental missing: %v", prefix, err)
+		}
 	}
 }
 

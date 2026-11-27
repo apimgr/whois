@@ -18,7 +18,7 @@
 
       <section id="terms-content" class="section-card" aria-labelledby="terms-content-heading">
         <h2 id="terms-content-heading">{{t .Lang "common.details"}}</h2>
-        {{ .Content | markdownToHTMLSection }}
+        {{if $terms := operatorHTML "terms"}}{{$terms}}{{else}}{{ .Content | markdownToHTMLSection }}{{end}}
       </section>
     </article>
   </div>

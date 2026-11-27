@@ -1,10 +1,12 @@
 package server
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/i18n"
@@ -23,7 +25,6 @@ type translatablePageData struct {
 	// The server renders class="theme-{{.Theme}}" on <html> so the page renders
 	// correctly without JS (AI.md PART 16 Themes — NON-NEGOTIABLE).
 	Theme           string
-	AccentCSS       bool
 	ConsentRequired bool
 	// Footer holds the values needed to render the shared application footer
 	// via {{footer .Footer}} (AI.md PART 16 — Footer Customization).
@@ -68,19 +69,15 @@ func themeFromRequest(r *http.Request) string {
 func (s *Server) newPageData(w http.ResponseWriter, r *http.Request) translatablePageData {
 	lang := LangFromContext(r.Context())
 	csrfToken := s.csrfToken(w, r)
-	headerHTML := ""
-	if strings.TrimSpace(s.config.Branding.Content.Header) != "" {
-		headerHTML = SanitizeFooterHTML(s.config.Branding.Content.Header)
-	}
+	headerHTML := string(s.operatorHTML(r, "header"))
 	return translatablePageData{
 		AppName:              s.brandName(),
 		CurrentPath:          r.URL.Path,
 		Lang:                 lang,
 		Dir:                  i18n.Dir(lang),
 		Theme:                themeFromRequest(r),
-		AccentCSS:            accentStylesheetURL(s.config.Web.UI.Accent),
 		ConsentRequired:      r.URL.Query().Get("consent_required") == "1",
-		Footer:               s.footerData(lang),
+		Footer:               s.footerData(lang, r),
 		HeaderHTML:           template.HTML(headerHTML),
 		CSRFToken:            csrfToken,
 		ConsentBannerHTML:    s.consentBannerHTML(w, r, lang),
@@ -92,11 +89,17 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request) translatabl
 
 // footerData builds the FooterData used to render the shared application
 // footer for the given language (AI.md PART 16 — Footer Customization).
-func (s *Server) footerData(lang string) FooterData {
+func (s *Server) footerData(lang string, requests ...*http.Request) FooterData {
 	tor := s.buildTorInfo()
 	torEnabled := tor.Enabled
 	torRunning := tor.Running
 	onionAddr := tor.Hostname
+	customHTML := SanitizeFooterHTML(s.config.Web.Footer.CustomHTML)
+	if len(requests) > 0 {
+		if custom := s.operatorHTML(requests[0], "footer"); custom != "" {
+			customHTML = string(custom)
+		}
+	}
 	return FooterData{
 		Lang:         lang,
 		LanguageName: s.nativeLanguageName(lang),
@@ -113,7 +116,7 @@ func (s *Server) footerData(lang string) FooterData {
 		}(),
 		ProjectVersion: Version,
 		BuildDatetime:  BuildDate,
-		CustomHTML:     SanitizeFooterHTML(s.config.Web.Footer.CustomHTML),
+		CustomHTML:     customHTML,
 		RepoURL:        constants.RepoURL,
 	}
 }
@@ -175,6 +178,7 @@ func (s *Server) renderTemplate(tmpl *template.Template, w http.ResponseWriter, 
 		}
 		return result + separator + "v=" + url.QueryEscape(Version+"-"+CommitID)
 	}
+	funcs["operatorHTML"] = func(name string) template.HTML { return s.operatorHTML(r, name) }
 	return tmpl.Funcs(funcs).ExecuteTemplate(w, "public.tmpl", data)
 }
 
@@ -216,13 +220,87 @@ func (s *Server) handleAboutAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	description := s.config.Branding.Description
 	if description == "" {
-		description = constants.InternalName + " is a self-hosted WHOIS lookup service for domain names, IP addresses, and ASNs."
+		description = "caswhois is a self-hosted WHOIS lookup service that provides fast, cached information about domain names, IP addresses, and Autonomous System Numbers (ASNs). It ships as a single static binary with an embedded SQLite database, a web interface, a REST API, and a companion CLI client. No external dependencies are required for first-run."
 	}
-	content := s.config.Pages.About.Content
+	content, format, _ := resolvedPageContent(s.config.Branding.Content.About.Body, s.config.Branding.Content.About.Format, LangFromContext(r.Context()))
 	if content == "" {
-		content = "# " + s.brandName() + "\n\n" + tagline + "\n\n" + description
+		content = aboutFallback(s.brandName(), tagline, description)
 	}
-	SendSuccess(w, map[string]string{"title": s.brandName(), "content": content, "format": "markdown"})
+	content = substitutePageVariables(s, r, content)
+	SendSuccess(w, map[string]string{"title": s.brandName(), "content": content, "format": format})
+}
+
+func aboutFallback(name, tagline, description string) string {
+	content := "# " + name + "\n\n" + tagline + "\n\n" + description + "\n\n## Features\n\n" +
+		"- WHOIS lookup for domains, IPv4, IPv6, and ASNs with automatic query detection\n" +
+		"- RDAP-first retrieval with WHOIS fallback\n" +
+		"- Cached lookups and a persistent local WHOIS dataset\n" +
+		"- Owner and registrant reverse search with optional provider seeding\n" +
+		"- GeoIP enrichment, optional Tor hidden service, and Prometheus metrics\n" +
+		"- Encrypted backups, in-place updates, and a built-in scheduler\n" +
+		"- Web interface, REST API, GraphQL, MCP, and companion CLI"
+	links := []string{"- [Source repository](" + constants.RepoURL + ")", "- [API documentation](/server/docs)", "- [API reference](/server/docs/swagger)"}
+	if OfficialSite != "" {
+		links = append([]string{"- [Official site](" + OfficialSite + ")"}, links...)
+	}
+	return content + "\n\n## Links\n\n" + strings.Join(links, "\n")
+}
+
+func substitutePageVariables(s *Server, r *http.Request, body string) string {
+	footer := s.footerData(LangFromContext(r.Context()))
+	buildDate := BuildDate
+	if parsed, err := time.Parse(time.RFC3339, BuildDate); err == nil {
+		buildDate = parsed.UTC().Format("January 02, 2006 at 15:04:05 MST")
+	}
+	values := []string{
+		"{current_year}", fmt.Sprint(time.Now().Year()),
+		"{project_name}", constants.InternalName,
+		"{project_org}", constants.InternalOrg,
+		"{project_version}", Version,
+		"{build_datetime}", buildDate,
+		"{onion_address}", footer.OnionAddress,
+		"{i2p_address}", footer.I2PAddress,
+	}
+	return strings.NewReplacer(values...).Replace(body)
+}
+
+func resolvedPageContent(body any, configuredFormat, language string) (string, string, bool) {
+	format := "markdown"
+	switch strings.ToLower(configuredFormat) {
+	case "", "md", "markdown":
+	case "html":
+		format = "html"
+	case "txt", "text":
+		format = "text"
+	default:
+		return "", "markdown", false
+	}
+	content, ok := contentBody(body, language)
+	if !ok || len(content) > 256*1024 {
+		return "", "markdown", false
+	}
+	return content, format, true
+}
+
+func contentBody(body any, language string) (string, bool) {
+	switch value := body.(type) {
+	case string:
+		return value, strings.TrimSpace(value) != ""
+	case map[string]any:
+		if content, ok := value[language].(string); ok && strings.TrimSpace(content) != "" {
+			return content, true
+		}
+		content, ok := value["default"].(string)
+		return content, ok && strings.TrimSpace(content) != ""
+	case map[string]string:
+		if content, ok := value[language]; ok && strings.TrimSpace(content) != "" {
+			return content, true
+		}
+		content, ok := value["default"]
+		return content, ok && strings.TrimSpace(content) != ""
+	default:
+		return "", false
+	}
 }
 
 // handleDocsPage serves the API documentation page.

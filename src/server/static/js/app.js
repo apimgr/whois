@@ -168,7 +168,7 @@ document.addEventListener('click',function(event){
     doLookup(input.value);
   });
 
-  document.querySelectorAll('.example-chip').forEach(function(el){
+  document.querySelectorAll('[data-js-example-query]').forEach(function(el){
     el.addEventListener('click',function(e){
       e.preventDefault();
       var q=el.getAttribute('data-query');

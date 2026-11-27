@@ -1,0 +1,110 @@
+{{define "page_head"}}
+<meta name="description" content="Shared component state gallery">
+<title>Component Gallery — {{.AppName}}</title>
+{{end}}
+
+{{define "page_content"}}
+<main id="main-content">
+  <div class="container">
+    <header class="page-header"><h1>Component Gallery</h1></header>
+    <nav class="cluster" aria-label="Gallery theme and direction">
+      <a class="nav-link" href="/debug/components?theme=dark&amp;dir={{.Dir}}">Dark</a>
+      <a class="nav-link" href="/debug/components?theme=light&amp;dir={{.Dir}}">Light</a>
+      <a class="nav-link" href="/debug/components?theme=auto&amp;dir={{.Dir}}">Auto</a>
+      <a class="nav-link" href="/debug/components?theme={{.Theme}}&amp;dir=ltr">LTR</a>
+      <a class="nav-link" href="/debug/components?theme={{.Theme}}&amp;dir=rtl">RTL</a>
+    </nav>
+
+    <section class="section-card" aria-labelledby="gallery-buttons">
+      <h2 id="gallery-buttons">Buttons</h2>
+      <div class="cluster">
+        <button class="btn" type="button">Default</button>
+        <button class="btn btn-primary" type="button">Primary</button>
+        <button class="btn btn-secondary" type="button">Secondary</button>
+        <button class="btn btn-danger" type="button">Danger</button>
+        <button class="btn btn-ghost" type="button">Ghost</button>
+        <button class="btn btn-sm" type="button">Small</button>
+        <button class="btn btn-lg" type="button">Large</button>
+        <button class="btn btn-xl" type="button">Extra large</button>
+        <button class="btn" type="button" disabled title="Unavailable in this example">Disabled</button>
+        <button class="btn btn-primary" type="button" aria-busy="true"><span class="spinner" aria-hidden="true"></span>Loading</button>
+        <button class="btn" type="button" aria-pressed="true">Pressed</button>
+      </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="gallery-inputs">
+      <h2 id="gallery-inputs">Inputs and form groups</h2>
+      <div class="stack">
+        <div class="form-group"><label class="form-group-label" for="gallery-input">Default input</label><input class="input" id="gallery-input" value="Example value"><p class="form-group-help">Help text for this field.</p></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-invalid">Invalid input</label><input class="input" id="gallery-invalid" aria-invalid="true" value="Invalid value"><p class="form-group-error" id="gallery-input-error">Enter a valid value.</p></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-readonly">Read-only input</label><input class="input" id="gallery-readonly" value="Read-only value" readonly></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-disabled">Disabled input</label><input class="input" id="gallery-disabled" value="Disabled value" disabled></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-input-sm">Small input</label><input class="input input-sm" id="gallery-input-sm" value="Small input"></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-input-lg">Large input</label><input class="input input-lg" id="gallery-input-lg" value="Large input"></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-select">Select</label><select class="input" id="gallery-select"><option selected>Selected option</option><option>Other option</option></select></div>
+        <div class="form-group"><label class="form-group-label" for="gallery-textarea">Textarea</label><textarea class="input" id="gallery-textarea">Example text</textarea></div>
+      </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="gallery-toggles">
+      <h2 id="gallery-toggles">Toggles, checks, and tiles</h2>
+      <div class="stack">
+        <label class="toggle toggle-sm"><input type="checkbox"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">Small toggle</span></label>
+        <label class="toggle"><input type="checkbox"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">Off</span></label>
+        <label class="toggle"><input type="checkbox" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">On</span></label>
+        <label class="toggle toggle-lg"><input type="checkbox" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">Large toggle</span></label>
+        <label class="toggle"><input type="checkbox" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">Disabled</span></label>
+        <label class="check"><input type="checkbox"><span class="check-box"></span><span class="check-label">Unchecked</span></label>
+        <label class="check"><input type="checkbox" checked><span class="check-box"></span><span class="check-label">Checked</span></label>
+        <label class="check"><input type="checkbox" disabled><span class="check-box"></span><span class="check-label">Disabled</span></label>
+        <div class="cluster"><button class="tile tile-sm" type="button" aria-checked="false" role="radio"><span class="tile-icon" aria-hidden="true">○</span><span class="tile-label">Small</span></button><button class="tile" type="button" aria-checked="true" role="radio"><span class="tile-icon" aria-hidden="true">✓</span><span class="tile-label">Default selected</span></button><button class="tile tile-lg" type="button"><span class="tile-label">Large</span></button><button class="tile tile-xl" type="button"><span class="tile-label">Extra large</span></button><button class="tile" type="button" disabled><span class="tile-label">Disabled</span></button></div>
+      </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="gallery-status">
+      <h2 id="gallery-status">Badges, alerts, and toasts</h2>
+      <div class="cluster">
+        <span class="badge badge-ok">OK</span><span class="badge badge-warning">Warning</span><span class="badge badge-error">Error</span><span class="badge badge-info">Info</span><span class="badge badge-neutral">Neutral</span>
+        <span class="badge badge-sm">Small</span><span class="badge">Default</span><span class="badge badge-lg">Large</span>
+      </div>
+      <div class="stack">
+        <div class="alert alert-info" role="status"><span class="alert-title">Information</span>Example message</div>
+        <div class="alert alert-success" role="status"><span class="alert-title">Success</span>Example message</div>
+        <div class="alert alert-warning" role="alert"><span class="alert-title">Warning</span>Example message</div>
+        <div class="alert alert-error" role="alert"><span class="alert-title">Error</span>Example message</div>
+        <div class="toast toast-success" role="status">Success toast<span class="toast-progress"></span><button class="toast-close" type="button" aria-label="Dismiss success toast">×</button></div>
+        <div class="toast toast-info" role="status">Info toast<span class="toast-progress"></span><button class="toast-close" type="button" aria-label="Dismiss info toast">×</button></div>
+        <div class="toast toast-warning" role="alert">Warning toast<span class="toast-progress"></span><button class="toast-close" type="button" aria-label="Dismiss warning toast">×</button></div>
+        <div class="toast toast-error" role="alert">Error toast<span class="toast-progress"></span><button class="toast-close" type="button" aria-label="Dismiss error toast">×</button></div>
+      </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="gallery-table">
+      <h2 id="gallery-table">Tables, hub entries, and empty states</h2>
+      <div class="table-wrapper"><table class="data-table"><thead><tr><th scope="col" aria-sort="ascending">Name</th><th scope="col">State</th></tr></thead><tbody><tr><td>One row</td><td><span class="badge badge-ok">OK</span></td></tr><tr><td>Many rows</td><td><span class="badge badge-neutral">Neutral</span></td></tr></tbody></table></div>
+      <ul class="hub-list"><li class="hub-item"><a class="hub-link" href="#gallery-table"><span class="hub-title">Hub entry</span><span class="hub-desc">Description with a visible link affordance.</span></a></li></ul>
+      <div class="empty-state empty-state-lg"><h3 class="empty-state-title">Empty state</h3><p>No items are available.</p></div>
+    </section>
+
+    <section class="section-card" aria-labelledby="gallery-icons">
+      <h2 id="gallery-icons">Icon sizes</h2>
+      <div class="cluster" role="group" aria-label="Small, medium, large, and extra large icons">
+        <svg class="icon icon-sm" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>
+        <svg class="icon icon-md" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>
+        <svg class="icon icon-lg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>
+        <svg class="icon icon-xl" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>
+      </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="gallery-dialog">
+      <h2 id="gallery-dialog">Dialog and popover</h2>
+      <button class="btn btn-secondary" type="button" popovertarget="gallery-popover">Open popover</button>
+      <div id="gallery-popover" popover><p>Popover content</p><div class="modal-actions"><button class="btn btn-secondary" type="button" popovertarget="gallery-popover">Close</button></div></div>
+      <dialog open aria-labelledby="gallery-dialog-title"><div class="modal-body"><h3 id="gallery-dialog-title">Open dialog</h3><p>Dialog content</p></div><div class="modal-actions"><button class="btn btn-primary" type="button">Confirm</button><button class="btn btn-secondary" type="button">Cancel</button></div></dialog>
+    </section>
+  </div>
+</main>
+{{end}}
+
+{{define "page_scripts"}}{{end}}
+{{template "public.tmpl" .}}

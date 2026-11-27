@@ -89,10 +89,12 @@ docker:
 test:
 	@mkdir -p "$(GO_CACHE)" "$(GO_BUILD)"
 	@$(GO_DOCKER) sh -c 'set -eu; \
-	  mkdir -p "/tmp/$(PROJECT_ORG)"; COVDIR=$$(mktemp -d "/tmp/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX"); trap "rm -rf $$COVDIR" EXIT; export TMPDIR=$$COVDIR; \
+	  mkdir -p "$${TMPDIR:-/tmp}/$(PROJECT_ORG)"; COVDIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX"); trap "rm -rf $$COVDIR" EXIT; export TMPDIR=$$COVDIR; \
 	  go mod tidy; go mod download; \
 	  go fmt ./...; \
-	  go vet ./...; govulncheck ./...; \
+	  go vet ./...; staticcheck ./...; govulncheck ./...; \
+	  shellcheck tests/*.sh; shfmt -d -i 2 tests/*.sh; \
+	  bash scripts/verify-licenses.sh; \
 	  mkdir -p "$$COVDIR/data"; \
 	  go test -cover ./... -args -test.gocoverdir="$$COVDIR/data"; \
 	  go tool covdata textfmt -i="$$COVDIR/data" -o="$$COVDIR/coverage.out"; \
@@ -100,6 +102,7 @@ test:
 	  awk -v coverage="$$COVERAGE" "BEGIN { exit !(coverage >= 60) }" || { echo "Coverage $$COVERAGE% is below 60%" >&2; exit 1; }; \
 	  go run ./src/tools/i18n-validate src/common/i18n/locales; \
 	  echo "Coverage: $$COVERAGE% (minimum 60%)"'
+	@bash tests/run_tests.sh
 	@if [ "$(INTEGRATION)" = "1" ]; then bash tests/incus.sh "$(INCUS_MODE)"; fi
 
 dev:

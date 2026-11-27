@@ -63,6 +63,9 @@ func TestDefault(t *testing.T) {
 	if cfg.Branding.AccentColor == "" {
 		t.Error("Default().Branding.AccentColor is empty")
 	}
+	if strings.Contains(strings.ToLower(cfg.Privacy.Retention.Period), "account") || strings.Contains(strings.ToLower(cfg.Privacy.Retention.Period), "account deletion") {
+		t.Errorf("default privacy retention describes accounts for a no-account product: %q", cfg.Privacy.Retention.Period)
+	}
 
 	// Rate limit read window must be non-zero
 	if cfg.RateLimit.Read.Window <= 0 {
@@ -146,6 +149,41 @@ func TestDefault(t *testing.T) {
 	// DatabaseDriver empty — auto-detected at runtime
 	if cfg.Database.Driver != "" {
 		t.Errorf("Default().DatabaseDriver = %q, want empty", cfg.Database.Driver)
+	}
+}
+
+func TestEnsureWebhookSecretsGeneratesAndPersistsPrivateKeys(t *testing.T) {
+	cfg := Default()
+	cfg.ConfigDir = t.TempDir()
+	cfg.Contact.Admin.Webhooks.Generic = "https://hooks.example.test/notify"
+	changed, err := ensureWebhookSecrets(cfg)
+	if err != nil {
+		t.Fatalf("ensure webhook signing secret: %v", err)
+	}
+	if !changed || cfg.Contact.Admin.Webhooks.GenericSecret == "" {
+		t.Fatal("configured webhook did not receive a signing secret")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(cfg.Contact.Admin.Webhooks.GenericSecret)
+	if err != nil || len(decoded) != 32 {
+		t.Fatalf("webhook secret is not a 32-byte key: decoded length %d, err=%v", len(decoded), err)
+	}
+	if err := cfg.SaveSecrets(cfg.ConfigDir); err != nil {
+		t.Fatalf("persist webhook signing secret: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(cfg.ConfigDir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var secrets map[string]any
+	if err := yaml.Unmarshal(data, &secrets); err != nil {
+		t.Fatal(err)
+	}
+	server := secrets["server"].(map[string]any)
+	contact := server["contact"].(map[string]any)
+	admin := contact["admin"].(map[string]any)
+	webhooks := admin["webhooks"].(map[string]any)
+	if webhooks["generic_secret"] != cfg.Contact.Admin.Webhooks.GenericSecret {
+		t.Fatal("secrets.yml did not preserve the generated webhook signing secret")
 	}
 }
 
@@ -2089,6 +2127,49 @@ func TestGetLogDir(t *testing.T) {
 func TestIsContainerConsistency(t *testing.T) {
 	if IsContainer() != isContainer() {
 		t.Error("IsContainer() and isContainer() returned different values")
+	}
+}
+
+func TestLoadBackupPasswordEncryptsPlaintextAndReadsEncryptedValue(t *testing.T) {
+	dir := t.TempDir()
+	key, err := GenerateEncryptionKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "secrets.yml"), []byte("server:\n  backup:\n    encryption_password: backup-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Default()
+	cfg.Security.EncryptionKey = key
+	password, err := LoadBackupPassword(dir, cfg)
+	if err != nil || password != "backup-secret" {
+		t.Fatalf("LoadBackupPassword() = %q, %v", password, err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "backup-secret") || !strings.Contains(string(data), "enc:v1:") {
+		t.Fatalf("plaintext password persisted: %s", data)
+	}
+	password, err = LoadBackupPassword(dir, cfg)
+	if err != nil || password != "backup-secret" {
+		t.Fatalf("LoadBackupPassword() after migration = %q, %v", password, err)
+	}
+}
+
+func TestRestoreConfigDefaultsAndValidation(t *testing.T) {
+	cfg := Default()
+	if cfg.Restore.MaxArchiveSize != "20GB" || cfg.Restore.MaxExpandedSize != "50GB" || cfg.Restore.MaxFiles != 1000000 || cfg.Restore.MaxPathLength != 4096 {
+		t.Fatalf("restore defaults = %+v", cfg.Restore)
+	}
+	cfg.Restore = RestoreConfig{MaxArchiveSize: "bad", MaxExpandedSize: "0", MaxFiles: -1, MaxPathLength: -1}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+	want := RestoreConfig{MaxArchiveSize: "20GB", MaxExpandedSize: "50GB", MaxFiles: 1000000, MaxPathLength: 4096}
+	if cfg.Restore != want {
+		t.Fatalf("validated restore config = %+v, want %+v", cfg.Restore, want)
 	}
 }
 

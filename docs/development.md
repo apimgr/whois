@@ -32,9 +32,9 @@ Build outputs are generated artifacts and should not be committed. Run build com
 make test      # Go quality gates, unit tests, coverage, locale checks, and basic Docker integration
 ```
 
-`make test` runs `go fmt`, `go vet`, `staticcheck`, `govulncheck`, ShellCheck, `shfmt -d`, license verification, the Go tests, the coverage threshold, and locale parity validation inside the Go container. It then runs the basic Docker binary and HTTP integration suite. Test output stays in the project-scoped temporary directory.
+`make test` runs `go fmt`, `go vet`, `staticcheck`, `govulncheck`, ShellCheck, `shfmt -d -i 2`, license verification, the Go tests, the coverage threshold, and locale parity validation inside the Go container. It then runs the basic Docker binary and HTTP integration suite. Test output stays in the project-scoped temporary directory.
 
-License verification scans the Go packages shipped from `src/` and rejects GPL, AGPL, and LGPL dependencies. A reviewed exception must be recorded in `.github/license-overrides.txt`; the generated license report and third-party license texts are kept in a private temporary directory and removed when the check finishes. GitHub, GitLab, Gitea, and Forgejo CI run the same verification script.
+License verification scans the Go packages shipped from `src/` and rejects GPL, AGPL, and LGPL dependencies. A reviewed exception must be recorded in `.github/license-overrides.txt`; the generated license report and third-party license texts are kept in a private temporary directory and removed when the check finishes. GitHub, GitLab, Gitea, Forgejo, and Jenkins CI run the same verification script.
 
 The basic binary suite can also be run on its own, and the full browser E2E and init-system suites remain explicit:
 

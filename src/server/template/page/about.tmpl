@@ -16,6 +16,7 @@
     <section class="section-card" aria-labelledby="about-description">
       <h2 id="about-description">{{t .Lang "about.section_about_heading"}}</h2>
       <p>{{.Description}}</p>
+      {{if $about := operatorHTML "about"}}<div>{{$about}}</div>{{end}}
     </section>
 
     <section class="section-card" aria-labelledby="who-uses">
@@ -69,10 +70,24 @@
       </ul>
     </section>
 
-    <nav aria-label="{{t .Lang "about.page_navigation"}}">
-      <a href="{{path "/"}}" class="btn btn-primary">{{t .Lang "common.new_lookup"}}</a>
-      <a href="{{path "/docs"}}" class="btn btn-secondary">{{t .Lang "about.api_documentation"}}</a>
-    </nav>
+    <section class="section-card" aria-labelledby="about-version">
+      <h2 id="about-version">{{t .Lang "health.version"}}</h2>
+      <p>{{.Version}} ({{.BuildDate}})</p>
+    </section>
+
+    <section class="section-card" aria-labelledby="about-links">
+      <h2 id="about-links">{{t .Lang "about.page_navigation"}}</h2>
+      <nav class="cluster" aria-label="{{t .Lang "about.page_navigation"}}">
+        {{if .OfficialSite}}<a class="nav-link" href="https://{{.OfficialSite}}" rel="noopener noreferrer">{{.OfficialSite}}</a>{{end}}
+        <a class="nav-link" href="https://github.com/apimgr/whois" rel="noopener noreferrer">GitHub</a>
+        <a class="nav-link" href="{{path "/docs"}}">{{t .Lang "about.api_documentation"}}</a>
+      </nav>
+    </section>
+
+    <section class="section-card" aria-labelledby="about-attribution">
+      <h2 id="about-attribution">{{t .Lang "about.technology_heading"}}</h2>
+      <p><a href="https://db-ip.com/">IP Geolocation by DB-IP</a></p>
+    </section>
 
   </div>
 </main>

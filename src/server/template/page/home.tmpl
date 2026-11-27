@@ -5,123 +5,71 @@
 
 {{define "page_content"}}
 <main id="main-content">
-  {{if .ConsentRequired}}<p class="container container-md" role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
-  <section class="search-section" aria-labelledby="search-heading">
-    <div class="container container-md">
-      <div class="card section-card search-card">
-        <div class="search-hero">
-          <h1 class="page-title" id="search-heading">{{t .Lang "whois.title"}}</h1>
-          <p>{{t .Lang "whois.subtitle"}}</p>
+  <div class="container container-sm">
+    {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
+    <header class="page-header">
+      <h1 class="page-title">{{t .Lang "whois.title"}}</h1>
+      <p class="page-lead">{{t .Lang "whois.subtitle"}}</p>
+    </header>
+    <section class="section-card" aria-labelledby="lookup-heading">
+      <h2 id="lookup-heading">{{t .Lang "whois.query_label"}}</h2>
+      <form id="whois-form" class="stack" action="{{path "/whois"}}" method="GET" novalidate
+        data-api-base="{{.APIBase}}"
+        data-msg-empty="{{t .Lang "whois.error_empty"}}"
+        data-msg-failed="{{t .Lang "whois.error_failed"}}"
+        data-msg-network="{{t .Lang "whois.error_network"}}"
+        data-msg-update="{{t .Lang "pwa.update_available"}}"
+        data-msg-update-action="{{t .Lang "pwa.update_action"}}">
+        <div class="form-group">
+          <label class="form-group-label" for="q">{{t .Lang "whois.query_label"}}</label>
+          <input id="q" class="input" name="q" type="text" placeholder="{{t .Lang "whois.placeholder"}}"
+            autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" value="{{.Query}}" required>
         </div>
-
-        <form id="whois-form" class="search-form-wrap" action="{{path "/whois"}}" method="GET" novalidate
-          data-api-base="{{.APIBase}}"
-          data-msg-empty="{{t .Lang "whois.error_empty"}}"
-          data-msg-failed="{{t .Lang "whois.error_failed"}}"
-          data-msg-network="{{t .Lang "whois.error_network"}}"
-          data-msg-update="{{t .Lang "pwa.update_available"}}"
-          data-msg-update-action="{{t .Lang "pwa.update_action"}}">
-          <div class="search-row">
-            <label for="q" class="sr-only">{{t .Lang "whois.query_label"}}</label>
-            <input
-              id="q" name="q" type="text"
-              class="search-input"
-              placeholder="{{t .Lang "whois.placeholder"}}"
-              autocomplete="off" autocorrect="off" autocapitalize="none"
-              spellcheck="false"
-              value="{{.Query}}"
-              aria-label="{{t .Lang "whois.query_label"}}"
-              required
-            >
-            <button type="submit" class="btn-primary" aria-label="{{t .Lang "whois.aria_lookup"}}">
-              {{t .Lang "whois.button"}}
-            </button>
-          </div>
-        </form>
-
-        <div class="examples" aria-label="{{t .Lang "whois.try_example"}}">
-          <div class="examples-label">{{t .Lang "whois.try_example"}}</div>
-          <div class="example-chips">
-            <a href="{{path "/whois?q=example.com"}}"   class="example-chip" data-query="example.com">example.com</a>
-            <a href="{{path "/whois?q=8.8.8.8"}}"       class="example-chip" data-query="8.8.8.8">8.8.8.8</a>
-            <a href="{{path "/whois?q=1.1.1.1"}}"       class="example-chip" data-query="1.1.1.1">1.1.1.1</a>
-            <a href="{{path "/whois?q=2001%3A4860%3A4860%3A%3A8888"}}" class="example-chip" data-query="2001:4860:4860::8888">2001:4860:4860::8888</a>
-            <a href="{{path "/whois?q=AS15169"}}"        class="example-chip" data-query="AS15169">AS15169</a>
-            <a href="{{path "/whois?q=AS13335"}}"        class="example-chip" data-query="AS13335">AS13335</a>
-          </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">{{t .Lang "whois.button"}}</button>
         </div>
-
-        {{/* Loading indicator — hidden until JS shows it */}}
-        <div id="js-loading" class="state-loading result-area" hidden aria-live="polite" aria-busy="true">
-          <span class="spinner" role="status" aria-label="{{t .Lang "common.loading"}}"></span>
-          <span>{{t .Lang "whois.loading"}}</span>
-        </div>
-
-        {{/* JS-rendered result */}}
-        <div id="js-result" class="result-area" hidden aria-live="polite">
-          <div class="result-meta">
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_query"}}</div>
-              <div id="r-query" class="meta-value long-string"></div>
-            </div>
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_type"}}</div>
-              <div id="r-type" class="meta-value"><span class="type-badge"></span></div>
-            </div>
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_server"}}</div>
-              <div id="r-server" class="meta-value long-string"></div>
-            </div>
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_timestamp"}}</div>
-              <div id="r-ts" class="meta-value"></div>
-            </div>
-          </div>
-          <pre id="r-raw" class="whois-raw" aria-label="{{t .Lang "whois.result_raw"}}"></pre>
-        </div>
-
-        {{/* JS error */}}
-        <div id="js-error" class="state-box state-error result-area" role="alert" hidden></div>
-
-        {{/* Server-side result (no-JS path) */}}
-        {{if .Result}}
-        <div class="server-result" aria-label="{{t .Lang "whois.result_raw"}}">
-          <div class="result-meta">
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_query"}}</div>
-              <div class="meta-value long-string">{{.Result.Query}}</div>
-            </div>
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_type"}}</div>
-              <div class="meta-value"><span class="type-badge">{{.Result.Type}}</span></div>
-            </div>
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_server"}}</div>
-              <div class="meta-value long-string">{{.Result.Server}}</div>
-            </div>
-            <div class="meta-item">
-              <div class="meta-label">{{t .Lang "whois.result_timestamp"}}</div>
-              <div class="meta-value"><time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time></div>
-            </div>
-          </div>
-          <pre class="whois-raw" aria-label="{{t .Lang "whois.result_raw"}}">{{.Result.Raw}}</pre>
-        </div>
-        {{end}}
-
-        {{/* Server-side error (no-JS path) */}}
-        {{if .Err}}
-        <div class="state-box state-error" role="alert">
-          {{.Err}}
-        </div>
-        {{end}}
+      </form>
+      <h3>{{t .Lang "whois.try_example"}}</h3>
+      <div class="cluster" aria-label="{{t .Lang "whois.try_example"}}">
+        <a href="{{path "/whois?q=example.com"}}" class="btn btn-secondary btn-sm" data-js-example-query data-query="example.com">example.com</a>
+        <a href="{{path "/whois?q=8.8.8.8"}}" class="btn btn-secondary btn-sm" data-js-example-query data-query="8.8.8.8">8.8.8.8</a>
+        <a href="{{path "/whois?q=1.1.1.1"}}" class="btn btn-secondary btn-sm" data-js-example-query data-query="1.1.1.1">1.1.1.1</a>
+        <a href="{{path "/whois?q=2001%3A4860%3A4860%3A%3A8888"}}" class="btn btn-secondary btn-sm" data-js-example-query data-query="2001:4860:4860::8888">2001:4860:4860::8888</a>
+        <a href="{{path "/whois?q=AS15169"}}" class="btn btn-secondary btn-sm" data-js-example-query data-query="AS15169">AS15169</a>
+        <a href="{{path "/whois?q=AS13335"}}" class="btn btn-secondary btn-sm" data-js-example-query data-query="AS13335">AS13335</a>
       </div>
-    </div>
-  </section>
+    </section>
+      <div id="js-loading" class="alert alert-info" hidden aria-live="polite" aria-busy="true">
+        <span class="spinner" role="status" aria-label="{{t .Lang "common.loading"}}"></span>
+        <span>{{t .Lang "whois.loading"}}</span>
+      </div>
+      <section id="js-result" class="section-card" aria-labelledby="js-result-heading" hidden aria-live="polite">
+        <h2 id="js-result-heading">{{t .Lang "common.details"}}</h2>
+        <dl class="info-list">
+          <dt class="info-label">{{t .Lang "whois.result_query"}}</dt><dd id="r-query" class="info-value long-string"></dd>
+          <dt class="info-label">{{t .Lang "whois.result_type"}}</dt><dd class="info-value"><span id="r-type" class="badge badge-info"></span></dd>
+          <dt class="info-label">{{t .Lang "whois.result_server"}}</dt><dd id="r-server" class="info-value long-string"></dd>
+          <dt class="info-label">{{t .Lang "whois.result_timestamp"}}</dt><dd id="r-ts" class="info-value"></dd>
+        </dl>
+        <pre id="r-raw" class="code-block" aria-label="{{t .Lang "whois.result_raw"}}"></pre>
+      </section>
+      <div id="js-error" class="alert alert-error" role="alert" hidden></div>
+      {{if .Result}}
+      <section class="section-card" aria-labelledby="server-result-heading">
+        <h2 id="server-result-heading">{{t .Lang "common.details"}}</h2>
+        <dl class="info-list">
+          <dt class="info-label">{{t .Lang "whois.result_query"}}</dt><dd class="info-value long-string">{{.Result.Query}}</dd>
+          <dt class="info-label">{{t .Lang "whois.result_type"}}</dt><dd class="info-value"><span class="badge badge-info">{{.Result.Type}}</span></dd>
+          <dt class="info-label">{{t .Lang "whois.result_server"}}</dt><dd class="info-value long-string">{{.Result.Server}}</dd>
+          <dt class="info-label">{{t .Lang "whois.result_timestamp"}}</dt><dd class="info-value"><time datetime="{{.Result.Timestamp}}">{{.Result.Timestamp}}</time></dd>
+        </dl>
+        <pre class="code-block" aria-label="{{t .Lang "whois.result_raw"}}">{{.Result.Raw}}</pre>
+      </section>
+      {{end}}
+      {{if .Err}}<div class="alert alert-error" role="alert">{{.Err}}</div>{{end}}
+  </div>
 </main>
 {{end}}
 
-{{define "page_scripts"}}
-
-{{end}}
-
+{{define "page_scripts"}}{{end}}
 {{template "public.tmpl" .}}

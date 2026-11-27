@@ -13,10 +13,10 @@
     <section class="section-card" aria-labelledby="export-heading">
       <h2 id="export-heading">{{t .Lang "preferences.export"}}</h2>
       <p><strong>{{t .Lang "preferences.export_url"}}</strong></p>
-      <p id="sync-url" class="copy-value selectable-text">{{.PreferencesURL}}</p>
+      <p id="sync-url" class="copy-value ">{{.PreferencesURL}}</p>
       <button class="copy-btn" type="button" data-copy="{{.PreferencesURL}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "owner_tokens.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "owner_tokens.copy"}}</span></button>
       <p><strong>{{t .Lang "preferences.export_code"}}</strong></p>
-      <p id="sync-code" class="copy-value selectable-text">{{.PreferencesCode}}</p>
+      <p id="sync-code" class="copy-value ">{{.PreferencesCode}}</p>
       <button class="copy-btn" type="button" data-copy="{{.PreferencesCode}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "owner_tokens.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "owner_tokens.copy"}}</span></button>
     </section>
     <form class="section-card" aria-labelledby="import-heading" method="post" action="{{path "/server/preferences/sync"}}">
@@ -24,7 +24,7 @@
       <h2 id="import-heading">{{t .Lang "preferences.import"}}</h2>
       <label for="sync-input">{{t .Lang "preferences.import_code"}}</label>
       <input id="sync-input" name="code" autocomplete="off">
-      <button class="btn-primary" type="submit">{{t .Lang "preferences.import"}}</button>
+      <button class="btn btn-primary" type="submit">{{t .Lang "preferences.import"}}</button>
     </form>
   </main>
 {{end}}

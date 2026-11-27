@@ -37,6 +37,15 @@ func GenerateEncryptionKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
+// GenerateWebhookSecret returns a base64-encoded per-webhook HMAC key.
+func GenerateWebhookSecret() (string, error) {
+	secret, err := GenerateEncryptionKey()
+	if err != nil {
+		return "", fmt.Errorf("generate webhook signing secret: %w", err)
+	}
+	return secret, nil
+}
+
 // GenerateToken generates the operator token: "adm_" + 32 base62 chars.
 func GenerateToken() (string, error) {
 	b := make([]byte, 32)

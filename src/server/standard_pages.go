@@ -1,11 +1,18 @@
 package server
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"database/sql"
+	"encoding/hex"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/apimgr/whois/src/common/constants"
+	"github.com/apimgr/whois/src/security"
 )
 
 // PrivacyPageData holds the dynamic data for the /server/privacy page
@@ -30,7 +37,6 @@ type PrivacyPageData struct {
 	ThirdPartyServices    []ThirdPartyServiceView
 	CCPAApplicable        bool
 	CCPAOptedOut          bool
-	Content               string
 }
 
 // SharingConditionView is the display-ready form of a config.SharingCondition.
@@ -49,6 +55,41 @@ type ThirdPartyServiceView struct {
 }
 
 var privacyTmpl = mustParseTemplate("privacy", "page/privacy.tmpl")
+
+const privacyDataCollection = `**We collect only what is necessary to provide our service:**
+
+**Usage Information (with consent):**
+- Pages visited and features used
+- Browser type and device information
+- Approximate location (country/region from IP, not precise)
+
+**Technical Information:**
+- IP address (for security and abuse prevention)
+- API token identifiers (hashed, never stored in plain text)
+
+**We do NOT collect:**
+- Payment information (unless explicitly required by the service)
+- Precise location data
+- Data from other websites or apps`
+
+const privacyDataSecurityCommon = `**How we protect your data:**
+
+- All data is stored on our servers (not third-party cloud services unless specified)
+- API tokens are stored as SHA-256 hashes (never in plain text)
+- Regular security audits and updates
+- Access controls and audit logging for operator actions`
+
+func privacyDataSecurity(s *Server, r *http.Request) string {
+	securityText := privacyDataSecurityCommon
+	proto := ""
+	if r != nil {
+		proto, _, _ = s.GetURLVars(r)
+	}
+	if proto == "https" {
+		return strings.Replace(securityText, "- Regular security audits", "- Connections are encrypted with HTTPS/TLS\n- Regular security audits", 1)
+	}
+	return strings.Replace(securityText, "- Regular security audits", "- This site is currently served without TLS\n- Regular security audits", 1)
+}
 
 // handlePrivacyPage serves the privacy policy page.
 // GET /server/privacy
@@ -70,14 +111,6 @@ func (s *Server) handlePrivacyPage(w http.ResponseWriter, r *http.Request) {
 	if dataUsage == "" {
 		dataUsage = "We use collected data solely to operate and improve the service."
 	}
-	dataCollection := p.Content.DataCollection
-	if dataCollection == "" {
-		dataCollection = "We collect only the data necessary to operate the service, such as request logs and, where enabled, anonymized analytics."
-	}
-	dataSecurity := p.Content.DataSecurity
-	if dataSecurity == "" {
-		dataSecurity = "We use industry-standard security practices, including encryption in transit, to protect your data."
-	}
 	data := PrivacyPageData{
 		translatablePageData:  s.newPageData(w, r),
 		Name:                  name,
@@ -89,16 +122,15 @@ func (s *Server) handlePrivacyPage(w http.ResponseWriter, r *http.Request) {
 		AnalyticsDesc:         p.GetAnalyticsDescription(),
 		EssentialCookieDesc:   p.Cookies.Essential.Description,
 		PreferencesCookieDesc: p.Cookies.Preferences.Description,
-		DataCollection:        dataCollection,
+		DataCollection:        privacyDataCollection,
 		DataUsage:             dataUsage,
-		DataSecurity:          dataSecurity,
+		DataSecurity:          privacyDataSecurity(s, r),
 		RetentionPeriod:       p.Retention.Period,
 		ExportAvailable:       p.Retention.ExportAvailable,
 		DeletionAvailable:     p.Retention.DeletionAvailable,
 		ThirdPartyServices:    services,
 		CCPAApplicable:        p.IsCCPAApplicable(),
 		CCPAOptedOut:          ccpaOptedOut(r),
-		Content:               s.config.Pages.Privacy.Content,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderTemplate(privacyTmpl, w, r, data); err != nil {
@@ -166,9 +198,6 @@ type privacyAPIResponse struct {
 	Content struct {
 		ConsentMessage string `json:"consent_message"`
 		DataUsage      string `json:"data_usage"`
-		// Override holds the full Markdown page override from
-		// server.pages.privacy.content; empty when the default template is used.
-		Override string `json:"override,omitempty"`
 	} `json:"content"`
 }
 
@@ -207,7 +236,6 @@ func (s *Server) handlePrivacyAPI(w http.ResponseWriter, r *http.Request) {
 	resp.CCPA.UserOptedOut = ccpaOptedOut(r)
 	resp.Content.ConsentMessage = p.GetConsentMessage()
 	resp.Content.DataUsage = p.GetDataUsageContent()
-	resp.Content.Override = s.config.Pages.Privacy.Content
 
 	accept := r.Header.Get("Accept")
 	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
@@ -281,6 +309,22 @@ type HelpPageData struct {
 
 var helpTmpl = mustParseTemplate("help", "page/help.tmpl")
 
+const defaultHelpContent = `# caswhois Help
+
+caswhois looks up WHOIS and RDAP records for domains, IPv4 and IPv6 addresses, and Autonomous System Numbers. RDAP is tried first when available, with WHOIS fallback.
+
+## Lookup
+
+Enter a domain name, IP address, or ASN in the lookup form. The service validates the query, checks its cache and stored records, and fetches fresh data when needed.
+
+## API and CLI
+
+Use the REST API, GraphQL endpoint, MCP tools, or the companion caswhois-cli client. API documentation is available at /server/docs.
+
+## Privacy and ownership
+
+Lookups are rate limited. Resource management uses owner tokens; the service has no user accounts. See /server/privacy for data handling details.`
+
 // handleHelpPage serves the help page.
 // GET /server/help
 func (s *Server) handleHelpPage(w http.ResponseWriter, r *http.Request) {
@@ -308,7 +352,7 @@ func (s *Server) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 			}
 			return ""
 		}(),
-		CustomHTML: s.config.Pages.Help.Content,
+		CustomHTML: helpPageContent(s, r),
 		MorePages:  s.registeredPages("help"),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -320,11 +364,11 @@ func (s *Server) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 // handleHelpAPI serves the help content as JSON/plain text.
 // GET /api/{api_version}/server/help
 func (s *Server) handleHelpAPI(w http.ResponseWriter, r *http.Request) {
-	content := s.config.Pages.Help.Content
+	content := helpPageContent(s, r)
 	registered := s.registeredPages("help")
 	pages := make([]map[string]string, 0, len(registered))
 	for _, page := range registered {
-		pages = append(pages, map[string]string{"path": page.Path, "title": translateKey(LangFromContext(r.Context()), page.TitleKey), "description": translateKey(LangFromContext(r.Context()), page.Description)})
+		pages = append(pages, map[string]string{"path": page.Path, "title": translateKey(LangFromContext(r.Context()), page.TitleKey)})
 	}
 	accept := r.Header.Get("Accept")
 	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
@@ -333,7 +377,15 @@ func (s *Server) handleHelpAPI(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(content))
 		return
 	}
-	SendSuccess(w, map[string]any{"content": content, "pages": pages})
+	SendSuccess(w, map[string]any{"title": s.brandName() + " Help", "content": content, "format": "markdown", "pages": pages})
+}
+
+func helpPageContent(s *Server, r *http.Request) string {
+	content, _, ok := resolvedPageContent(s.config.Pages.Help.Content, "markdown", LangFromContext(r.Context()))
+	if !ok {
+		content = defaultHelpContent
+	}
+	return substitutePageVariables(s, r, content)
 }
 
 // TermsPageData holds the dynamic data for the /server/terms page.
@@ -368,10 +420,7 @@ func (s *Server) handleTermsPage(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = constants.InternalName
 	}
-	content := s.config.Pages.Terms.Content
-	if content == "" {
-		content = defaultTermsContent
-	}
+	content := defaultTermsContent
 	data := TermsPageData{
 		translatablePageData: s.newPageData(w, r),
 		Name:                 name,
@@ -386,10 +435,11 @@ func (s *Server) handleTermsPage(w http.ResponseWriter, r *http.Request) {
 // handleTermsAPI serves the terms of service content as JSON/plain text.
 // GET /api/{api_version}/server/terms
 func (s *Server) handleTermsAPI(w http.ResponseWriter, r *http.Request) {
-	content := s.config.Pages.Terms.Content
+	content, format, _ := resolvedPageContent(s.config.Branding.Content.Terms.Body, s.config.Branding.Content.Terms.Format, LangFromContext(r.Context()))
 	if content == "" {
 		content = defaultTermsContent
 	}
+	content = substitutePageVariables(s, r, content)
 	accept := r.Header.Get("Accept")
 	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -397,7 +447,7 @@ func (s *Server) handleTermsAPI(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(content))
 		return
 	}
-	SendSuccess(w, map[string]string{"content": content})
+	SendSuccess(w, map[string]string{"title": "Terms of Service", "content": content, "format": format})
 }
 
 type dpoPageData struct {
@@ -528,7 +578,7 @@ func (s *Server) handleSecurityAPI(w http.ResponseWriter, r *http.Request) {
 	contacts := make([]map[string]string, 0, 3)
 	contacts = append(contacts, map[string]string{"type": "github", "value": reportURL})
 	if contactURL := s.securityReportURL(r.Context(), r, now); contactURL != "" {
-		contacts = append(contacts, map[string]string{"type": "form", "value": contactURL})
+		contacts = append(contacts, map[string]string{"type": "contact_form", "value": contactURL})
 	}
 	if email := s.securityEmail(); email != "" {
 		contacts = append(contacts, map[string]string{"type": "email", "value": "mailto:" + email})
@@ -541,10 +591,70 @@ func (s *Server) handleSecurityAPI(w http.ResponseWriter, r *http.Request) {
 		"security_txt_url": s.BuildURL(r, "/.well-known/security.txt"),
 		"policy":           s.securityPolicy(),
 	}
+	fingerprint := security.PGPPublicKeyFingerprint(s.config.ConfigDir)
+	pgp := map[string]any{"available": false, "url": nil, "fingerprint": nil}
+	if security.PGPKeypairExists(s.config.ConfigDir) && fingerprint != "" {
+		pgp = map[string]any{"available": true, "url": s.BuildURL(r, "/.well-known/pgp-key.asc"), "fingerprint": strings.ToUpper(fingerprint)}
+	}
+	response["pgp"] = pgp
 	if s.config.Pages.Contact.Enabled {
 		response["report_url"] = s.BuildURL(r, "/server/contact")
 	}
 	SendSuccess(w, response)
+}
+
+func (s *Server) handlePGPPublicKey(w http.ResponseWriter, r *http.Request) {
+	if !security.PGPKeypairExists(s.config.ConfigDir) || security.PGPPublicKeyFingerprint(s.config.ConfigDir) == "" {
+		http.NotFound(w, r)
+		return
+	}
+	path := filepath.Join(s.config.ConfigDir, "security", security.PGPPublicKeyFile)
+	key, err := os.ReadFile(path)
+	if err != nil || security.ValidatePGPPublicKey(key) != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pgp-keys")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(key)
+}
+
+// handleAuthCheckAPI validates a bearer token without updating owner-token use
+// timestamps or returning any portion of the token.
+func (s *Server) handleAuthCheckAPI(w http.ResponseWriter, r *http.Request) {
+	if s.authFailureBlocked(w, r) {
+		return
+	}
+	token := extractBearerToken(r)
+	if token == "" {
+		if s.recordAuthFailure(w, r) {
+			return
+		}
+		SendError(w, ErrUnauthorized, "Invalid token")
+		return
+	}
+	incoming := sha256.Sum256([]byte(token))
+	if subtle.ConstantTimeCompare(incoming[:], s.getServerTokenHash()) == 1 {
+		SendSuccess(w, map[string]string{"kind": "operator"})
+		return
+	}
+	if strings.HasPrefix(token, "own_") && len(token) == 36 {
+		var kind string
+		var expires, revoked sql.NullInt64
+		err := s.database.Read().QueryRowContext(r.Context(), `SELECT kind, expires_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hex.EncodeToString(incoming[:])).Scan(&kind, &expires, &revoked)
+		if err == nil && (kind == "primary" || kind == "linked") && !revoked.Valid && (!expires.Valid || expires.Int64 > time.Now().UTC().Unix()) {
+			SendSuccess(w, map[string]string{"kind": "owner"})
+			return
+		}
+		if err != nil && err != sql.ErrNoRows {
+			SendError(w, ErrServerError, "Token validation unavailable")
+			return
+		}
+	}
+	if s.recordAuthFailure(w, r) {
+		return
+	}
+	SendError(w, ErrUnauthorized, "Invalid token")
 }
 
 func (s *Server) handleSecurityPolicyAPI(w http.ResponseWriter, r *http.Request) {

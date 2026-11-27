@@ -359,7 +359,7 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 		// Wire real implementations for the placeholder built-in tasks
 		// (AI.md PART 18) before registering them.
 		sched.BackupDailyHook = func(ctx context.Context) error {
-			_, err := srv.runBackup("backup")
+			_, err := srv.runBackup("backup-daily")
 			return err
 		}
 		sched.BackupHourlyHook = func(ctx context.Context) error {
@@ -1144,9 +1144,7 @@ func (s *Server) setupRoutes() http.Handler {
 	}
 
 	// Static assets — CSS, JS (embedded at compile time, served under /static/)
-	r.Get("/static/css/accent.css", s.handleAccentCSS)
-	r.Get("/static/css/notifications.css", s.handleNotificationsCSS)
-	r.Handle("/static/*", staticFileServer())
+	r.Handle("/static/*", staticFileServer(s))
 
 	// SEO & Security files (PART 14, PART 16) — required
 	r.Get("/sitemap.xml", s.handleSitemap)
@@ -1157,6 +1155,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Route("/.well-known", func(wk chi.Router) {
 		wk.Use(wellKnownMethodCheck)
 		wk.Get("/security.txt", s.handleSecurityTxt)
+		wk.Get("/pgp-key.asc", s.handlePGPPublicKey)
 		wk.Get("/llms.txt", s.handleLLMsTxt)
 		// Catch-all for unsupported well-known entries — returns 404
 		wk.Get("/*", s.handleWellKnownNotFound)
@@ -1187,6 +1186,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/server/contact", s.handleContactPage)
 	r.Post("/server/contact", s.requireCSRF(s.handleContactPage))
 	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/contact", "getContact", "Contact information", "none", true, false, http.HandlerFunc(s.handleContactAPI))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/auth/check", "checkAuth", "Check bearer token kind", "token", false, true, http.HandlerFunc(s.handleAuthCheckAPI))
 	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/contact", "submitContact", "Submit a contact request", "none", true, false, http.HandlerFunc(s.handleContactAPI))
 	r.Get("/server/security/report/{tracking_id}", s.handleSecurityReportStatus)
 	// Anonymous owner tokens (AI.md PART 12 — Owner Token Management).
@@ -1252,7 +1252,9 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/server/docs/graphql", s.handleGraphiQL)
 	r.Post("/server/docs/graphql", s.requireCSRF(s.handleGraphiQL))
 	s.addAPIRoute(r, http.MethodPost, "/api/graphql", "executeGraphQLAlias", "Execute a GraphQL query", "none", false, true, http.HandlerFunc(s.handleGraphQL))
+	s.addAPIRoute(r, http.MethodGet, "/api/graphql", "queryGraphQLAlias", "Execute a GraphQL query over GET", "none", false, true, http.HandlerFunc(s.handleGraphQL))
 	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/graphql", "executeGraphQL", "Execute a GraphQL query", "none", false, true, http.HandlerFunc(s.handleGraphQL))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/graphql", "queryGraphQL", "Execute a GraphQL query over GET", "none", false, true, http.HandlerFunc(s.handleGraphQL))
 
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
 	r.Get("/whois", s.handleWHOISPage)
@@ -1368,33 +1370,13 @@ func (s *Server) handleWHOIS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perform WHOIS lookup with cache
-	result, err := whois.QueryWHOISWithCache(r.Context(), query, s.cache)
+	result, err := s.lookupWHOIS(r.Context(), query)
 	if err != nil {
 		SendError(w, ErrServerError, fmt.Sprintf("WHOIS lookup failed: %v", err))
 		return
 	}
 
-	// Build response
-	data := map[string]interface{}{
-		"query":     result.Query,
-		"type":      result.Type.String(),
-		"server":    result.Server,
-		"timestamp": result.Timestamp.Format(time.RFC3339),
-		"raw":       result.Raw,
-	}
-
-	// Add parsed data if available
-	if result.Domain != nil {
-		data["domain"] = result.Domain
-	}
-	if result.IP != nil {
-		data["ip"] = result.IP
-	}
-	if result.ASN != nil {
-		data["asn"] = result.ASN
-	}
-
-	SendSuccess(w, data)
+	SendSuccess(w, lookupResponseData(result))
 }
 
 // getPIDFilePath returns the PID file path based on privilege level (AI.md PART 23).

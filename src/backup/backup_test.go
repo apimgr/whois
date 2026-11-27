@@ -4,16 +4,19 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"database/sql"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"gopkg.in/yaml.v3"
+	_ "modernc.org/sqlite"
 )
 
-// sqliteHeader returns a minimal valid SQLite file (100+ bytes with correct magic).
+// sqliteHeader returns a SQLite-looking file for exclusion-only fixtures.
 func sqliteHeader() []byte {
 	header := []byte("SQLite format 3\x00")
 	header = append(header, make([]byte, 100)...)
@@ -81,6 +84,30 @@ func TestCreateSanitizesSecretsFile(t *testing.T) {
 	t.Fatal("backup did not contain secrets.yml")
 }
 
+func TestEnsureBackupDirAndSweepArtifacts(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "backups")
+	if err := EnsureBackupDir(dir); err != nil {
+		t.Fatalf("EnsureBackupDir: %v", err)
+	}
+	partial := filepath.Join(dir, ".backup-interrupted")
+	valid := filepath.Join(dir, "caswhois_backup_2025-01-01.tar.gz")
+	if err := os.WriteFile(partial, []byte("partial"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(valid, []byte("valid"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SweepBackupArtifacts(dir); err != nil {
+		t.Fatalf("SweepBackupArtifacts: %v", err)
+	}
+	if _, err := os.Stat(partial); !os.IsNotExist(err) {
+		t.Fatalf("partial archive still exists: %v", err)
+	}
+	if _, err := os.Stat(valid); err != nil {
+		t.Fatalf("valid archive was removed: %v", err)
+	}
+}
+
 func TestRestoreSecretsPreservesDestinationOperatorToken(t *testing.T) {
 	dir := t.TempDir()
 	backupPath := filepath.Join(dir, "backup-secrets.yml")
@@ -135,8 +162,16 @@ func makeFixtures(t *testing.T, configDir, dataDir string) {
 	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte("port: 64001\n"), 0600); err != nil {
 		t.Fatalf("write server.yml: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dataDir, "server.db"), sqliteHeader(), 0600); err != nil {
-		t.Fatalf("write server.db: %v", err)
+	database, err := sql.Open("sqlite", filepath.Join(dataDir, "server.db"))
+	if err != nil {
+		t.Fatalf("open server.db: %v", err)
+	}
+	if _, err := database.Exec(`CREATE TABLE fixture (value TEXT)`); err != nil {
+		_ = database.Close()
+		t.Fatalf("create server.db fixture: %v", err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatalf("close server.db fixture: %v", err)
 	}
 }
 
@@ -233,6 +268,36 @@ func TestCreate_WithPassword(t *testing.T) {
 	}
 	if info.Size() == 0 {
 		t.Fatal("output file is empty")
+	}
+}
+
+func TestSelectLatestFullBackupUsesFilenameDateAndModificationTieBreak(t *testing.T) {
+	dir := t.TempDir()
+	files := []string{
+		"caswhois_backup_2025-01-02.tar.gz",
+		"caswhois_backup_2025-01-03.tar.gz.enc",
+		"caswhois_backup_2025-01-03_120000.tar.gz",
+		"caswhois-daily.tar.gz",
+	}
+	for _, name := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("backup"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	newer := time.Date(2025, 1, 3, 14, 0, 0, 0, time.UTC)
+	olderSameDate := time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(filepath.Join(dir, files[2]), olderSameDate, olderSameDate); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(dir, files[1]), newer, newer); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := SelectLatestFullBackup(dir, "caswhois")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(selected) != files[1] {
+		t.Fatalf("selected %q, want %q", filepath.Base(selected), files[1])
 	}
 }
 
@@ -376,6 +441,9 @@ func TestCreate_WithDataDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dataDir, "extra.json"), []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dataDir, "cache.db"), sqliteHeader(), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	outFile := filepath.Join(dir, "with-data.tar.gz")
 	opts := &BackupOptions{
@@ -390,6 +458,13 @@ func TestCreate_WithDataDir(t *testing.T) {
 	}
 	if info, err := os.Stat(outFile); err != nil || info.Size() == 0 {
 		t.Fatal("output file missing or empty")
+	}
+	restoredDataDir := filepath.Join(dir, "restored-data")
+	if err := Restore(&RestoreOptions{BackupFile: outFile, ConfigDir: filepath.Join(dir, "restored-config"), DataDir: restoredDataDir, Force: true}); err != nil {
+		t.Fatalf("Restore() with IncludeData error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(restoredDataDir, "cache.db")); !os.IsNotExist(err) {
+		t.Fatalf("derived cache database was restored: err=%v", err)
 	}
 }
 
@@ -701,8 +776,14 @@ func TestCreateIncremental_Daily(t *testing.T) {
 	opts := &BackupOptions{
 		ConfigDir:  configDir,
 		DataDir:    dataDir,
+		BackupDir:  dir,
 		AppVersion: "1.0.0",
 	}
+	opts.OutputFile = filepath.Join(dir, "caswhois_backup_2025-01-01.tar.gz")
+	if err := Create(opts); err != nil {
+		t.Fatalf("create base full: %v", err)
+	}
+	opts.OutputFile = filepath.Join(dir, "caswhois-daily.tar.gz")
 
 	if err := CreateIncremental(opts, "daily"); err != nil {
 		t.Fatalf("CreateIncremental daily: %v", err)
@@ -710,6 +791,22 @@ func TestCreateIncremental_Daily(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(dir, "caswhois-daily.tar.gz")); err != nil {
 		t.Fatalf("daily backup file missing: %v", err)
+	}
+	if err := VerifyBackup(filepath.Join(dir, "caswhois-daily.tar.gz"), ""); err != nil {
+		t.Fatalf("verify daily incremental and base: %v", err)
+	}
+	basePath := filepath.Join(dir, "caswhois_backup_2025-01-01.tar.gz")
+	if err := os.WriteFile(basePath, []byte("corrupt base"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyBackup(filepath.Join(dir, "caswhois-daily.tar.gz"), ""); err == nil {
+		t.Fatal("verify daily incremental succeeded with a corrupt base")
+	}
+}
+
+func TestCreateIncremental_SkipsWithoutBase(t *testing.T) {
+	if err := CreateIncremental(&BackupOptions{BackupDir: t.TempDir()}, "daily"); err != ErrNoFullBackup {
+		t.Fatalf("CreateIncremental without base = %v, want ErrNoFullBackup", err)
 	}
 }
 
@@ -734,8 +831,14 @@ func TestCreateIncremental_Hourly(t *testing.T) {
 	opts := &BackupOptions{
 		ConfigDir:  configDir,
 		DataDir:    dataDir,
+		BackupDir:  dir,
 		AppVersion: "1.0.0",
 	}
+	opts.OutputFile = filepath.Join(dir, "caswhois_backup_2025-01-01.tar.gz")
+	if err := Create(opts); err != nil {
+		t.Fatalf("create base full: %v", err)
+	}
+	opts.OutputFile = filepath.Join(dir, "caswhois-hourly.tar.gz")
 
 	if err := CreateIncremental(opts, "hourly"); err != nil {
 		t.Fatalf("CreateIncremental hourly: %v", err)
@@ -743,6 +846,9 @@ func TestCreateIncremental_Hourly(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(dir, "caswhois-hourly.tar.gz")); err != nil {
 		t.Fatalf("hourly backup file missing: %v", err)
+	}
+	if err := VerifyBackup(filepath.Join(dir, "caswhois-hourly.tar.gz"), ""); err != nil {
+		t.Fatalf("verify hourly incremental and base: %v", err)
 	}
 }
 
@@ -767,9 +873,15 @@ func TestCreateIncremental_Encrypted(t *testing.T) {
 	opts := &BackupOptions{
 		ConfigDir:  configDir,
 		DataDir:    dataDir,
+		BackupDir:  dir,
 		Password:   "incpass",
 		AppVersion: "1.0.0",
 	}
+	opts.OutputFile = filepath.Join(dir, "caswhois_backup_2025-01-01.tar.gz.enc")
+	if err := Create(opts); err != nil {
+		t.Fatalf("create base full: %v", err)
+	}
+	opts.OutputFile = filepath.Join(dir, "caswhois-daily.tar.gz.enc")
 
 	if err := CreateIncremental(opts, "daily"); err != nil {
 		t.Fatalf("CreateIncremental encrypted daily: %v", err)
@@ -1013,6 +1125,49 @@ func TestDecryptBackupData_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestEncryptBackupUsesAuthenticatedBKUP1Header(t *testing.T) {
+	ciphertext, err := encryptBackup([]byte("archive"), "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(ciphertext[:5]) != "BKUP1" || len(ciphertext) < 55 {
+		t.Fatalf("encrypted archive header = %q, length %d", ciphertext[:5], len(ciphertext))
+	}
+	if plain, err := decryptBackupData(ciphertext, "secret"); err != nil || string(plain) != "archive" {
+		t.Fatalf("decrypt result = %q, %v", plain, err)
+	}
+	ciphertext[33] ^= 1
+	if _, err := decryptBackupData(ciphertext, "secret"); err == nil {
+		t.Fatal("tampered authenticated header was accepted")
+	}
+}
+
+func TestRestoreArchiveLimits(t *testing.T) {
+	limits, err := effectiveRestoreLimits(RestoreLimits{MaxExpandedSize: "4B", MaxFiles: 1, MaxPathLength: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name  string
+		files map[string][]byte
+		want  string
+	}{
+		{name: "expanded size", files: map[string][]byte{"a": []byte("12345")}, want: "ERR_RESTORE_LIMIT"},
+		{name: "entry count", files: map[string][]byte{"a": []byte("1"), "b": []byte("2")}, want: "ERR_RESTORE_LIMIT"},
+		{name: "path length", files: map[string][]byte{"long-name": []byte("1")}, want: "ERR_RESTORE_LIMIT"},
+		{name: "unsafe path", files: map[string][]byte{"../escape": []byte("1")}, want: "invalid archive path"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			archive := buildTarGz(t, test.files)
+			err := checkRestoreArchiveLimits(archive, limits)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("checkRestoreArchiveLimits() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestDecryptBackupData_TruncatedCiphertext(t *testing.T) {
 	// 32 bytes of salt + fewer bytes than nonceSize (12) → should fail.
 	tooShort := make([]byte, 32+8)
@@ -1112,7 +1267,126 @@ func TestRestore_EncryptedWrongPassword(t *testing.T) {
 	}
 }
 
+func TestRestore_IncrementalAppliesChangesAndDeletes(t *testing.T) {
+	dir := t.TempDir()
+	configDir, dataDir := filepath.Join(dir, "config"), filepath.Join(dir, "data")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	makeFixtures(t, configDir, dataDir)
+	basePath := filepath.Join(dir, "caswhois_backup_2025-01-01.tar.gz")
+	opts := &BackupOptions{ConfigDir: configDir, DataDir: dataDir, BackupDir: dir, OutputFile: basePath, AppVersion: "1.0.0"}
+	if err := Create(opts); err != nil {
+		t.Fatalf("create base full: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), []byte("server:\n  address: changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	removed := filepath.Join(configDir, "theme", "old.css")
+	if err := os.MkdirAll(filepath.Dir(removed), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(removed, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	opts.OutputFile = filepath.Join(dir, "caswhois_backup_2025-01-02.tar.gz")
+	if err := Create(opts); err != nil {
+		t.Fatalf("create current full: %v", err)
+	}
+	if err := os.Remove(removed); err != nil {
+		t.Fatal(err)
+	}
+	opts.OutputFile = filepath.Join(dir, "caswhois-daily.tar.gz")
+	if err := CreateIncremental(opts, "daily"); err != nil {
+		t.Fatalf("create incremental: %v", err)
+	}
+	if err := VerifyBackup(opts.OutputFile, ""); err != nil {
+		t.Fatalf("verify incremental: %v", err)
+	}
+	restoreDir := t.TempDir()
+	configOut, dataOut := filepath.Join(restoreDir, "config"), filepath.Join(restoreDir, "data")
+	if err := Restore(&RestoreOptions{BackupFile: opts.OutputFile, ConfigDir: configOut, DataDir: dataOut, Force: true}); err != nil {
+		t.Fatalf("restore incremental: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(configOut, "server.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restoredConfig map[string]any
+	if err := yaml.Unmarshal(got, &restoredConfig); err != nil {
+		t.Fatal(err)
+	}
+	if restoredConfig["server"].(map[string]any)["address"] != "changed" {
+		t.Fatalf("restored server.yml = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(configOut, "theme", "old.css")); !os.IsNotExist(err) {
+		t.Fatalf("deleted file still exists or stat failed: %v", err)
+	}
+}
+
 // ---- copyDir tests ----
+
+func TestRestorePreservesConfiguredRemoteDatabase(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	archiveConfig := filepath.Join(root, "archive-server.yml")
+	if err := os.WriteFile(archiveConfig, []byte("server:\n  database:\n    driver: sqlite\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	currentConfig := filepath.Join(configDir, "server.yml")
+	if err := os.WriteFile(currentConfig, []byte("server:\n  database:\n    driver: libsql\n    url: https://db.example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	serverOut := filepath.Join(root, "restored-server.yml")
+	if err := restoreServerConfig(archiveConfig, serverOut, root, configDir); err != nil {
+		t.Fatalf("restore config: %v", err)
+	}
+	var serverConfig map[string]any
+	data, err := os.ReadFile(serverOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &serverConfig); err != nil {
+		t.Fatal(err)
+	}
+	server := serverConfig["server"].(map[string]any)
+	database := server["database"].(map[string]any)
+	if database["driver"] != "libsql" || database["url"] != "https://db.example" {
+		t.Fatalf("restored database configuration = %#v", database)
+	}
+
+	archiveSecrets := filepath.Join(root, "archive-secrets.yml")
+	currentSecrets := filepath.Join(configDir, "secrets.yml")
+	secretsOut := filepath.Join(root, "restored-secrets.yml")
+	if err := os.WriteFile(archiveSecrets, []byte("server:\n  database:\n    token: archive-value\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(currentSecrets, []byte("server:\n  database:\n    token: destination-value\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreSecretsFileWithCurrentAndDatabase(archiveSecrets, secretsOut, currentSecrets, currentConfig); err != nil {
+		t.Fatalf("restore secrets: %v", err)
+	}
+	data, err = os.ReadFile(secretsOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var secrets map[string]any
+	if err := yaml.Unmarshal(data, &secrets); err != nil {
+		t.Fatal(err)
+	}
+	secretServer := secrets["server"].(map[string]any)
+	secretDatabase := secretServer["database"].(map[string]any)
+	if secretDatabase["token"] != "destination-value" {
+		t.Fatal("restored database credentials did not preserve the destination value")
+	}
+}
 
 // TestCopyDir_BasicCopy verifies that copyDir duplicates all files and
 // subdirectories from source to destination.
@@ -1353,8 +1627,16 @@ func TestRestore_UsersDB(t *testing.T) {
 	}
 	makeFixtures(t, configDir, dataDir)
 
-	// Also create users.db with a valid SQLite header.
-	if err := os.WriteFile(filepath.Join(dataDir, "users.db"), sqliteHeader(), 0600); err != nil {
+	// Also create a valid users.db so the integrity check can open it.
+	usersDB, err := sql.Open("sqlite", filepath.Join(dataDir, "users.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := usersDB.Exec(`CREATE TABLE fixture (value TEXT)`); err != nil {
+		_ = usersDB.Close()
+		t.Fatal(err)
+	}
+	if err := usersDB.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1453,7 +1735,7 @@ func TestLoadManifest_Valid(t *testing.T) {
 		"created_at": "2025-01-15T12:00:00Z",
 		"encrypted": false,
 		"contents": ["server.yml", "server.db"],
-		"checksum": "sha256:abc123"
+		"sha256": "abc123"
 	}`)
 	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), content, 0600); err != nil {
 		t.Fatal(err)
@@ -1466,7 +1748,7 @@ func TestLoadManifest_Valid(t *testing.T) {
 	if m.Version != "1.0.0" {
 		t.Errorf("version mismatch: %s", m.Version)
 	}
-	if m.Checksum != "sha256:abc123" {
+	if m.Checksum != "abc123" {
 		t.Errorf("checksum mismatch: %s", m.Checksum)
 	}
 }

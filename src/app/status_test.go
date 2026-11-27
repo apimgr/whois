@@ -11,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/whois/src/backup"
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 func TestGetConfigDir_WithExplicitDir(t *testing.T) {
@@ -563,7 +566,8 @@ func TestHandleMaintenance_Mode_Development(t *testing.T) {
 // TestHandleMaintenance_Restore_MissingFile verifies that restoring a non-existent
 // file returns exit code 1 (handleMaintenance now returns int, not calls os.Exit).
 func TestHandleMaintenance_Restore_MissingFile(t *testing.T) {
-	code := handleMaintenance("restore /nonexistent/file.tar.gz", "", "")
+	dir := t.TempDir()
+	code := handleMaintenance("restore /nonexistent/file.tar.gz", dir, dir)
 	if code != 1 {
 		t.Errorf("handleMaintenance(restore missing-file) = %d, want 1", code)
 	}
@@ -571,7 +575,9 @@ func TestHandleMaintenance_Restore_MissingFile(t *testing.T) {
 
 // TestHandleMaintenance_Restore_NoArgs verifies that "restore" with no file arg returns 1.
 func TestHandleMaintenance_Restore_NoArgs(t *testing.T) {
-	code := handleMaintenance("restore", "", "")
+	dir := t.TempDir()
+	t.Setenv("BACKUP_DIR", filepath.Join(dir, "backups"))
+	code := handleMaintenance("restore", dir, dir)
 	if code != 1 {
 		t.Errorf("handleMaintenance(restore no-args) = %d, want 1", code)
 	}
@@ -629,26 +635,75 @@ func TestHandleMaintenance_Setup_NotRoot(t *testing.T) {
 	}
 }
 
-// TestHandleMaintenance_Backup_WithPassword verifies that "backup" runs performBackup
-// with a password from env var. The backup fails (empty dirs) and returns 1 — the
-// test verifies the code path is exercised without blocking on stdin.
-func TestHandleMaintenance_Backup_WithPassword(t *testing.T) {
-	t.Setenv("CASWHOIS_BACKUP_PASSWORD", "testpassword123")
+// TestHandleMaintenance_BackupFailure verifies missing backup inputs return an error.
+func TestHandleMaintenance_BackupFailure(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("BACKUP_DIR", filepath.Join(dir, "backups"))
 	code := handleMaintenance("backup", dir, dir)
 	if code != 1 {
 		t.Logf("handleMaintenance(backup) = %d (0 means backup actually succeeded)", code)
 	}
 }
 
-// TestPerformBackup_WithPassword verifies that performBackup runs with a password from
-// env var and covers the env-var-read branch plus the backup.Create call.
-func TestPerformBackup_WithPassword(t *testing.T) {
-	t.Setenv("CASWHOIS_BACKUP_PASSWORD", "testpassword123")
+// TestPerformBackupWithoutLocalDatabase verifies server.db remains optional.
+func TestPerformBackupWithoutLocalDatabase(t *testing.T) {
 	dir := t.TempDir()
-	// performBackup may fail at backup.Create or backup.VerifyBackup; that is fine —
-	// we only need the branch through the password env var to be exercised.
-	_ = performBackup(dir, dir)
+	configYAML := []byte("server:\n  maintenance:\n    cleanup:\n      disk_threshold: 100\n")
+	if err := os.WriteFile(filepath.Join(dir, "server.yml"), configYAML, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATABASE_DIR", filepath.Join(dir, "database"))
+	t.Setenv("BACKUP_DIR", filepath.Join(dir, "backups"))
+	if err := performBackup(dir, dir); err != nil {
+		t.Fatalf("performBackup() without server.db: %v", err)
+	}
+}
+
+func TestPerformBackupTestVerifiesLatestFullAndIncrementals(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	backupDir := filepath.Join(root, "backups")
+	for _, dir := range []string{configDir, dataDir, backupDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	configYAML := []byte(fmt.Sprintf("server:\n  backup:\n    dir: %q\n", backupDir))
+	if err := os.WriteFile(filepath.Join(configDir, "server.yml"), configYAML, 0600); err != nil {
+		t.Fatal(err)
+	}
+	opts := &backup.BackupOptions{
+		ConfigDir:  configDir,
+		DataDir:    dataDir,
+		BackupDir:  backupDir,
+		AppVersion: "test",
+	}
+	fullPath := filepath.Join(backupDir, constants.InternalName+"_backup_2026-11-26.tar.gz")
+	opts.OutputFile = fullPath
+	if err := backup.Create(opts); err != nil {
+		t.Fatalf("create full backup: %v", err)
+	}
+	for _, kind := range []string{"daily", "hourly"} {
+		opts.OutputFile = filepath.Join(backupDir, constants.InternalName+"-"+kind+".tar.gz")
+		if err := backup.CreateIncremental(opts, kind); err != nil {
+			t.Fatalf("create %s incremental: %v", kind, err)
+		}
+	}
+	output := captureStdout(t, func() {
+		if err := performBackupTest("", configDir); err != nil {
+			t.Errorf("performBackupTest: %v", err)
+		}
+	})
+	for _, name := range []string{
+		filepath.Base(fullPath),
+		constants.InternalName + "-daily.tar.gz",
+		constants.InternalName + "-hourly.tar.gz",
+	} {
+		if !strings.Contains(output, name) {
+			t.Errorf("backup test output does not report %s: %s", name, output)
+		}
+	}
 }
 
 // TestHandleUpdate_Check_Fails verifies that "check" returns 1 when the network is unavailable.

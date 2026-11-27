@@ -15,13 +15,19 @@ merged file precedence is built-in defaults, `server.yml`, `yaml.d/` files in
 lexical filename order, then recognized credentials from `secrets.yml`.
 Supported configuration overrides include `MODE`, `DEBUG`, `PORT`, `LISTEN`,
 `CONFIG_DIR`, `DATA_DIR`, `LOG_DIR`, `BACKUP_DIR`, `DATABASE_DIR`,
-`DATABASE_URL`, `DATABASE_DRIVER`, `I2P_ENABLED`, `APPLICATION_NAME`,
-`APPLICATION_TAGLINE`, and SMTP variables `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`, `SMTP_FROM_NAME`, and
-`SMTP_FROM_EMAIL`. `NO_COLOR` and `TERM=dumb` control console color; service
-manager variables are used only for runtime detection. There is no general
-`CASWHOIS_` prefix for every setting. Boolean values include `true`/`false`,
-`yes`/`no`, `1`/`0`, and `on`/`off` where boolean parsing is used.
+`CACHE_DIR`, `PID_FILE`, `DATABASE_URL`, `DATABASE_DRIVER`, `I2P_ENABLED`,
+`DOMAIN`, `APPLICATION_NAME`, `APPLICATION_TAGLINE`, and SMTP variables
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`,
+`SMTP_FROM_NAME`, and
+`SMTP_FROM_EMAIL`. `CASWHOIS_CONFIG_DIR` selects the config directory used
+when persisting update-channel changes. `DOMAIN` is a comma-separated list of
+public hostnames used when generating public URLs; when unset, system hostname
+detection can use `HOSTNAME` as a fallback. `XDG_CONFIG_HOME` changes the
+non-root Linux config-directory base. `NO_COLOR` and `TERM=dumb` control
+console color; service-manager variables are used only for runtime detection.
+There is no general `CASWHOIS_` prefix for every setting. Boolean
+values include `true`/`false`, `yes`/`no`, `1`/`0`, and `on`/`off` where
+boolean parsing is used.
 
 ```bash
 caswhois --help
@@ -170,7 +176,7 @@ while database values are re-encrypted.
 
 ## Paths
 
-Default paths depend on operating system and whether the process runs as root or as a user. The `--config`, `--data`, `--cache`, `--log`, and `--backup` options can override the corresponding locations. Docker uses `/config` and `/data` inside the container.
+Default paths depend on operating system and whether the process runs as root or as a user. The `--config`, `--data`, `--cache`, `--log`, and `--backup` options can override the corresponding locations. In application containers, defaults are `/config/caswhois`, `/data/caswhois`, `/cache/caswhois`, `/data/log/caswhois`, `/data/backups/caswhois`, and `/data/db/sqlite` for config, data, cache, logs, backups, and SQLite respectively. Docker volumes are mounted at `/config`, `/data`, and `/cache`.
 
 ## Reloading
 

@@ -14,7 +14,7 @@
     </header>
     <section class="section-card" aria-labelledby="graphql-query-heading">
       <h2 id="graphql-query-heading">{{t .Lang "graphql.query_label"}}</h2>
-    <p class="gql-meta">
+    <p class="text-muted">
       {{t .Lang "graphql.endpoint_label"}}:
       <code>{{.EndpointURL}}</code>
     </p>
@@ -25,12 +25,12 @@
       data-loading="{{t .Lang "common.loading"}}"
       data-network-error="{{t .Lang "whois.error_network"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <div class="gql-layout">
-        <div class="gql-pane">
+      <div class="grid">
+        <div class="stack">
           <label for="gql-query"><strong>{{t .Lang "graphql.query_label"}}</strong></label>
           <textarea
             id="gql-query" name="query"
-            class="gql-textarea"
+            class="input"
             aria-label="{{t .Lang "graphql.query_label"}}"
             spellcheck="false"
             autocorrect="off"
@@ -40,7 +40,7 @@
           <label for="gql-vars"><strong>{{t .Lang "graphql.variables_label"}}</strong></label>
           <textarea
             id="gql-vars" name="variables"
-            class="gql-textarea gql-textarea-vars"
+            class="input"
             aria-label="{{t .Lang "graphql.variables_label"}}"
             spellcheck="false"
             autocorrect="off"
@@ -50,24 +50,24 @@
           <label for="gql-op"><strong>{{t .Lang "graphql.operation_label"}}</strong></label>
           <input
             id="gql-op" name="operationName" type="text"
-            class="search-input"
+            class="input"
             aria-label="{{t .Lang "graphql.operation_label"}}"
             value="{{.OperationName}}"
             autocorrect="off" autocapitalize="none"
             spellcheck="false"
           >
 
-          <div class="gql-run">
-            <button type="submit" class="btn-primary">{{t .Lang "graphql.submit"}}</button>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{t .Lang "graphql.submit"}}</button>
           </div>
         </div>
 
-        <div class="gql-pane">
-          <label><strong>{{t .Lang "graphql.response_label"}}</strong></label>
+        <div class="stack">
+          <h3>{{t .Lang "graphql.response_label"}}</h3>
           {{if .ErrorMsg}}
-          <div class="state-box state-error" role="alert">{{.ErrorMsg}}</div>
+          <div class="alert alert-error" role="alert">{{.ErrorMsg}}</div>
           {{end}}
-          <pre id="gql-response" class="gql-response" aria-label="{{t .Lang "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
+          <pre id="gql-response" class="code-block" aria-label="{{t .Lang "graphql.response_label"}}" aria-live="polite">{{.Response}}</pre>
         </div>
       </div>
     </form>

@@ -93,6 +93,8 @@ workflow-policy:
     - |
       bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
       if [ -n "$bad" ]; then echo "unpinned actions found:"; echo "$bad"; exit 1; fi
+      env_files=$(git ls-files | grep -E '(^|/)\.env([^/]*)$' || true)
+      if [ -n "$env_files" ]; then echo "committed .env files found:"; echo "$env_files"; exit 1; fi
 
 vuln-scan:
   stage: security

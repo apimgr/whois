@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,8 +19,10 @@ import (
 
 	"github.com/apimgr/whois/src/backup"
 	"github.com/apimgr/whois/src/common/constants"
+	"github.com/apimgr/whois/src/common/terminal"
 	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/db"
+	caslogger "github.com/apimgr/whois/src/logger"
 	"github.com/apimgr/whois/src/security"
 	"github.com/apimgr/whois/src/update"
 	"gopkg.in/yaml.v3"
@@ -367,19 +370,33 @@ func handleMaintenance(cmd, configDir, dataDir string) int {
 
 	switch operation {
 	case "backup":
-		if err := performBackup(configDir, dataDir); err != nil {
+		if len(args) > 1 && args[1] == "test" {
+			backupFile := ""
+			if len(args) > 2 {
+				backupFile = args[2]
+			}
+			if err := performBackupTest(backupFile, configDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: Backup verification failed: %v\n", err)
+				return 1
+			}
+			fmt.Printf("%s Backup verified successfully\n", okMark())
+			return 0
+		}
+		filename := ""
+		if len(args) > 1 {
+			filename = args[1]
+		}
+		if err := performBackup(configDir, dataDir, filename); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Backup failed: %v\n", err)
 			return 1
 		}
 		fmt.Printf("%s Backup completed successfully\n", okMark())
 
 	case "restore":
-		if len(args) < 2 {
-			fmt.Fprintf(os.Stderr, "Error: Restore requires backup file path\n")
-			fmt.Fprintf(os.Stderr, "Usage: --maintenance 'restore /path/to/backup.tar.gz'\n")
-			return 1
+		backupFile := ""
+		if len(args) > 1 {
+			backupFile = args[1]
 		}
-		backupFile := args[1]
 		if err := performRestore(backupFile, configDir, dataDir); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Restore failed: %v\n", err)
 			return 1
@@ -656,8 +673,8 @@ func requiresInstallationSecret(action string, args []string) bool {
 func printMaintenanceHelp() {
 	fmt.Println("Maintenance Commands:")
 	fmt.Println()
-	fmt.Println("  backup             Create encrypted backup of database, config, and certificates")
-	fmt.Println("  restore FILE       Restore from backup file (requires auth — server token or root)")
+	fmt.Println("  backup [test [FILE]] Create backup, or test an existing backup")
+	fmt.Println("  restore [FILE]     Restore a backup (defaults to newest full; typed confirmation required)")
 	fmt.Println("  update [CMD]       Alias for --update [CMD] (check|yes|branch NAME; default: yes)")
 	fmt.Println("  mode MODE          Change server mode (production|development) — requires root")
 	fmt.Println("  setup              Reset server configuration to defaults — requires root or first-run")
@@ -1032,32 +1049,90 @@ func handleUpdate(cmd, binaryName string) int {
 }
 
 // performBackup creates an encrypted backup (PART 22)
-func performBackup(configDir, dataDir string) error {
-	// Prompt for password if not provided
-	password := os.Getenv("CASWHOIS_BACKUP_PASSWORD")
+func performBackup(configDir, dataDir string, requestedName ...string) error {
+	resolvedConfigDir := getConfigDir(configDir)
+	cfg, err := config.LoadServerConfig(resolvedConfigDir)
+	if err != nil {
+		return fmt.Errorf("load backup configuration: %w", err)
+	}
+	if cfg.Backup.Dir == "" {
+		if envDir := strings.TrimSpace(os.Getenv("BACKUP_DIR")); envDir != "" {
+			cfg.Backup.Dir = envDir
+		}
+	}
+	password, err := config.LoadBackupPassword(resolvedConfigDir, cfg)
+	if err != nil {
+		return err
+	}
+	if cfg.Compliance.Enabled && password == "" {
+		return fmt.Errorf("backups require encryption in compliance mode; set server.backup.encryption_password in secrets.yml")
+	}
 	if password == "" {
-		fmt.Print("Enter backup password (leave empty for unencrypted): ")
-		if _, err := fmt.Scanln(&password); err != nil && err != io.EOF {
-			return fmt.Errorf("read backup password: %w", err)
+		fmt.Fprintln(os.Stderr, "WARN: backup encryption is not configured; this backup will not be encrypted")
+	}
+
+	backupDir := cfg.GetBackupDir()
+	if err := backup.EnsureBackupDir(backupDir); err != nil {
+		return err
+	}
+	if err := backup.SweepBackupArtifacts(backupDir); err != nil {
+		return err
+	}
+	if err := backup.CheckBackupDiskSpace(backupDir, cfg.Maintenance.Cleanup.DiskThreshold); err != nil {
+		return err
+	}
+	extension := ".tar.gz"
+	if password != "" {
+		extension += ".enc"
+	}
+	filename := fmt.Sprintf("%s_backup_%s%s", constants.InternalName, time.Now().UTC().Format("2006-01-02_150405"), extension)
+	if len(requestedName) > 0 && strings.TrimSpace(requestedName[0]) != "" {
+		filename = requestedName[0]
+		if filepath.Base(filename) != filename || strings.ContainsAny(filename, `/\\`) {
+			return fmt.Errorf("backup filename must be a name inside the configured backup directory")
+		}
+		if !strings.HasSuffix(filename, extension) {
+			return fmt.Errorf("backup filename must end with %s", extension)
+		}
+	}
+	outputFile := filepath.Join(backupDir, filename)
+	resolvedDataDir := dataDir
+	if resolvedDataDir == "" {
+		resolvedDataDir = getDataDir(configDir)
+	}
+	appSecrets := map[string]string{}
+	driver, _, dbPath := cfg.GetDatabaseConfig()
+	localDBExists := false
+	if info, statErr := os.Stat(filepath.Join(dbPath, "server.db")); statErr == nil && info.Mode().IsRegular() {
+		localDBExists = true
+	}
+	if driver != "sqlite" || localDBExists {
+		database, err := initDatabase(cfg)
+		if err != nil {
+			return fmt.Errorf("open database for backup secrets: %w", err)
+		}
+		appSecrets, err = database.ExportAppSecrets(context.Background())
+		closeErr := database.Close()
+		if err != nil {
+			return fmt.Errorf("export application secrets: %w", err)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close backup database: %w", closeErr)
 		}
 	}
 
-	// Get backup directory (from config or default)
-	// For CLI usage, default to current directory
-	backupDir := "."
-
-	// OutputFile is empty so backup.Create auto-generates a timestamped name.
-	// IncludeSSL captures SSL certificates; IncludeData is false to keep CLI
-	// backups small (data directory can be very large).
 	opts := &backup.BackupOptions{
-		ConfigDir:   getConfigDir(configDir),
-		DataDir:     getDataDir(configDir),
-		OutputFile:  "",
-		Password:    password,
-		IncludeSSL:  true,
-		IncludeData: false,
-		AdminUser:   "cli-user",
-		AppVersion:  Version,
+		ConfigDir:          resolvedConfigDir,
+		DataDir:            resolvedDataDir,
+		OutputFile:         outputFile,
+		Password:           password,
+		IncludeSSL:         false,
+		IncludeData:        false,
+		AdminUser:          "cli-user",
+		AppVersion:         Version,
+		AppSecrets:         appSecrets,
+		ConnectionTLSFiles: []string{cfg.Cache.TLSCA, cfg.Cache.TLSCert, cfg.Cache.TLSKey},
+		ExternalTLSFiles:   []backup.ExternalTLSFile{{Name: "cert.pem", Path: cfg.TLS.Cert}, {Name: "key.pem", Path: cfg.TLS.Key}},
 	}
 
 	// Create backup
@@ -1072,48 +1147,192 @@ func performBackup(configDir, dataDir string) error {
 		_ = os.Remove(opts.OutputFile)
 		return fmt.Errorf("backup verification failed: %w", err)
 	}
-
-	// Move backup to backup directory if different from current dir
-	if backupDir != "." && backupDir != "" {
-		if err := os.MkdirAll(backupDir, 0755); err != nil {
-			return fmt.Errorf("create backup directory: %w", err)
-		}
-		newPath := filepath.Join(backupDir, filepath.Base(opts.OutputFile))
-		if err := os.Rename(opts.OutputFile, newPath); err == nil {
-			opts.OutputFile = newPath
-		}
+	if err := backup.ApplyRetentionPolicy(backupDir, cfg.Backup.Retention.MaxBackups, cfg.Backup.Retention.KeepWeekly, cfg.Backup.Retention.KeepMonthly, cfg.Backup.Retention.KeepYearly, cfg.Backup.Retention.MaxTotalSize); err != nil {
+		fmt.Fprintf(os.Stderr, "WARN: backup retention failed: %v\n", err)
 	}
 
 	fmt.Printf("%s Backup created: %s\n", okMark(), opts.OutputFile)
 	return nil
 }
 
+func performBackupTest(backupFile, configDir string) error {
+	cfg, err := config.LoadServerConfig(getConfigDir(configDir))
+	if err != nil {
+		return fmt.Errorf("load backup configuration: %w", err)
+	}
+	if cfg.Backup.Dir == "" {
+		if envDir := strings.TrimSpace(os.Getenv("BACKUP_DIR")); envDir != "" {
+			cfg.Backup.Dir = envDir
+		}
+	}
+	if backupFile == "" {
+		backupFile, err = backup.SelectLatestFullBackup(cfg.GetBackupDir(), constants.InternalName)
+		if err != nil {
+			return err
+		}
+	}
+	archives := []string{backupFile}
+	for _, suffix := range []string{"-daily.tar.gz", "-daily.tar.gz.enc", "-hourly.tar.gz", "-hourly.tar.gz.enc"} {
+		candidate := filepath.Join(cfg.GetBackupDir(), constants.InternalName+suffix)
+		if _, err := os.Stat(candidate); err == nil {
+			archives = append(archives, candidate)
+		}
+	}
+	seen := make(map[string]bool, len(archives))
+	var failures []error
+	for _, archiveFile := range archives {
+		absolute, err := filepath.Abs(archiveFile)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("resolve backup %s: %w", archiveFile, err))
+			continue
+		}
+		if seen[absolute] {
+			continue
+		}
+		seen[absolute] = true
+		password := ""
+		if strings.HasSuffix(archiveFile, ".enc") {
+			password, err = promptBackupPassword()
+			if err != nil {
+				failure := fmt.Errorf("verify backup %s: %w", filepath.Base(archiveFile), err)
+				failures = append(failures, failure)
+				fmt.Fprintf(os.Stderr, "%s %v\n", failMark(), failure)
+				continue
+			}
+		}
+		fmt.Printf("Verifying backup and base: %s\n", filepath.Base(archiveFile))
+		if err := backup.VerifyBackup(archiveFile, password); err != nil {
+			failure := fmt.Errorf("verify backup %s: %w", filepath.Base(archiveFile), err)
+			failures = append(failures, failure)
+			fmt.Fprintf(os.Stderr, "%s %v\n", failMark(), failure)
+			continue
+		}
+		fmt.Printf("%s Backup and base verified: %s\n", okMark(), filepath.Base(archiveFile))
+	}
+	return errors.Join(failures...)
+}
+
 // performRestore restores from backup (PART 22)
 func performRestore(backupFile, configDir, dataDir string) error {
+	cfg, err := config.LoadServerConfig(getConfigDir(configDir))
+	if err != nil {
+		return fmt.Errorf("load restore configuration: %w", err)
+	}
+	if cfg.Backup.Dir == "" {
+		if envDir := strings.TrimSpace(os.Getenv("BACKUP_DIR")); envDir != "" {
+			cfg.Backup.Dir = envDir
+		}
+	}
+	resolvedDataDir := dataDir
+	if resolvedDataDir == "" {
+		resolvedDataDir = getDataDir(configDir)
+	}
+	if !restoreDatabaseEmpty(cfg, resolvedDataDir) && !authorizeOperatorMaintenance(cfg, "Restore") {
+		return fmt.Errorf("restore authorization failed")
+	}
+	if backupFile == "" {
+		backupFile, err = backup.SelectLatestFullBackup(cfg.GetBackupDir(), constants.InternalName)
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(backupFile); err != nil {
+		return fmt.Errorf("stat backup file: %w", err)
+	}
+
 	// Check if backup file is encrypted
 	isEncrypted := strings.HasSuffix(backupFile, ".enc")
 
 	// Prompt for password if encrypted
 	password := ""
 	if isEncrypted {
-		password = os.Getenv("CASWHOIS_BACKUP_PASSWORD")
-		if password == "" {
-			fmt.Print("Enter backup password: ")
-			if _, err := fmt.Scanln(&password); err != nil && err != io.EOF {
-				return fmt.Errorf("read backup password: %w", err)
-			}
+		var err error
+		password, err = promptBackupPassword()
+		if err != nil {
+			return err
 		}
 	}
-
+	if !optsConfirmRestore() {
+		return fmt.Errorf("restore cancelled or confirmation unavailable")
+	}
 	opts := &backup.RestoreOptions{
 		BackupFile: backupFile,
 		Password:   password,
 		ConfigDir:  getConfigDir(configDir),
-		DataDir:    getDataDir(configDir),
-		Force:      false,
+		DataDir:    resolvedDataDir,
+		Limits: backup.RestoreLimits{
+			MaxArchiveSize:  cfg.Restore.MaxArchiveSize,
+			MaxExpandedSize: cfg.Restore.MaxExpandedSize,
+			MaxFiles:        cfg.Restore.MaxFiles,
+			MaxPathLength:   cfg.Restore.MaxPathLength,
+		},
+		Force: false,
+		ApplyRemoteRestore: func(sqlitePath string, secrets map[string]string) error {
+			restoredConfig, err := config.LoadServerConfig(getConfigDir(configDir))
+			if err != nil {
+				return err
+			}
+			driver, _, _ := restoredConfig.GetDatabaseConfig()
+			if driver == "sqlite" {
+				return nil
+			}
+			database, err := initDatabase(restoredConfig)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = database.Close() }()
+			if info, err := os.Stat(sqlitePath); err == nil && info.Mode().IsRegular() {
+				if err := database.SeedFromSQLite(context.Background(), sqlitePath); err != nil {
+					return err
+				}
+			} else if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("inspect restored SQLite database: %w", err)
+			}
+			return database.RestoreAppSecretsIfEmpty(context.Background(), secrets)
+		},
 	}
 
-	return backup.Restore(opts)
+	if err := backup.Restore(opts); err != nil {
+		return err
+	}
+	if auditLogger, err := caslogger.Open(cfg.GetLogDir()); err == nil {
+		auditLogger.WriteAudit(caslogger.AuditEntry{Category: "backup", Action: "backup.restored", Source: "system", TargetType: "backup", TargetID: filepath.Base(backupFile), Success: true})
+		auditLogger.Close()
+	}
+	return nil
+}
+
+func restoreDatabaseEmpty(cfg *config.ServerConfig, dataDir string) bool {
+	if cfg == nil || (cfg.Database.Driver != "" && cfg.Database.Driver != "sqlite") || cfg.Database.URL != "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dataDir, "server.db"))
+	return os.IsNotExist(err) || (err == nil && info.Size() == 0)
+}
+
+func optsConfirmRestore() bool {
+	if !terminal.IsStdinTerminal() {
+		return false
+	}
+	fmt.Fprint(os.Stderr, "Type RESTORE to continue: ")
+	var confirmation string
+	if _, err := fmt.Fscanln(os.Stdin, &confirmation); err != nil {
+		return false
+	}
+	return confirmation == "RESTORE"
+}
+
+func promptBackupPassword() (string, error) {
+	if !terminal.IsStdinTerminal() {
+		return "", fmt.Errorf("encrypted backup password requires an interactive terminal")
+	}
+	fmt.Fprint(os.Stderr, "Enter backup password: ")
+	password, err := terminal.ReadPasswordFromStdin()
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", fmt.Errorf("read backup password: %w", err)
+	}
+	return string(password), nil
 }
 
 // checkForUpdates checks GitHub releases for updates (PART 23)

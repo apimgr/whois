@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -55,7 +57,8 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 	base := s.GetBaseURL(r)
 	stamp := Version + "-" + CommitID
-	cacheName := constants.InternalName + "-cache-" + stamp
+	configHash := sha256.Sum256([]byte(fmt.Sprintf("%s|%d|%d", s.config.Web.UI.Accent, s.config.Notifications.WebUI.Duration, s.config.Notifications.WebUI.WarningDuration)))
+	cacheName := constants.InternalName + "-cache-" + stamp + "-" + hex.EncodeToString(configHash[:6])
 	script := `const CACHE_NAME = @@CACHE@@;
 const CACHE_PREFIX = @@PREFIX@@;
 const BASE_PATH = @@BASE@@;

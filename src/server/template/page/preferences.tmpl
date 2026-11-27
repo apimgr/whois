@@ -33,15 +33,15 @@
         {{if .CCPAApplicable}}<label><input type="checkbox" name="ccpa_opt_out" {{if .CCPAOptOut}}checked{{end}}> {{t .Lang "preferences.ccpa_opt_out"}}</label>{{end}}
       </section>
       <div class="form-actions">
-        <button class="btn-primary" type="submit">{{t .Lang "preferences.save"}}</button>
-        <a class="btn-secondary" href="{{.CancelURL}}">{{t .Lang "preferences.cancel"}}</a>
-        <button class="btn-secondary" type="button" popovertarget="reset-confirmation">{{t .Lang "preferences.reset"}}</button>
+        <button class="btn btn-primary" type="submit">{{t .Lang "preferences.save"}}</button>
+        <a class="btn btn-secondary" href="{{.CancelURL}}">{{t .Lang "preferences.cancel"}}</a>
+        <button class="btn btn-secondary" type="button" popovertarget="reset-confirmation">{{t .Lang "preferences.reset"}}</button>
       </div>
       <section id="reset-confirmation" class="section-card" aria-labelledby="reset-confirmation-heading" popover>
         <h2 id="reset-confirmation-heading">{{t .Lang "preferences.reset_warning_title"}}</h2>
         <p>{{t .Lang "preferences.reset_warning"}}</p>
-        <button class="btn-secondary" type="button" popovertarget="reset-confirmation" popovertargetaction="hide">{{t .Lang "preferences.keep"}}</button>
-        <button class="btn-danger" type="submit" name="action" value="reset">{{t .Lang "preferences.erase"}}</button>
+        <button class="btn btn-secondary" type="button" popovertarget="reset-confirmation" popovertargetaction="hide">{{t .Lang "preferences.keep"}}</button>
+        <button class="btn btn-danger" type="submit" name="action" value="reset">{{t .Lang "preferences.erase"}}</button>
       </section>
     </form>
     <section class="section-card" aria-labelledby="more-preferences-heading">

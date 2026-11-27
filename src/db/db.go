@@ -8,7 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -47,6 +50,280 @@ func (db *DB) AppSecret(ctx context.Context, name string) ([]byte, error) {
 		return nil, fmt.Errorf("decode application secret %q: %w", name, err)
 	}
 	return secret, nil
+}
+
+// ExportAppSecrets returns every encrypted application-secret row for backup.
+func (db *DB) ExportAppSecrets(ctx context.Context) (map[string]string, error) {
+	if db == nil || db.Read() == nil {
+		return nil, errors.New("database read handle is unavailable")
+	}
+	rows, err := db.Read().QueryContext(ctx, `SELECT name, value FROM app_secrets ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("query application secrets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	secrets := make(map[string]string)
+	for rows.Next() {
+		var name, value string
+		if err := rows.Scan(&name, &value); err != nil {
+			return nil, fmt.Errorf("read application secret: %w", err)
+		}
+		secrets[name] = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate application secrets: %w", err)
+	}
+	return secrets, nil
+}
+
+// RestoreAppSecretsIfEmpty seeds generated secrets only on a new remote database.
+func (db *DB) RestoreAppSecretsIfEmpty(ctx context.Context, secrets map[string]string) error {
+	return db.Write(ctx, func(tx *sql.Tx) error {
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM app_secrets`).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return nil
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		for _, name := range sortedSecretNames(secrets) {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO app_secrets(name,value,updated_at) VALUES(?,?,?) ON CONFLICT(name) DO NOTHING`, name, secrets[name], now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// SeedFromSQLite copies an archived local database into an empty remote database.
+// The schema is created by the normal remote startup path before this runs.
+func (db *DB) SeedFromSQLite(ctx context.Context, sourcePath string) error {
+	const seedMarker = "__apimgr_restore_seed_pending"
+	if db == nil || db.Driver != "libsql" || db.writeDB == nil {
+		return errors.New("remote database write handle is unavailable")
+	}
+	absPath, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return fmt.Errorf("resolve SQLite seed path: %w", err)
+	}
+	sourceURI := (&url.URL{Path: filepath.ToSlash(absPath)}).EscapedPath()
+	source, err := sql.Open("sqlite", "file:"+sourceURI+"?mode=ro")
+	if err != nil {
+		return fmt.Errorf("open SQLite seed database: %w", err)
+	}
+	defer func() { _ = source.Close() }()
+	if err := source.PingContext(ctx); err != nil {
+		return fmt.Errorf("connect SQLite seed database: %w", err)
+	}
+	rows, err := source.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY rowid`)
+	if err != nil {
+		return fmt.Errorf("list SQLite seed tables: %w", err)
+	}
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("read SQLite seed table: %w", err)
+		}
+		tables = append(tables, name)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close SQLite seed table list: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate SQLite seed tables: %w", err)
+	}
+	var marker string
+	markerErr := db.Read().QueryRowContext(ctx, `SELECT value FROM config WHERE key = ?`, seedMarker).Scan(&marker)
+	if markerErr != nil && !errors.Is(markerErr, sql.ErrNoRows) {
+		return fmt.Errorf("check remote restore marker: %w", markerErr)
+	}
+	if markerErr == nil {
+		if err := db.rollbackSQLiteSeed(ctx, tables); err != nil {
+			return fmt.Errorf("clear interrupted remote restore: %w", err)
+		}
+	}
+	for _, table := range tables {
+		if table == "app_secrets" || table == "config_meta" {
+			continue
+		}
+		var count int
+		if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM `+quoteIdentifier(DatabaseObjectName(db.Driver, table))).Scan(&count); err != nil {
+			return fmt.Errorf("check remote table %s: %w", table, err)
+		}
+		if count != 0 {
+			return nil
+		}
+	}
+	if err := db.Write(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO config(key,value,type) VALUES(?,?,'string') ON CONFLICT(key) DO UPDATE SET value=excluded.value,type=excluded.type`, seedMarker, "pending"); err != nil {
+			return fmt.Errorf("mark remote restore in progress: %w", err)
+		}
+		for _, table := range []string{"app_secrets", "config_meta"} {
+			if containsSeedTable(tables, table) {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM `+quoteIdentifier(DatabaseObjectName(db.Driver, table))); err != nil {
+					return fmt.Errorf("clear initialized remote table %s: %w", table, err)
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, table := range tables {
+		if err := copySQLiteTable(ctx, source, db, db.Driver, table); err != nil {
+			rollbackErr := db.rollbackSQLiteSeed(ctx, tables)
+			if rollbackErr != nil {
+				markErr := db.Write(ctx, func(tx *sql.Tx) error {
+					_, err := tx.ExecContext(ctx, `INSERT INTO config(key,value,type) VALUES(?,?,'string') ON CONFLICT(key) DO UPDATE SET value=excluded.value,type=excluded.type`, seedMarker, "pending")
+					return err
+				})
+				rollbackErr = errors.Join(rollbackErr, markErr)
+			}
+			return errors.Join(fmt.Errorf("seed table %s: %w", table, err), rollbackErr)
+		}
+	}
+	return db.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM config WHERE key = ?`, seedMarker)
+		return err
+	})
+}
+
+func (db *DB) rollbackSQLiteSeed(ctx context.Context, tables []string) error {
+	var failures []error
+	for index := len(tables) - 1; index >= 0; index-- {
+		table := tables[index]
+		if err := db.Write(ctx, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `DELETE FROM `+quoteIdentifier(DatabaseObjectName(db.Driver, table)))
+			return err
+		}); err != nil {
+			failures = append(failures, fmt.Errorf("clear partially seeded table %s: %w", table, err))
+		}
+	}
+	if err := db.ensureSchema(ctx); err != nil {
+		failures = append(failures, fmt.Errorf("reinitialize empty remote schema: %w", err))
+	}
+	return errors.Join(failures...)
+}
+
+func copySQLiteTable(ctx context.Context, source *sql.DB, target *DB, driverName, table string) error {
+	const batchSize = 500
+	quotedSource := quoteIdentifier(table)
+	columns, err := sqliteTableColumns(ctx, source, table)
+	if err != nil {
+		return err
+	}
+	quotedColumns := make([]string, len(columns))
+	placeholders := make([]string, len(columns))
+	for i, column := range columns {
+		quotedColumns[i] = quoteIdentifier(column)
+		placeholders[i] = "?"
+	}
+	selectColumns := strings.Join(quotedColumns, ",")
+	query := `INSERT INTO ` + quoteIdentifier(DatabaseObjectName(driverName, table)) + ` (` + strings.Join(quotedColumns, ",") + `) VALUES (` + strings.Join(placeholders, ",") + `)`
+	first, err := source.QueryContext(ctx, `SELECT `+selectColumns+` FROM `+quotedSource+` ORDER BY rowid LIMIT ? OFFSET 0`, batchSize)
+	if err != nil {
+		return fmt.Errorf("read SQLite table %s: %w", table, err)
+	}
+	var offset int64
+	rows := first
+	for {
+		batch := make([][]any, 0, batchSize)
+		for rows.Next() {
+			values := make([]any, len(columns))
+			destinations := make([]any, len(columns))
+			for i := range values {
+				destinations[i] = &values[i]
+			}
+			if err := rows.Scan(destinations...); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan SQLite table %s: %w", table, err)
+			}
+			for i, value := range values {
+				if data, ok := value.([]byte); ok {
+					values[i] = append([]byte(nil), data...)
+				}
+			}
+			batch = append(batch, values)
+		}
+		rowsErr := rows.Err()
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close SQLite table %s: %w", table, err)
+		}
+		if rowsErr != nil {
+			return fmt.Errorf("iterate SQLite table %s: %w", table, rowsErr)
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		if err := target.Write(ctx, func(tx *sql.Tx) error {
+			for _, values := range batch {
+				if _, err := tx.ExecContext(ctx, query, values...); err != nil {
+					return fmt.Errorf("seed remote table %s: %w", table, err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		offset += int64(len(batch))
+		if len(batch) < batchSize {
+			return nil
+		}
+		rows, err = source.QueryContext(ctx, `SELECT `+selectColumns+` FROM `+quotedSource+` ORDER BY rowid LIMIT ? OFFSET ?`, batchSize, offset)
+		if err != nil {
+			return fmt.Errorf("read SQLite table %s: %w", table, err)
+		}
+	}
+}
+
+func sqliteTableColumns(ctx context.Context, source *sql.DB, table string) ([]string, error) {
+	rows, err := source.QueryContext(ctx, `PRAGMA table_info(`+quoteIdentifier(table)+`)`)
+	if err != nil {
+		return nil, fmt.Errorf("inspect SQLite columns for %s: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var columns []string
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, dataType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return nil, fmt.Errorf("read SQLite column for %s: %w", table, err)
+		}
+		columns = append(columns, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate SQLite columns for %s: %w", table, err)
+	}
+	if len(columns) == 0 {
+		return nil, fmt.Errorf("SQLite table %s has no readable columns", table)
+	}
+	return columns, nil
+}
+
+func quoteIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+}
+
+func containsSeedTable(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedSecretNames(secrets map[string]string) []string {
+	names := make([]string, 0, len(secrets))
+	for name := range secrets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // DatabaseConfig holds database configuration. Only SQLite/libsql are

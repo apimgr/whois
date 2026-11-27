@@ -1,9 +1,8 @@
 {{define "theme_toggle"}}
 <form method="post" action="{{path "/server/preferences"}}" class="theme-toggle-form">
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-  <button id="theme-toggle" class="btn-theme" type="submit" name="action" value="theme_toggle" aria-label="{{t .Lang "theme.toggle"}}" title="{{t .Lang "theme.toggle"}}">
-    <span class="icon-sun" aria-hidden="true">&#9788;</span>
-    <span class="icon-moon" aria-hidden="true">&#9790;</span>
+  <button id="theme-toggle" class="btn btn-ghost" type="submit" name="action" value="theme_toggle" title="{{t .Lang "theme.toggle"}}">
+    {{t .Lang "theme.toggle"}}
   </button>
 </form>
 {{end}}

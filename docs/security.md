@@ -71,8 +71,8 @@ server also publishes `/.well-known/security.txt` with that URL, a short-lived
 `/server/contact?security_id=...` report link, the optional security email
 address, a policy URL, and an expiry date. The same public contact information
 is rendered at `/server/security` and is available from
-`GET /api/v1/server/security`. The contact form is noindex and is not linked
-from general site navigation.
+`GET https://caswhois.apimgr.dev/api/v1/server/security`. The contact form is
+noindex and is not linked from general site navigation.
 
 When a security PGP keypair exists, `/.well-known/pgp-key.asc` serves the
 ASCII-armored public key and the security API includes its URL and fingerprint
@@ -99,7 +99,7 @@ disclosure date; this private status view has no API mirror. Its token is
 accepted once per UTC day and expires 30 days after a report is closed.
 Disclosed reports may appear on `/server/security/thanks` when the
 researcher opted in; the same list is returned by
-`GET /api/v1/server/security/thanks`.
+`GET https://caswhois.apimgr.dev/api/v1/server/security/thanks`.
 
 Operators manage report metadata from the CLI:
 

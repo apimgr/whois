@@ -32,8 +32,8 @@ SCRIPT_SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 echo "$APPNAME $VERSION: running basic tests as $RUN_USER (uid $SET_UID)"
 
 if command -v docker &>/dev/null; then
-    echo "Docker detected - running the basic tests..."
-    exec "$SCRIPT_SRC_DIR/docker.sh"
+  echo "Docker detected - running the basic tests..."
+  exec "$SCRIPT_SRC_DIR/docker.sh"
 fi
 
 echo "ERROR: docker not found: every test script builds with Docker" >&2

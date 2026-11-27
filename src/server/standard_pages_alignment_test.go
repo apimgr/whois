@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apimgr/whois/src/config"
 	"github.com/apimgr/whois/src/security"
 	htmlparse "golang.org/x/net/html"
 )
@@ -60,7 +61,7 @@ func TestSecurityAPIListsConfiguredDisclosureChannels(t *testing.T) {
 	if response.Data.Contacts[0].Type != "github" || response.Data.Contacts[0].Value != "https://github.com/apimgr/whois/security/advisories/new" {
 		t.Errorf("first contact = %#v, want GitHub reporting channel", response.Data.Contacts[0])
 	}
-	if response.Data.Contacts[1].Type != "form" || !strings.HasPrefix(response.Data.Contacts[1].Value, "http://whois.example.test/server/contact?security_id=") {
+	if response.Data.Contacts[1].Type != "contact_form" || !strings.HasPrefix(response.Data.Contacts[1].Value, "http://whois.example.test/server/contact?security_id=") {
 		t.Errorf("second contact = %#v, want generated instance report URL", response.Data.Contacts[1])
 	}
 	if response.Data.Contacts[2].Type != "email" || response.Data.Contacts[2].Value != "mailto:security@example.test" {
@@ -86,11 +87,10 @@ func TestContactDisabledReturnsNotFound(t *testing.T) {
 
 func TestRegisteredServerPagesUseSharedShell(t *testing.T) {
 	s := newTestServer(t)
-	s.config.Pages.About.Content = "# Operator about text\n\n## About section"
-	s.config.Pages.Privacy.Content = "# Operator privacy text\n\n## Privacy section"
-	s.config.Pages.Terms.Content = "# Operator terms text\n\n## Terms section"
+	s.config.Branding.Content.About = config.ContentOverride{Format: "md", Body: "# Operator about text\n\n## About section"}
+	s.config.Branding.Content.Privacy = config.ContentOverride{Format: "md", Body: "# Operator privacy text\n\n## Privacy section"}
+	s.config.Branding.Content.Terms = config.ContentOverride{Format: "md", Body: "# Operator terms text\n\n## Terms section"}
 	s.config.Pages.Help.Content = "# Operator help text\n\n## Help section"
-	s.config.Privacy.Content.DataCollection = "# Collection text\n\n## Collection detail"
 	s.config.Web.Security.Policy = "# Reporting policy\n\n## Policy detail"
 	handler := s.setupRoutes()
 	trackingID := "sec_0123456789abcdef"
@@ -144,7 +144,7 @@ func TestRegisteredServerPagesUseSharedShell(t *testing.T) {
 			}{
 				{name: "main landmark", count: strings.Count(body, "<main")},
 				{name: "page title", count: strings.Count(body, "<h1")},
-				{name: "shared header", count: strings.Count(body, `<header class="header">`)},
+				{name: "shared header", count: strings.Count(body, `<header class="site-header">`)},
 				{name: "main skip link", count: strings.Count(body, `href="#main-content"`)},
 				{name: "navigation skip link", count: strings.Count(body, `href="#navigation"`)},
 			} {
@@ -171,8 +171,8 @@ func TestConfiguredHeaderFragmentFollowsHeaderActions(t *testing.T) {
 		t.Fatalf("GET /server/about status = %d: %s", recorder.Code, recorder.Body.String())
 	}
 	body := recorder.Body.String()
-	actions := strings.Index(body, `class="header-actions"`)
-	fragment := strings.Index(body, `<div class="header-branding"><span>Operator notice</span></div>`)
+	actions := strings.Index(body, `class="site-header-actions"`)
+	fragment := strings.Index(body, `<span>Operator notice</span>`)
 	headerEnd := strings.Index(body, "</header>")
 	if actions < 0 || fragment <= actions || headerEnd <= fragment {
 		t.Fatalf("configured header fragment is not after actions inside the shared header: %s", body)
@@ -456,7 +456,7 @@ func assertHeaderConformance(t *testing.T, path string, doc *htmlparse.Node) {
 	visit = func(node *htmlparse.Node) {
 		if node.Type == htmlparse.ElementNode && node.Data == "header" {
 			classes, _ := htmlAttribute(node, "class")
-			if strings.Contains(" "+classes+" ", " header ") {
+			if strings.Contains(" "+classes+" ", " site-header ") {
 				header = node
 			}
 		}
@@ -474,18 +474,31 @@ func assertHeaderConformance(t *testing.T, path string, doc *htmlparse.Node) {
 		if child.Type != htmlparse.ElementNode {
 			continue
 		}
-		if child.Data != "a" && child.Data != "nav" && child.Data != "label" && child.Data != "div" {
+		classes, _ := htmlAttribute(child, "class")
+		if child.Data == "input" {
+			id, _ := htmlAttribute(child, "id")
+			inputType, _ := htmlAttribute(child, "type")
+			if id != "nav-toggle" || inputType != "checkbox" || !strings.Contains(" "+classes+" ", " nav-checkbox ") {
+				t.Errorf("%s header has an unexpected direct input", path)
+			} else {
+				counts["nav-checkbox"]++
+			}
+			continue
+		}
+		if child.Data != "a" && child.Data != "nav" && child.Data != "label" && child.Data != "div" && child.Data != "span" {
 			t.Errorf("%s header has disallowed direct child <%s>", path, child.Data)
 		}
-		classes, _ := htmlAttribute(child, "class")
 		for _, class := range strings.Fields(classes) {
-			if class == "header-actions" || class == "header-branding" {
+			if class == "site-header-actions" {
 				counts[class]++
 			}
 		}
 	}
-	if counts["header-actions"] != 1 || counts["header-branding"] > 1 {
-		t.Errorf("%s header has %d actions blocks and %d configured fragments", path, counts["header-actions"], counts["header-branding"])
+	if counts["site-header-actions"] != 1 {
+		t.Errorf("%s header has %d actions blocks; want one", path, counts["site-header-actions"])
+	}
+	if counts["nav-checkbox"] != 1 {
+		t.Errorf("%s header has %d mobile navigation checkboxes; want one", path, counts["nav-checkbox"])
 	}
 }
 

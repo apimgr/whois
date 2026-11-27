@@ -13,55 +13,55 @@ INTERNAL_NAME="$(sed -n 's/^internal_name:[[:space:]]*//p' "$PROJECT_DIR/IDEA.md
 CONTAINER_NAME="${PROJECT_NAME}-$(date +%s%N | sha256sum | cut -c1-8)"
 
 image_check() {
-    local image_ref port elapsed tor_status outbound
-    image_ref="${1:?Usage: tests/docker.sh --image-check IMAGE}"
-    CONTAINER_NAME="${PROJECT_NAME}-image-check-$(date +%s%N | sha256sum | cut -c1-8)"
-    docker run --rm --no-healthcheck --name "${PROJECT_NAME}-image-contract-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" --entrypoint sh "$image_ref" -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'
-    docker run -d --no-healthcheck --name "$CONTAINER_NAME" \
-        --tmpfs /config:rw,mode=1777 --tmpfs /data:rw,mode=1777 \
-        -p 127.0.0.1::80 "$image_ref" >/dev/null
-    port="$(docker port "$CONTAINER_NAME" 80/tcp | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n1)"
-    if [ -z "$port" ]; then
-        echo "ERROR: unable to determine mapped health port for $image_ref" >&2
-        return 1
-    fi
+  local image_ref port elapsed tor_status outbound
+  image_ref="${1:?Usage: tests/docker.sh --image-check IMAGE}"
+  CONTAINER_NAME="${PROJECT_NAME}-image-check-$(date +%s%N | sha256sum | cut -c1-8)"
+  docker run --rm --no-healthcheck --name "${PROJECT_NAME}-image-contract-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" --entrypoint sh "$image_ref" -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'
+  docker run -d --no-healthcheck --name "$CONTAINER_NAME" \
+    --tmpfs /config:rw,mode=1777 --tmpfs /data:rw,mode=1777 \
+    -p 127.0.0.1::80 "$image_ref" >/dev/null
+  port="$(docker port "$CONTAINER_NAME" 80/tcp | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n1)"
+  if [ -z "$port" ]; then
+    echo "ERROR: unable to determine mapped health port for $image_ref" >&2
+    return 1
+  fi
 
-    elapsed=0
-    tor_status=""
-    while [ "$elapsed" -lt "${TOR_BOOTSTRAP_TIMEOUT:-180}" ]; do
-        tor_status="$(curl -q -sS --connect-timeout 2 --max-time 5 -H 'Accept: application/json' "http://127.0.0.1:$port/api/v1/server/healthz" 2>/dev/null | sed -n '/"tor": {/,/}/p' | sed -n 's/.*"status":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
-        if [ "$tor_status" = healthy ]; then
-            echo "PASS image contract and Tor health: $image_ref"
-            return 0
-        fi
-        if [ "$tor_status" = error ]; then
-            echo "ERROR: Tor reported error in $image_ref" >&2
-            return 1
-        fi
-        sleep 1
-        elapsed=$((elapsed + 1))
-    done
+  elapsed=0
+  tor_status=""
+  while [ "$elapsed" -lt "${TOR_BOOTSTRAP_TIMEOUT:-180}" ]; do
+    tor_status="$(curl -q -sS --connect-timeout 2 --max-time 5 -H 'Accept: application/json' "http://127.0.0.1:$port/api/v1/server/healthz" 2>/dev/null | sed -n '/"tor": {/,/}/p' | sed -n 's/.*"status":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
+    if [ "$tor_status" = healthy ]; then
+      echo "PASS image contract and Tor health: $image_ref"
+      return 0
+    fi
+    if [ "$tor_status" = error ]; then
+      echo "ERROR: Tor reported error in $image_ref" >&2
+      return 1
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
 
-    if [ "${REQUIRE_OVERLAY:-0}" = 1 ]; then
-        echo "ERROR: Tor did not become healthy within ${TOR_BOOTSTRAP_TIMEOUT:-180}s (status: ${tor_status:-unknown})" >&2
-        return 1
-    fi
-    outbound=0
-    if command -v curl >/dev/null 2>&1 && curl -q -fsS --connect-timeout 5 --max-time 10 https://check.torproject.org/ >/dev/null 2>&1; then
-        outbound=1
-    fi
-    if [ "$outbound" -eq 0 ] && { [ "$tor_status" = starting ] || [ "$tor_status" = unavailable ]; }; then
-        echo "SKIP: no outbound network" >&2
-        return 0
-    fi
+  if [ "${REQUIRE_OVERLAY:-0}" = 1 ]; then
     echo "ERROR: Tor did not become healthy within ${TOR_BOOTSTRAP_TIMEOUT:-180}s (status: ${tor_status:-unknown})" >&2
     return 1
+  fi
+  outbound=0
+  if command -v curl >/dev/null 2>&1 && curl -q -fsS --connect-timeout 5 --max-time 10 https://check.torproject.org/ >/dev/null 2>&1; then
+    outbound=1
+  fi
+  if [ "$outbound" -eq 0 ] && { [ "$tor_status" = starting ] || [ "$tor_status" = unavailable ]; }; then
+    echo "SKIP: no outbound network" >&2
+    return 0
+  fi
+  echo "ERROR: Tor did not become healthy within ${TOR_BOOTSTRAP_TIMEOUT:-180}s (status: ${tor_status:-unknown})" >&2
+  return 1
 }
 
 if [ "${1:-}" = --image-check ]; then
-    trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT INT TERM
-    image_check "${2:-}"
-    exit $?
+  trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT INT TERM
+  image_check "${2:-}"
+  exit $?
 fi
 
 DOCKER_MEM="${DOCKER_MEM:-4g}"
@@ -71,10 +71,10 @@ DOCKER_TIMEOUT="${DOCKER_TIMEOUT:-3600}"
 ARTIFACT_DIR=""
 
 cleanup() {
-    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-    if [ -n "$ARTIFACT_DIR" ]; then
-        rm -rf -- "$ARTIFACT_DIR"
-    fi
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  if [ -n "$ARTIFACT_DIR" ]; then
+    rm -rf -- "$ARTIFACT_DIR"
+  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -91,17 +91,18 @@ echo "Building server and CLI binaries in Docker..."
 make build BINDIR="$BIN_DIR" RELDIR="$RELEASE_DIR"
 
 if [ ! -x "$BIN_DIR/$INTERNAL_NAME" ]; then
-    echo "ERROR: server binary missing: $BIN_DIR/$INTERNAL_NAME" >&2
-    exit 1
+  echo "ERROR: server binary missing: $BIN_DIR/$INTERNAL_NAME" >&2
+  exit 1
 fi
 
 timeout -k 30 "$DOCKER_TIMEOUT" docker run --rm --no-healthcheck --name "$CONTAINER_NAME" \
-    --memory="$DOCKER_MEM" --cpus="$DOCKER_CPUS" --cpu-shares="$DOCKER_CPU_SHARES" \
-    -v "$BIN_DIR:/binaries:ro" \
-    -e PROJECT_NAME="$PROJECT_NAME" \
-    -e PROJECT_ORG="$PROJECT_ORG" \
-    -e INTERNAL_NAME="$INTERNAL_NAME" \
-    alpine:latest sh -eu -c "$(cat <<'CONTAINER_SCRIPT'
+  --memory="$DOCKER_MEM" --cpus="$DOCKER_CPUS" --cpu-shares="$DOCKER_CPU_SHARES" \
+  -v "$BIN_DIR:/binaries:ro" \
+  -e PROJECT_NAME="$PROJECT_NAME" \
+  -e PROJECT_ORG="$PROJECT_ORG" \
+  -e INTERNAL_NAME="$INTERNAL_NAME" \
+  alpine:latest sh -eu -c "$(
+    cat <<'CONTAINER_SCRIPT'
         apk add --no-cache curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
         mkdir -p "/tmp/$PROJECT_ORG"
         TEST_ROOT=$(mktemp -d "/tmp/$PROJECT_ORG/$INTERNAL_NAME-XXXXXX")
@@ -247,4 +248,4 @@ timeout -k 30 "$DOCKER_TIMEOUT" docker run --rm --no-healthcheck --name "$CONTAI
         fi
         echo "PASS Docker binary integration tests"
 CONTAINER_SCRIPT
-)"
+  )"

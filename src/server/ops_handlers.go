@@ -1,14 +1,20 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/apimgr/whois/src/backup"
+	"github.com/apimgr/whois/src/common/constants"
+	"github.com/apimgr/whois/src/config"
+	caslogger "github.com/apimgr/whois/src/logger"
 )
 
 // runBackup builds the BackupOptions for the current server config and
@@ -16,35 +22,130 @@ import (
 // HTTP handler (handleBackupRun) and the scheduler hooks (backup_daily /
 // backup_hourly). prefix controls the filename prefix; pass "backup" for
 // daily/full backups and "backup-hourly" for hourly incrementals.
-func (s *Server) runBackup(prefix string) (string, error) {
+func (s *Server) runBackup(prefix string) (resultFilename string, resultErr error) {
+	failureAction := "backup.failed"
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		if strings.Contains(resultErr.Error(), "backup.skipped_disk_full") {
+			failureAction = "backup.skipped_disk_full"
+		}
+		s.recordBackupEvent(failureAction, fmt.Sprintf("filename=%s error=%s", resultFilename, resultErr), false)
+		if failureAction != "backup.skipped_disk_full" {
+			s.notifyBackup("backup_failed", resultFilename, 0, resultErr)
+		}
+	}()
 	backupDir := s.config.GetBackupDir()
-	if err := os.MkdirAll(backupDir, 0750); err != nil {
-		return "", fmt.Errorf("create backup directory: %w", err)
+	if err := backup.EnsureBackupDir(backupDir); err != nil {
+		return "", err
+	}
+	if err := backup.SweepBackupArtifacts(backupDir); err != nil {
+		return "", err
+	}
+	if err := backup.CheckBackupDiskSpace(backupDir, s.config.Maintenance.Cleanup.DiskThreshold); err != nil {
+		log.Printf("ERROR: %v", err)
+		return "", err
 	}
 
-	filename := prefix + "-" + time.Now().UTC().Format("20060102-150405") + ".tar.gz"
-	destPath := filepath.Join(backupDir, filename)
-
-	password := ""
-	if s.config.Backup.Encryption.Enabled {
-		// Server token doubles as the backup encryption key (AI.md PART 21).
-		password = s.config.ServerToken
+	password, err := config.LoadBackupPassword(s.config.ConfigDir, s.config)
+	if err != nil {
+		return "", err
 	}
-
+	if s.config.Compliance.Enabled && password == "" {
+		return "", fmt.Errorf("backups require encryption in compliance mode; set server.backup.encryption_password in secrets.yml")
+	}
+	if password == "" {
+		log.Printf("WARN: backup encryption is not configured; creating an unencrypted backup")
+	}
+	extension := ".tar.gz"
+	if password != "" {
+		extension += ".enc"
+	}
+	now := time.Now().UTC()
 	opts := &backup.BackupOptions{
-		ConfigDir:   s.config.ConfigDir,
-		DataDir:     s.config.GetDatabaseDir(),
-		OutputFile:  destPath,
-		Password:    password,
-		IncludeData: true,
-		AppVersion:  "dev",
+		ConfigDir:          s.config.ConfigDir,
+		DataDir:            s.config.GetDatabaseDir(),
+		Password:           password,
+		IncludeData:        false,
+		AppVersion:         "dev",
+		BackupDir:          backupDir,
+		SnapshotAt:         now,
+		ConnectionTLSFiles: []string{s.config.Cache.TLSCA, s.config.Cache.TLSCert, s.config.Cache.TLSKey},
+		ExternalTLSFiles:   []backup.ExternalTLSFile{{Name: "cert.pem", Path: s.config.TLS.Cert}, {Name: "key.pem", Path: s.config.TLS.Key}},
 	}
-
+	if s.database != nil {
+		appSecrets, err := s.database.ExportAppSecrets(context.Background())
+		if err != nil {
+			return "", fmt.Errorf("export application secrets: %w", err)
+		}
+		opts.AppSecrets = appSecrets
+	}
+	if prefix == "backup-hourly" {
+		filename := constants.InternalName + "-hourly" + extension
+		opts.OutputFile = filepath.Join(backupDir, filename)
+		if err := backup.CreateIncremental(opts, "hourly"); err != nil {
+			if errors.Is(err, backup.ErrNoFullBackup) {
+				return "", nil
+			}
+			if errors.Is(err, backup.ErrBackupPasswordChanged) || errors.Is(err, backup.ErrCorruptBackupBase) {
+				log.Printf("WARN: hourly incremental skipped: %v", err)
+				return "", nil
+			}
+			return filename, fmt.Errorf("create hourly incremental: %w", err)
+		}
+		if err := backup.VerifyBackup(opts.OutputFile, password); err != nil {
+			_ = os.Remove(opts.OutputFile)
+			failureAction = "backup.verification_failed"
+			return filename, fmt.Errorf("hourly incremental verification failed: %w", err)
+		}
+		s.recordCreatedBackup(filename, opts.OutputFile, password != "")
+		return filename, nil
+	}
+	if prefix == "backup-daily" {
+		filename := constants.InternalName + "-daily" + extension
+		opts.OutputFile = filepath.Join(backupDir, filename)
+		if err := backup.CreateIncremental(opts, "daily"); err != nil {
+			switch {
+			case errors.Is(err, backup.ErrNoFullBackup):
+			case errors.Is(err, backup.ErrBackupPasswordChanged):
+				log.Printf("INFO: backup encryption password changed; skipping daily incremental")
+			case errors.Is(err, backup.ErrCorruptBackupBase):
+				log.Printf("WARN: corrupt incremental base; skipping daily incremental: %v", err)
+			default:
+				return filename, fmt.Errorf("create daily incremental: %w", err)
+			}
+		} else {
+			if err := backup.VerifyBackup(opts.OutputFile, password); err != nil {
+				_ = os.Remove(opts.OutputFile)
+				failureAction = "backup.verification_failed"
+				return filename, fmt.Errorf("daily incremental verification failed: %w", err)
+			}
+			s.recordBackupEvent("backup.daily_updated", fmt.Sprintf("filename=%s", filename), true)
+		}
+	}
+	dateFormat := "2006-01-02_150405"
+	if prefix == "backup-daily" {
+		dateFormat = "2006-01-02"
+		dailyPath := filepath.Join(backupDir, fmt.Sprintf("%s_backup_%s%s", constants.InternalName, now.Format(dateFormat), extension))
+		if _, err := os.Stat(dailyPath); err == nil {
+			dateFormat = "2006-01-02_150405"
+		}
+	}
+	filename := fmt.Sprintf("%s_backup_%s%s", constants.InternalName, now.Format(dateFormat), extension)
+	destPath := filepath.Join(backupDir, filename)
+	opts.OutputFile = destPath
 	if err := backup.Create(opts); err != nil {
 		return filename, fmt.Errorf("backup.Create: %w", err)
 	}
+	if err := backup.VerifyBackup(destPath, password); err != nil {
+		_ = os.Remove(destPath)
+		failureAction = "backup.verification_failed"
+		return filename, fmt.Errorf("backup verification failed: %w", err)
+	}
 
 	// Apply retention policy after successful creation (AI.md PART 21).
+	beforeRetention := backupArchiveNames(backupDir)
 	if err := backup.ApplyRetentionPolicy(
 		backupDir,
 		s.config.Backup.Retention.MaxBackups,
@@ -54,8 +155,86 @@ func (s *Server) runBackup(prefix string) (string, error) {
 		s.config.Backup.Retention.MaxTotalSize,
 	); err != nil {
 		log.Printf("WARN: backup retention failed: %v", err)
+		s.recordBackupEvent("backup.retention_cleanup", fmt.Sprintf("error=%s", err), false)
+	} else {
+		remaining := backupArchiveNames(backupDir)
+		var deleted []string
+		for name := range beforeRetention {
+			if !remaining[name] {
+				deleted = append(deleted, name)
+			}
+		}
+		if len(deleted) > 0 {
+			s.recordBackupEvent("backup.retention_cleanup", fmt.Sprintf("deleted=%s remaining_count=%d reason=retention_policy", strings.Join(deleted, ","), len(remaining)), true)
+		}
 	}
+	s.recordCreatedBackup(filename, destPath, password != "")
 	return filename, nil
+}
+
+func (s *Server) recordCreatedBackup(filename, path string, encrypted bool) {
+	size := int64(0)
+	if info, err := os.Stat(path); err == nil {
+		size = info.Size()
+	}
+	s.recordBackupEvent("backup.created", fmt.Sprintf("filename=%s size=%d encrypted=%t verification=passed", filename, size, encrypted), true)
+	s.notifyBackup("backup_complete", filename, size, nil)
+}
+
+func (s *Server) recordBackupEvent(action, details string, success bool) {
+	if s.logger == nil {
+		return
+	}
+	level := "INFO"
+	if !success {
+		level = "ERROR"
+	}
+	s.logger.WriteAudit(caslogger.AuditEntry{Level: level, Category: "backup", Action: action, Source: "system", Details: details, Success: success})
+	severity := "info"
+	if !success {
+		severity = "critical"
+	}
+	s.dispatchAdminWebhooks(action, "Backup event: "+action, details, severity)
+}
+
+func (s *Server) notifyBackup(template, filename string, size int64, failure error) {
+	if s.email == nil || s.config == nil || strings.TrimSpace(s.config.Contact.Admin.Email) == "" {
+		return
+	}
+	fqdn := s.config.FQDN
+	appURL := ""
+	if fqdn != "" {
+		appURL = "https://" + fqdn
+	}
+	errorText := ""
+	if failure != nil {
+		errorText = failure.Error()
+	}
+	if err := s.email.SendEmail(s.config.Contact.Admin.Email, template, map[string]string{
+		"app_name":  constants.InternalName,
+		"fqdn":      fqdn,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"filename":  filename,
+		"size":      fmt.Sprintf("%d bytes", size),
+		"error":     errorText,
+		"app_url":   appURL,
+	}); err != nil {
+		log.Printf("WARN: backup notification delivery failed: %v", err)
+	}
+}
+
+func backupArchiveNames(dir string) map[string]bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	names := make(map[string]bool)
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.Contains(entry.Name(), ".tar.gz") {
+			names[entry.Name()] = true
+		}
+	}
+	return names
 }
 
 // ---- Scheduler handlers -------------------------------------------------------

@@ -11,21 +11,51 @@ import (
 	"github.com/apimgr/whois/src/graphql"
 )
 
-// TestHandleGraphQLMethodNotAllowed verifies GET returns 405.
-func TestHandleGraphQLMethodNotAllowed(t *testing.T) {
+// TestHandleGraphQLGetWithoutQueryReturnsUsage verifies a query-less GET receives usage text.
+func TestHandleGraphQLGetWithoutQueryReturnsUsage(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/graphql", nil)
 	rr := httptest.NewRecorder()
 
 	s.handleGraphQL(rr, req)
 
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Usage: GET") {
+		t.Errorf("usage response = %q", rr.Body.String())
+	}
+}
+
+// TestHandleGraphQLGetQuery verifies read-only queries can use GET.
+func TestHandleGraphQLGetQuery(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/graphql?query=%7Bhealth%7Bok%20status%20version%7D%7D", nil)
+	rr := httptest.NewRecorder()
+	s.handleGraphQL(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+	var response graphql.GraphQLResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Errors) > 0 || response.Data == nil {
+		t.Fatalf("GET query response = %#v", response)
+	}
+}
+
+// TestHandleGraphQLUnsupportedMethodNotAllowed verifies unsupported methods are rejected.
+func TestHandleGraphQLUnsupportedMethodNotAllowed(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodPut, "/api/graphql", nil)
+	rr := httptest.NewRecorder()
+	s.handleGraphQL(rr, req)
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rr.Code)
 	}
-
-	allow := rr.Header().Get("Allow")
-	if allow != "POST" {
-		t.Errorf("Allow = %q, want POST", allow)
+	if allow := rr.Header().Get("Allow"); allow != "GET, POST" {
+		t.Errorf("Allow = %q, want GET, POST", allow)
 	}
 }
 
