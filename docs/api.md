@@ -75,6 +75,14 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/sync` | Public | Export the current appearance, language, and privacy preferences as a URL and code |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/preferences/sync/import` | Public | Apply preferences supplied as query values or a sync code |
 
+Linked-token creation accepts `scope: "read"` or `scope: "read-write"` and
+defaults to `read-write`; token-list and creation responses include each
+token's scope. Primary owner tokens and the configured operator token have
+global scope. A read-scoped linked token cannot create, rotate, reveal, edit,
+or revoke tokens and receives `403` with
+`WWW-Authenticate: Bearer error="insufficient_scope"` on token-management
+requests.
+
 Preference updates accept JSON or form data. Only supported values are applied;
 unknown or invalid values are returned in the `ignored` list. Updating a
 preference requires the visitor to have granted preferences consent. Sync links contain the selected preferences and should be shared only with

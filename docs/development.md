@@ -44,10 +44,11 @@ The binary-validation suite is separate from `make test` and requires Docker:
 ./tests/incus.sh openrc   # Alpine with OpenRC only
 ```
 
-After publishing an image, check its required runtime packages and Tor health
-with `./tests/docker.sh --image-check IMAGE`. `make docker` and the image CI
-jobs run this check automatically for the standard and development images. The
-check waits up to `TOR_BOOTSTRAP_TIMEOUT` seconds (default `180`); set
+After building or pulling an image, check its required runtime packages and Tor
+health with `./tests/docker.sh --image-check IMAGE`. `make docker` builds and
+loads the host-platform image locally without publishing it, then runs this
+check. Image CI jobs publish multi-architecture standard and development images
+and run the same check. The check waits up to `TOR_BOOTSTRAP_TIMEOUT` seconds (default `180`); set
 `REQUIRE_OVERLAY=1` when Tor must become healthy even without outbound network.
 
 The Go test suite is colocated with packages under `src/`. Browser E2E checks

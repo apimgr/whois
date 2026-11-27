@@ -216,6 +216,21 @@ Field-level parsing rules and RDAP-to-WHOIS mappings are implementation details 
 - mTLS between caswhois and upstream WHOIS servers — not supported by upstream protocol
 - Proof of WHOIS result authenticity — upstream provides none; we relay as-is
 
+### API routes
+
+These are the project-defined WHOIS API routes. Shared server, health, preferences, token, scheduler, backup, GraphQL, and MCP routes are defined by AI.md.
+
+| Method | Path | Auth | Purpose and request/response |
+|--------|------|------|------------------------------|
+| GET | `/api/{api_version}/whois/{query}` | Public | Auto-detect and look up a domain, IP address, or ASN; query path value returns the normalized lookup response. |
+| GET | `/api/{api_version}/whois/domain/{domain}` | Public | Look up a domain and return its normalized RDAP/WHOIS record. |
+| GET | `/api/{api_version}/whois/ip/{ip}` | Public | Look up an IPv4 or IPv6 address and return its normalized record. |
+| GET | `/api/{api_version}/whois/asn/{asn}` | Public | Look up an ASN and return its normalized record. |
+| GET | `/api/{api_version}/whois/validate/{query}` | Public | Validate a domain, IP address, or ASN query and return validation details. |
+| GET | `/api/{api_version}/whois/search` | Public | Search the local registrant dataset with the `owner` query parameter; returns matching records. |
+| POST | `/api/{api_version}/whois/bulk` | Operator bearer token | Submit a bounded list of queries and receive per-query lookup results. |
+| GET | `/api/{api_version}/whois-servers` | Public | List supported WHOIS server information. |
+
 ### Security decisions & exceptions
 
 **Intentional security decisions (documented here per AI.md PART 1):**
