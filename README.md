@@ -380,10 +380,10 @@ docker-compose -f docker-compose.dev.yml up --build
 
 **Testing:**
 ```bash
-# Go unit tests and coverage gate
+# Go quality gates, unit tests, coverage, and basic Docker integration checks
 make test
 
-# Basic compiled-binary integration tests (Docker required)
+# Re-run only the basic compiled-binary integration suite
 ./tests/run_tests.sh
 
 # Run the basic Docker suite directly

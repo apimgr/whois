@@ -29,12 +29,14 @@ Build outputs are generated artifacts and should not be committed. Run build com
 ## Validation
 
 ```bash
-make test      # CSS contract, Go static checks, vulnerability scan, tests, and locale validation
+make test      # Go quality gates, unit tests, coverage, locale checks, and basic Docker integration
 ```
 
-`make test` parses every embedded stylesheet with the pure-Go CSS contract test, then runs `go fmt`, `go vet`, `govulncheck`, the Go tests, the coverage threshold, and locale parity validation inside the Go container. Test output stays in the project-scoped temporary directory. CI also runs the configured static analysis jobs.
+`make test` runs `go fmt`, `go vet`, `staticcheck`, `govulncheck`, ShellCheck, `shfmt -d`, license verification, the Go tests, the coverage threshold, and locale parity validation inside the Go container. It then runs the basic Docker binary and HTTP integration suite. Test output stays in the project-scoped temporary directory.
 
-The binary-validation suite is separate from `make test` and requires Docker:
+License verification scans the Go packages shipped from `src/` and rejects GPL, AGPL, and LGPL dependencies. A reviewed exception must be recorded in `.github/license-overrides.txt`; the generated license report and third-party license texts are kept in a private temporary directory and removed when the check finishes. GitHub, GitLab, Gitea, and Forgejo CI run the same verification script.
+
+The basic binary suite can also be run on its own, and the full browser E2E and init-system suites remain explicit:
 
 ```bash
 ./tests/run_tests.sh   # basic Docker tier
@@ -53,11 +55,24 @@ and run the same check. The check waits up to `TOR_BOOTSTRAP_TIMEOUT` seconds (d
 
 The Go test suite is colocated with packages under `src/`. Browser E2E checks
 are available through `./tests/e2e.sh`; they require Docker and Chromium. The
-suite checks SSR, no-JavaScript behavior, and full browser behavior, including
-registered server pages, WHOIS validation, language switching, API documentation
-route parity, CSRF rejection, internal-link crawling, responsive layout, and
-accessibility through the vendored axe-core script. Keep test and build output in
-the project-scoped temporary locations selected by the Makefile.
+suite runs SSR, no-JavaScript, and full-browser tiers against a fresh database
+and a local RDAP fixture, with the runner network isolated from the internet. It
+checks real WHOIS results, primary and linked owner-token issue/list/reveal/
+rotate/revoke behavior, MCP calls with primary and linked tokens, language
+switching, API documentation parity, CSRF rejection, internal-link crawling,
+themed error pages, static assets, responsive layout, and accessibility through
+the vendored axe-core script. The layout contract visits registered pages in
+dark, light, and auto themes, in both text directions, at mobile and desktop
+viewports; component-gallery checks cover the full breakpoint matrix. Optional
+filters are available for focused investigation:
+
+```bash
+E2E_RUN=TestTier2NoJavaScriptWHOISForm ./tests/e2e.sh
+E2E_PAGE=/server/docs ./tests/e2e.sh
+```
+
+Keep test and build output in the project-scoped temporary locations selected by
+the Makefile and E2E runner.
 
 ## Running locally
 
