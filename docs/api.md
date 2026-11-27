@@ -11,6 +11,11 @@ The public service API base is `https://caswhois.apimgr.dev/api/v1`. For a
 service you operate, replace that origin with your server's URL. The configured
 API version is exposed by the server.
 
+The server mounts API handlers from one route registry. OpenAPI JSON and
+`/llms.txt` are generated from its public and authenticated entries; MCP tools
+use the same definitions and apply the caller's token scope. Use the live
+OpenAPI response for the exact operation list and request schemas.
+
 ```http
 Authorization: Bearer <server-token>
 ```
@@ -56,6 +61,7 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 | GET | `https://caswhois.apimgr.dev/api/v1/server/privacy` | Public | Privacy policy data |
 | GET, POST | `https://caswhois.apimgr.dev/api/v1/server/contact` | Public | Contact form descriptors and two-step submission |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/help` | Public | Help content |
+| GET | `https://caswhois.apimgr.dev/api/v1/server/help/mcp` | Public | MCP integration instructions and available tools |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/terms` | Public | Terms of service |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/dpo` | Public | Data protection contact |
 | GET | `https://caswhois.apimgr.dev/api/v1/server/security` | Public | Security policy/contact data |
