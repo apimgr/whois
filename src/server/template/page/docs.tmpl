@@ -7,18 +7,15 @@
 {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
 
 <main id="main-content">
-  <header class="page-header">
-    <div class="container container-md">
+  <div class="container container-md">
+    <header class="page-header">
       <h1 class="page-title">{{.Name}} {{t .Lang "docs.title_prefix"}}</h1>
-      <p>{{t .Lang "docs.subtitle"}}</p>
-    </div>
-  </header>
+      <p class="page-lead">{{t .Lang "docs.subtitle"}}</p>
+    </header>
 
-  <div class="container docs-layout container-md">
-
-    <aside class="docs-toc" aria-label="Table of contents">
+    <aside aria-label="{{t .Lang "docs.toc_heading"}}">
       <nav>
-        <p class="toc-heading">{{t .Lang "docs.toc_heading"}}</p>
+        <p>{{t .Lang "docs.toc_heading"}}</p>
         <ul>
           <li><a href="#base-url">{{t .Lang "docs.toc_base_url"}}</a></li>
           <li><a href="#auth">{{t .Lang "docs.toc_auth"}}</a></li>
@@ -31,27 +28,27 @@
       </nav>
     </aside>
 
-    <article class="docs-body">
+    <article>
 
-      <section class="card section-card" id="base-url" aria-labelledby="h-base-url">
+      <section class="section-card" id="base-url" aria-labelledby="h-base-url">
         <h2 id="h-base-url">{{t .Lang "docs.toc_base_url"}}</h2>
-        <pre class="code-block"><code>/api/{{.APIVersion}}</code></pre>
+        <div class="code-block" id="doc-code-1"><pre><code>/api/{{.APIVersion}}</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-1 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         <p>{{t .Lang "docs.base_url_desc_prefix"}} <code>/api/{{.APIVersion}}</code>.</p>
       </section>
 
-      <section class="card section-card" id="auth" aria-labelledby="h-auth">
+      <section class="section-card" id="auth" aria-labelledby="h-auth">
         <h2 id="h-auth">{{t .Lang "docs.toc_auth"}}</h2>
         <p>
           {{t .Lang "docs.auth_desc1"}}
         </p>
-        <pre class="code-block"><code>Authorization: Bearer adm_&lt;operator-token&gt; or own_&lt;owner-token&gt;</code></pre>
+        <div class="code-block" id="doc-code-2"><pre><code>Authorization: Bearer adm_&lt;operator-token&gt; or own_&lt;owner-token&gt;</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-2 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         <p>
           {{t .Lang "docs.auth_desc2_prefix"}}
           <code>server.yml</code>. {{t .Lang "docs.auth_desc2_suffix"}}
         </p>
       </section>
 
-      <section class="card section-card" id="formats" aria-labelledby="h-formats">
+      <section class="section-card" id="formats" aria-labelledby="h-formats">
         <h2 id="h-formats">{{t .Lang "docs.toc_formats"}}</h2>
         <p>
           {{t .Lang "docs.formats_desc"}}
@@ -71,63 +68,63 @@
         </div>
       </section>
 
-      <section class="card section-card" id="endpoints" aria-labelledby="h-endpoints">
+      <section class="section-card" id="endpoints" aria-labelledby="h-endpoints">
         <h2 id="h-endpoints">{{t .Lang "docs.toc_endpoints"}}</h2>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/server/healthz</code>
+          <div>
+          <div>
+            <span>GET</span>
+            <code>/server/healthz</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_healthz_desc"}}</p>
+          <p>{{t .Lang "docs.endpoint_healthz_desc"}}</p>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois/{query}</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/whois/{query}</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_whois_desc"}}</p>
-          <pre class="code-block"><code>GET /api/{{.APIVersion}}/whois/example.com
+          <p>{{t .Lang "docs.endpoint_whois_desc"}}</p>
+          <div class="code-block" id="doc-code-3"><pre><code>GET /api/{{.APIVersion}}/whois/example.com
 GET /api/{{.APIVersion}}/whois/8.8.8.8
-GET /api/{{.APIVersion}}/whois/AS15169</code></pre>
+GET /api/{{.APIVersion}}/whois/AS15169</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-3 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois/domain/{domain}</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/whois/domain/{domain}</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_domain_desc"}}</p>
-          <pre class="code-block"><code>GET /api/{{.APIVersion}}/whois/domain/github.com</code></pre>
+          <p>{{t .Lang "docs.endpoint_domain_desc"}}</p>
+          <div class="code-block" id="doc-code-4"><pre><code>GET /api/{{.APIVersion}}/whois/domain/github.com</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-4 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois/ip/{ip}</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/whois/ip/{ip}</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_ip_desc"}}</p>
-          <pre class="code-block"><code>GET /api/{{.APIVersion}}/whois/ip/1.1.1.1
-GET /api/{{.APIVersion}}/whois/ip/2001:4860:4860::8888</code></pre>
+          <p>{{t .Lang "docs.endpoint_ip_desc"}}</p>
+          <div class="code-block" id="doc-code-5"><pre><code>GET /api/{{.APIVersion}}/whois/ip/1.1.1.1
+GET /api/{{.APIVersion}}/whois/ip/2001:4860:4860::8888</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-5 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois/asn/{asn}</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/whois/asn/{asn}</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_asn_desc"}}</p>
-          <pre class="code-block"><code>GET /api/{{.APIVersion}}/whois/asn/AS13335</code></pre>
+          <p>{{t .Lang "docs.endpoint_asn_desc"}}</p>
+          <div class="code-block" id="doc-code-6"><pre><code>GET /api/{{.APIVersion}}/whois/asn/AS13335</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-6 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois/validate/{query}</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/whois/validate/{query}</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_validate_desc"}}</p>
-          <pre class="code-block"><code>GET /api/{{.APIVersion}}/whois/validate/example.com
+          <p>{{t .Lang "docs.endpoint_validate_desc"}}</p>
+          <div class="code-block" id="doc-code-7"><pre><code>GET /api/{{.APIVersion}}/whois/validate/example.com
 
 {
   "ok": true,
@@ -136,48 +133,48 @@ GET /api/{{.APIVersion}}/whois/ip/2001:4860:4860::8888</code></pre>
     "valid": true,
     "type": "domain"
   }
-}</code></pre>
+}</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-7 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-post">POST</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois/bulk</code>
-            <span class="auth-badge">{{t .Lang "docs.auth_required_badge"}}</span>
+        <div>
+          <div>
+            <span>POST</span>
+            <code>/api/{{.APIVersion}}/whois/bulk</code>
+            <span>{{t .Lang "docs.auth_required_badge"}}</span>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_bulk_desc"}}</p>
-          <pre class="code-block"><code>POST /api/{{.APIVersion}}/whois/bulk
+          <p>{{t .Lang "docs.endpoint_bulk_desc"}}</p>
+          <div class="code-block" id="doc-code-8"><pre><code>POST /api/{{.APIVersion}}/whois/bulk
 Authorization: Bearer adm_&lt;server-token&gt;
 Content-Type: application/json
 
 {
   "queries": ["example.com", "8.8.8.8", "AS15169"]
-}</code></pre>
+}</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-8 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/whois-servers</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/whois-servers</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_servers_desc"}}</p>
+          <p>{{t .Lang "docs.endpoint_servers_desc"}}</p>
         </div>
 
-        <div class="endpoint">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <code class="endpoint-path long-string">/api/{{.APIVersion}}/server/stats</code>
+        <div>
+          <div>
+            <span>GET</span>
+            <code>/api/{{.APIVersion}}/server/stats</code>
           </div>
-          <p class="endpoint-desc">{{t .Lang "docs.endpoint_stats_desc"}}</p>
+          <p>{{t .Lang "docs.endpoint_stats_desc"}}</p>
         </div>
 
       </section>
 
-      <section class="card section-card" id="response-schema" aria-labelledby="h-schema">
+      <section class="section-card" id="response-schema" aria-labelledby="h-schema">
         <h2 id="h-schema">{{t .Lang "docs.toc_response_schema"}}</h2>
 
         <h3>{{t .Lang "common.success"}}</h3>
-        <pre class="code-block"><code>{
+        <div class="code-block" id="doc-code-9"><pre><code>{
   "ok": true,
   "data": {
     "query":     "example.com",
@@ -186,17 +183,17 @@ Content-Type: application/json
     "timestamp": "2026-05-28T14:00:00Z",
     "raw":       "Domain Name: EXAMPLE.COM\n..."
   }
-}</code></pre>
+}</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-9 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "common.error"}}</h3>
-        <pre class="code-block"><code>{
+        <div class="code-block" id="doc-code-10"><pre><code>{
   "ok":      false,
   "error":   "VALIDATION_FAILED",
   "message": "Invalid domain format"
-}</code></pre>
+}</code></pre><button type="button" class="copy-btn" data-copy-target="#doc-code-10 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
       </section>
 
-      <section class="card section-card" id="rate-limits" aria-labelledby="h-rate">
+      <section class="section-card" id="rate-limits" aria-labelledby="h-rate">
         <h2 id="h-rate">{{t .Lang "docs.toc_rate_limits"}}</h2>
         <div class="table-wrapper">
           <table class="data-table">
@@ -211,7 +208,7 @@ Content-Type: application/json
         <p>{{t .Lang "docs.rate_limit_note"}}</p>
       </section>
 
-      <section class="card section-card" id="errors" aria-labelledby="h-errors">
+      <section class="section-card" id="errors" aria-labelledby="h-errors">
         <h2 id="h-errors">{{t .Lang "docs.toc_errors"}}</h2>
         <div class="table-wrapper">
           <table class="data-table">
@@ -233,7 +230,7 @@ Content-Type: application/json
       </section>
 
       <nav class="mt-sm">
-        <a href="{{path "/"}}" class="btn-primary-inline">{{t .Lang "common.new_lookup"}} &rarr;</a>
+        <a href="{{path "/"}}" class="btn btn-primary">{{t .Lang "common.new_lookup"}} &rarr;</a>
       </nav>
 
     </article>

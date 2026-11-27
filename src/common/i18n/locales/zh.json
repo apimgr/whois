@@ -32,7 +32,9 @@
     "details": "详情",
     "settings": "设置",
     "done": "完成",
-    "new_lookup": "新查询"
+    "new_lookup": "新查询",
+    "copied": "已复制！",
+    "response_description": "所请求的信息如下所示。"
   },
   "nav": {
     "home": "主页",
@@ -57,11 +59,23 @@
     "healthy": "健康",
     "degraded": "降级",
     "unhealthy": "不健康",
+    "restart_required": "需要重启",
+    "maintenance": "维护中",
+    "shutting_down": "正在关闭",
     "version": "版本",
     "uptime": "运行时间",
     "mode": "模式",
     "status": "状态",
-    "checks": "组件检查",
+    "checks": "检查项",
+    "check": {"unknown": "检查：{key}"},
+    "geoip": "GeoIP",
+    "build": "构建",
+    "go_version": "Go",
+    "checked": "检查时间",
+    "statistics": "统计信息",
+    "requests_total": "请求总数",
+    "requests_24h": "请求数（24 小时）",
+    "active_connections": "活动连接数",
     "database": "数据库",
     "cache": "缓存",
     "disk": "磁盘",
@@ -332,7 +346,8 @@
     "ccpa_note": "我们不出售个人数据。此控制项仍然提供。",
     "contact_heading": "疑问",
     "contact_intro": "如果您对本政策有疑问，请",
-    "contact_link": "联系我们"
+    "contact_link": "联系我们",
+    "description": "阅读隐私政策并了解服务如何处理数据。"
   },
   "contact": {
     "title": "联系我们",
@@ -571,6 +586,9 @@
     "expires": "到期时间",
     "name": "名称",
     "expiry": "有效期",
+    "scope": "权限",
+    "read_only": "只读",
+    "read_write": "读写",
     "days": "天",
     "year": "年",
     "custom_date": "自定义日期",
@@ -626,7 +644,8 @@
     "import_code": "粘贴 URL、查询字符串或短代码",
     "automatic": "自动 ({language})",
     "copy": "复制首选项",
-    "erase": "删除已保存的首选项"
+    "erase": "删除已保存的首选项",
+    "description": "管理外观、语言、同意设置和关联令牌。"
   },
   "security": {
     "thanks_description": "安全研究人员致谢",
@@ -672,7 +691,8 @@
       "patching": "修复正在进行中",
       "disclosed": "已披露",
       "wont_fix": "不会修复"
-    }
+    },
+    "status_description": "查看安全报告的当前状态。"
   },
   "plurals": {
     "duration": {

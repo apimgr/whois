@@ -44,6 +44,7 @@ func prepareRuntimeOwnership(cfg config.ServerConfig, pidPath string) error {
 		cfg.ConfigDir, cfg.DataDir, cfg.CacheDir, cfg.GetLogDir(), cfg.GetBackupDir(),
 		cfg.GetDatabaseDir(),
 		filepath.Join(cfg.ConfigDir, "tor"), filepath.Join(cfg.ConfigDir, "i2p"),
+		filepath.Join(cfg.DataDir, "tor"), filepath.Join(cfg.DataDir, "i2p"),
 		filepath.Join(cfg.DataDir, "tor", "site"), filepath.Join(cfg.DataDir, "i2p", "site"),
 	}
 	if pidPath != "" {

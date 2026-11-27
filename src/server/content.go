@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/apimgr/whois/src/swagger"
 
 	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/common/i18n"
@@ -189,7 +193,7 @@ func RespondWithFormat(w http.ResponseWriter, r *http.Request, data interface{})
 
 // apiContentNegotiation applies the API response format rules and dispatches
 // .txt aliases to the same route handler.
-func apiContentNegotiation(next http.Handler) http.Handler {
+func apiContentNegotiation(next http.Handler, routes func() []swagger.Route) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/api/mcp") || strings.Contains(r.URL.Path, "/server/mcp") {
 			next.ServeHTTP(w, r)
@@ -205,7 +209,7 @@ func apiContentNegotiation(next http.Handler) http.Handler {
 			request.URL = &urlCopy
 		} else {
 			accept := request.Header.Get("Accept")
-			if strings.Contains(accept, "text/plain") {
+			if acceptsPlainText(accept) {
 				textResponse = true
 			} else if strings.TrimSpace(accept) == "" {
 				textResponse = isNonInteractiveClient(request)
@@ -231,14 +235,6 @@ func apiContentNegotiation(next http.Handler) http.Handler {
 			writeRequestError(w, r, http.StatusInternalServerError)
 			return
 		}
-		// API errors keep their JSON envelope even for non-interactive clients;
-		// callers need stable machine-readable error codes and messages.
-		if result.StatusCode >= http.StatusBadRequest {
-			w.Header().Set("Content-Type", result.Header.Get("Content-Type"))
-			w.WriteHeader(result.StatusCode)
-			_, _ = w.Write(body)
-			return
-		}
 		contentType := result.Header.Get("Content-Type")
 		if !strings.Contains(contentType, "application/json") {
 			w.Header().Set("Content-Type", contentType)
@@ -246,7 +242,29 @@ func apiContentNegotiation(next http.Handler) http.Handler {
 			_, _ = w.Write(ensureTrailingNewline(body))
 			return
 		}
-		plain, ok := serializeAPIText(body, request.Method)
+		var route swagger.Route
+		if routes != nil {
+			for _, candidate := range routes() {
+				if candidate.Method == request.Method && serverRoutePatternMatches(candidate.Path, request.URL.Path) {
+					route = candidate
+					break
+				}
+			}
+		}
+		if result.StatusCode >= http.StatusBadRequest {
+			plain, ok := serializeAPIText(body, request.Method)
+			if !ok {
+				w.Header().Set("Content-Type", contentType)
+				w.WriteHeader(result.StatusCode)
+				_, _ = w.Write(body)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(result.StatusCode)
+			_, _ = io.WriteString(w, ensureTextNewline(plain))
+			return
+		}
+		plain, ok := serializeAPITextForRoute(body, request.Method, request.URL.Path, route)
 		if !ok {
 			w.Header().Set("Content-Type", contentType)
 			w.WriteHeader(result.StatusCode)
@@ -257,6 +275,88 @@ func apiContentNegotiation(next http.Handler) http.Handler {
 		w.WriteHeader(result.StatusCode)
 		_, _ = io.WriteString(w, ensureTextNewline(plain))
 	})
+}
+
+func acceptsPlainText(header string) bool {
+	textQuality := 0.0
+	jsonQuality := 0.0
+	for _, value := range strings.Split(header, ",") {
+		mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(value))
+		if err != nil {
+			continue
+		}
+		quality := 1.0
+		if raw, exists := params["q"]; exists {
+			parsed, parseErr := strconv.ParseFloat(raw, 64)
+			if parseErr != nil || parsed < 0 || parsed > 1 {
+				quality = 0
+			} else {
+				quality = parsed
+			}
+		}
+		switch strings.ToLower(mediaType) {
+		case "text/plain", "text/*":
+			if quality > textQuality {
+				textQuality = quality
+			}
+		case "application/json", "application/*":
+			if quality > jsonQuality {
+				jsonQuality = quality
+			}
+		}
+	}
+	return textQuality > jsonQuality && textQuality > 0
+}
+
+func serverRoutePatternMatches(pattern, path string) bool {
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(patternParts) != len(pathParts) {
+		return false
+	}
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			continue
+		}
+		if part != pathParts[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func serializeAPITextForRoute(body []byte, method, path string, route swagger.Route) (string, bool) {
+	var value map[string]any
+	if err := json.Unmarshal(body, &value); err != nil {
+		return "", false
+	}
+	if strings.HasSuffix(path, "/server/healthz") {
+		return strings.Join(flattenAPIText(value, ""), "\n"), true
+	}
+	if route.Primary != "" {
+		var response APIResponse
+		if err := json.Unmarshal(body, &response); err == nil {
+			if object, ok := response.Data.(map[string]any); ok {
+				if primary, found := object[route.Primary]; found {
+					return fmt.Sprint(primary), true
+				}
+			}
+		}
+	}
+	plain, ok := serializeAPIText(body, method)
+	if !ok {
+		return plain, ok
+	}
+	defaultMessage := defaultTextMessage(method)
+	message := route.Message
+	var response APIResponse
+	if json.Unmarshal(body, &response) == nil && response.Message != "" {
+		message = response.Message
+	}
+	if message == "" {
+		message = defaultMessage
+	}
+	return strings.Replace(plain, "OK: "+defaultMessage, "OK: "+message, 1), true
 }
 
 func serializeAPIText(body []byte, method string) (string, bool) {

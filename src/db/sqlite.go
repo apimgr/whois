@@ -212,6 +212,7 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			owner_id TEXT NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
 			kind TEXT NOT NULL CHECK (kind IN ('primary', 'linked')),
+			scope TEXT NOT NULL DEFAULT 'read-write' CHECK (scope IN ('read', 'read-write', 'global')),
 			name TEXT,
 			token_hash TEXT NOT NULL UNIQUE,
 			token_prefix TEXT NOT NULL,
@@ -327,11 +328,30 @@ func (db *DB) ensureSchema(ctx context.Context) error {
 	if err := db.migrateLinkedTokenNameIndex(ctx); err != nil {
 		return err
 	}
+	if err := db.migrateAPITokenScopes(ctx); err != nil {
+		return err
+	}
 
 	if err := db.initializeAppSecrets(ctx); err != nil {
 		return fmt.Errorf("initialize application secrets: %w", err)
 	}
 
+	return nil
+}
+
+func (db *DB) migrateAPITokenScopes(ctx context.Context) error {
+	var exists int
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('api_tokens') WHERE name = 'scope'`).Scan(&exists); err != nil {
+		return fmt.Errorf("inspect API token scopes: %w", err)
+	}
+	if exists == 0 {
+		if err := db.ExecWrite(ctx, `ALTER TABLE api_tokens ADD COLUMN scope TEXT NOT NULL DEFAULT 'read-write' CHECK (scope IN ('read', 'read-write', 'global'))`); err != nil {
+			return fmt.Errorf("add API token scope column: %w", err)
+		}
+	}
+	if err := db.ExecWrite(ctx, `UPDATE api_tokens SET scope = 'global' WHERE kind = 'primary' AND scope <> 'global'`); err != nil {
+		return fmt.Errorf("set primary API token scopes: %w", err)
+	}
 	return nil
 }
 

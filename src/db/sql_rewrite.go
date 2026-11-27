@@ -165,7 +165,6 @@ func (c prefixedLibSQLConn) BeginTx(ctx context.Context, options driver.TxOption
 	if options.Isolation != driver.IsolationLevel(sql.LevelDefault) || options.ReadOnly {
 		return nil, driver.ErrSkip
 	}
-	//lint:ignore SA1019 Legacy drivers may implement Conn.Begin without ConnBeginTx.
 	return nil, driver.ErrSkip
 }
 

@@ -1217,7 +1217,7 @@ func TestGetOverallStatusDegraded(t *testing.T) {
 	}
 }
 
-// TestGetOverallStatusTorError verifies Tor error field contributes to overall status.
+// TestGetOverallStatusTorError verifies an unavailable overlay is non-critical.
 func TestGetOverallStatusTorError(t *testing.T) {
 	checks := ChecksInfo{
 		Database:  "ok",
@@ -1226,8 +1226,15 @@ func TestGetOverallStatusTorError(t *testing.T) {
 		Scheduler: "ok",
 		Tor:       "error",
 	}
+	if got := getOverallStatus(checks); got != "degraded" {
+		t.Errorf("getOverallStatus with tor=error = %q, want degraded", got)
+	}
+}
+
+func TestGetOverallStatusDiskErrorIsUnhealthy(t *testing.T) {
+	checks := ChecksInfo{Database: "ok", Cache: "ok", Disk: "error", Scheduler: "ok"}
 	if got := getOverallStatus(checks); got != "unhealthy" {
-		t.Errorf("getOverallStatus with tor=error = %q, want unhealthy", got)
+		t.Errorf("getOverallStatus with disk=error = %q, want unhealthy", got)
 	}
 }
 

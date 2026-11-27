@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
-
-	"github.com/apimgr/whois/src/config"
 )
 
 // OpenAPISpec represents the OpenAPI 3.0 specification structure.
@@ -53,6 +50,7 @@ type PathItem struct {
 	Get    *Operation `json:"get,omitempty"`
 	Post   *Operation `json:"post,omitempty"`
 	Put    *Operation `json:"put,omitempty"`
+	Patch  *Operation `json:"patch,omitempty"`
 	Delete *Operation `json:"delete,omitempty"`
 }
 
@@ -122,70 +120,21 @@ type SecurityScheme struct {
 	Description  string `json:"description,omitempty"`
 }
 
-// BuildSpec constructs the OpenAPI 3.0 specification for the WHOIS API.
-// baseURL is the absolute server URL (e.g. "https://whois.example.com") and
-// version is the running server version (AI.md PART 13 "version").
-func BuildSpec(baseURL, version string) OpenAPISpec {
-	return BuildSpecWithAPIBase(baseURL, version, defaultAPIBase())
-}
-
-// BuildSpecWithAPIBase builds a specification whose operation paths match the
-// configured API prefix.
-func BuildSpecWithAPIBase(baseURL, version, apiBase string) OpenAPISpec {
-	paths := buildPaths()
-	if apiBase == "" {
-		apiBase = defaultAPIBase()
-	}
-	defaultBase := defaultAPIBase()
-	for path, operations := range paths {
-		if strings.HasPrefix(path, defaultBase+"/") {
-			delete(paths, path)
-			paths[strings.Replace(path, defaultBase, apiBase, 1)] = operations
+// WriteJSONFromRoutes serves an OpenAPI document built from the server's
+// registered route contract.
+func WriteJSONFromRoutes(w http.ResponseWriter, baseURL, version, apiBase string, routes []Route) {
+	listed := make([]Route, 0, len(routes))
+	for _, route := range routes {
+		if route.Listed && !route.Internal && route.Auth != "operator" && route.Auth != "service" {
+			listed = append(listed, route)
 		}
 	}
-	return OpenAPISpec{
-		OpenAPI: "3.0.3",
-		Info: OpenAPIInfo{
-			Title:       "caswhois API",
-			Description: "WHOIS lookup service with domain, IP, and ASN queries. Supports RDAP-first with WHOIS fallback.",
-			Version:     version,
-			Contact: OpenAPIContact{
-				Name:  "CasJay",
-				Email: "casjay@yahoo.com",
-			},
-			License: OpenAPILicense{
-				Name: "MIT",
-				URL:  "https://opensource.org/licenses/MIT",
-			},
-		},
-		Servers: []OpenAPIServer{
-			{URL: baseURL, Description: "Current server"},
-		},
-		Paths:      paths,
-		Components: buildComponents(),
-	}
-}
-
-func defaultAPIBase() string {
-	return (&config.ServerConfig{APIVersion: config.DefaultAPIVersion}).APIBasePath()
-}
-
-// WriteJSON writes the OpenAPI specification as a JSON response.
-// Routes: /api/swagger, /api/{api_version}/server/swagger (AI.md PART 14).
-func WriteJSON(w http.ResponseWriter, baseURL, version string) {
-	WriteJSONWithAPIBase(w, baseURL, version, defaultAPIBase())
-}
-
-// WriteJSONWithAPIBase writes a spec using the configured API prefix.
-func WriteJSONWithAPIBase(w http.ResponseWriter, baseURL, version, apiBase string) {
-	spec := BuildSpecWithAPIBase(baseURL, version, apiBase)
-
+	spec := BuildSpecFromRoutes(baseURL, version, apiBase, listed)
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {
 		http.Error(w, `{"ok":false,"error":"INTERNAL_ERROR","message":"Failed to generate spec"}`, http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)

@@ -6,6 +6,7 @@ import (
 	"net/http/pprof"
 	"runtime"
 
+	"github.com/apimgr/whois/src/swagger"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -16,30 +17,12 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 		return
 	}
 
-	r.Route("/debug", func(debug chi.Router) {
-		debug.Use(s.requireOperatorToken)
-		debug.HandleFunc("/pprof", pprof.Index)
-		debug.HandleFunc("/pprof/", pprof.Index)
-		debug.HandleFunc("/pprof/cmdline", pprof.Cmdline)
-		debug.HandleFunc("/pprof/profile", pprof.Profile)
-		debug.HandleFunc("/pprof/symbol", pprof.Symbol)
-		debug.HandleFunc("/pprof/trace", pprof.Trace)
-		debug.Handle("/pprof/heap", pprof.Handler("heap"))
-		debug.Handle("/pprof/goroutine", pprof.Handler("goroutine"))
-		debug.Handle("/pprof/allocs", pprof.Handler("allocs"))
-		debug.Handle("/pprof/block", pprof.Handler("block"))
-		debug.Handle("/pprof/mutex", pprof.Handler("mutex"))
-		debug.Handle("/pprof/threadcreate", pprof.Handler("threadcreate"))
-		debug.Handle("/vars", expvar.Handler())
-		debug.Get("/config", s.handleDebugConfig)
-		debug.Get("/routes", s.handleDebugRoutes)
-		debug.Get("/cache", s.handleDebugCache)
-		debug.Get("/db", s.handleDebugDB)
-		debug.Get("/scheduler", s.handleDebugScheduler)
-		debug.Get("/memory", s.handleDebugMemory)
-		debug.Get("/goroutines", s.handleDebugGoroutines)
-		debug.Get("/error500", s.handleDebugError500)
-	})
+	for _, route := range []struct {
+		path, operationID string
+		handler           http.Handler
+	}{{"/debug/pprof", "debugPprofIndex", http.HandlerFunc(pprof.Index)}, {"/debug/pprof/", "debugPprofIndexSlash", http.HandlerFunc(pprof.Index)}, {"/debug/pprof/cmdline", "debugPprofCmdline", http.HandlerFunc(pprof.Cmdline)}, {"/debug/pprof/profile", "debugPprofProfile", http.HandlerFunc(pprof.Profile)}, {"/debug/pprof/symbol", "debugPprofSymbol", http.HandlerFunc(pprof.Symbol)}, {"/debug/pprof/trace", "debugPprofTrace", http.HandlerFunc(pprof.Trace)}, {"/debug/pprof/heap", "debugPprofHeap", pprof.Handler("heap")}, {"/debug/pprof/goroutine", "debugPprofGoroutine", pprof.Handler("goroutine")}, {"/debug/pprof/allocs", "debugPprofAllocs", pprof.Handler("allocs")}, {"/debug/pprof/block", "debugPprofBlock", pprof.Handler("block")}, {"/debug/pprof/mutex", "debugPprofMutex", pprof.Handler("mutex")}, {"/debug/pprof/threadcreate", "debugPprofThreadCreate", pprof.Handler("threadcreate")}, {"/debug/vars", "debugVars", expvar.Handler()}, {"/debug/config", "debugConfig", http.HandlerFunc(s.handleDebugConfig)}, {"/debug/routes", "debugRoutes", http.HandlerFunc(s.handleDebugRoutes)}, {"/debug/cache", "debugCache", http.HandlerFunc(s.handleDebugCache)}, {"/debug/db", "debugDB", http.HandlerFunc(s.handleDebugDB)}, {"/debug/scheduler", "debugScheduler", http.HandlerFunc(s.handleDebugScheduler)}, {"/debug/memory", "debugMemory", http.HandlerFunc(s.handleDebugMemory)}, {"/debug/goroutines", "debugGoroutines", http.HandlerFunc(s.handleDebugGoroutines)}, {"/debug/error500", "debugError500", http.HandlerFunc(s.handleDebugError500)}} {
+		s.addContractRoute(r, swagger.Route{Method: http.MethodGet, Path: route.path, OperationID: route.operationID, Summary: "Debug diagnostics", Auth: "operator", Internal: true, DebugOnly: true, Handler: s.requireOperatorToken(route.handler)})
+	}
 }
 
 func (s *Server) requireOperatorToken(next http.Handler) http.Handler {

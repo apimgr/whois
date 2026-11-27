@@ -7,7 +7,7 @@
 <main id="main-content">
   <div class="container container-md">
     <header class="page-header"><h1 class="page-title">{{t .Lang .TitleKey}}</h1><p class="page-lead">{{t .Lang "errors.page_description"}}</p></header>
-    <section class="card section-card" aria-labelledby="error-heading" role="alert">
+    <section class="section-card" aria-labelledby="error-heading" role="alert">
       <h2 id="error-heading">{{t .Lang "errors.page_heading"}}</h2>
       <p>{{t .Lang .MessageKey}}</p>
       <p><a class="btn btn-primary" href="{{path "/"}}">{{t .Lang "errors.home_action"}}</a></p>

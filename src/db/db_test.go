@@ -677,6 +677,48 @@ func TestEnsureSchemaRefusesDuplicateLinkedNamesWithoutDeletingTokens(t *testing
 	}
 }
 
+func TestEnsureSchemaMigratesTokenScopes(t *testing.T) {
+	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "server.db"))
+	if err != nil {
+		t.Fatalf("open SQLite database: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	if _, err := raw.Exec(`CREATE TABLE owners (id TEXT PRIMARY KEY, created_at INTEGER, last_seen_at INTEGER)`); err != nil {
+		t.Fatalf("create owners: %v", err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE api_tokens (
+		id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, name TEXT,
+		token_hash TEXT NOT NULL UNIQUE, token_prefix TEXT NOT NULL, token_last4 TEXT NOT NULL,
+		token_enc TEXT NOT NULL, created_at INTEGER, rotated_at INTEGER, expires_at INTEGER,
+		last_used_at INTEGER, revoked_at INTEGER, revoked_reason TEXT
+	)`); err != nil {
+		t.Fatalf("create legacy api_tokens: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO owners (id) VALUES ('owner')`); err != nil {
+		t.Fatalf("insert owner: %v", err)
+	}
+	for _, token := range []struct{ id, kind string }{{"primary", "primary"}, {"linked", "linked"}} {
+		_, err := raw.Exec(`INSERT INTO api_tokens (id, owner_id, kind, token_hash, token_prefix, token_last4, token_enc)
+			VALUES (?, 'owner', ?, ?, 'own_prefix', 'last', 'encrypted')`, token.id, token.kind, token.id+"-hash")
+		if err != nil {
+			t.Fatalf("insert %s token: %v", token.kind, err)
+		}
+	}
+	database := &DB{Driver: "sqlite", readDB: raw, writeDB: raw}
+	if err := database.ensureSchema(context.Background()); err != nil {
+		t.Fatalf("ensureSchema: %v", err)
+	}
+	for _, token := range []struct{ id, want string }{{"primary", "global"}, {"linked", "read-write"}} {
+		var scope string
+		if err := raw.QueryRow(`SELECT scope FROM api_tokens WHERE id = ?`, token.id).Scan(&scope); err != nil {
+			t.Fatalf("read %s token scope: %v", token.id, err)
+		}
+		if scope != token.want {
+			t.Errorf("%s token scope = %q, want %q", token.id, scope, token.want)
+		}
+	}
+}
+
 func TestEnsureSchema_InitializesPersistentSecrets(t *testing.T) {
 	database := openTempDB(t)
 	secretNames := []string{"installation_secret", "cookie_signing_key", "csrf_token_secret"}

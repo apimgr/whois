@@ -85,17 +85,20 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	operator := s.isServerToken(token)
+	scope := "global"
 	if !operator {
 		if s.database == nil || s.database.Read() == nil {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			s.mcpAuthFailure(w, r, nil)
 			return
 		}
-		if _, err := s.lookupOwnerToken(r.Context(), token); err != nil {
+		record, err := s.lookupOwnerToken(r.Context(), token)
+		if err != nil {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			s.mcpAuthFailure(w, r, nil)
 			return
 		}
+		scope = record.Scope
 	}
 	var request struct {
 		JSONRPC string          `json:"jsonrpc"`
@@ -131,6 +134,9 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tools := s.mcpTools(r, operator)
+	if scope == "read" {
+		tools = filterMCPReadTools(tools)
+	}
 	if request.Method == "tools/list" {
 		for i := range tools {
 			tools[i].Method = ""
@@ -149,6 +155,15 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		s.writeMCPError(w, http.StatusBadRequest, request.ID, -32020, "HeaderMismatch")
 		return
 	}
+	if scope == "read" {
+		for _, tool := range s.mcpTools(r, true) {
+			if tool.Name == request.Params.Name && tool.Method != http.MethodGet {
+				w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+				s.writeMCPError(w, http.StatusForbidden, request.ID, -32003, "Insufficient scope")
+				return
+			}
+		}
+	}
 	for _, tool := range tools {
 		if tool.Name != request.Params.Name {
 			continue
@@ -161,6 +176,16 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeMCPError(w, http.StatusNotFound, request.ID, -32601, "Tool not found")
+}
+
+func filterMCPReadTools(tools []mcpTool) []mcpTool {
+	filtered := make([]mcpTool, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Method == http.MethodGet {
+			filtered = append(filtered, tool)
+		}
+	}
+	return filtered
 }
 
 func (s *Server) mcpHelpContent(r *http.Request) (string, string, string, []mcpTool, string) {
@@ -229,7 +254,7 @@ func mcpSameOrigin(origin, base string) bool {
 }
 
 func (s *Server) mcpTools(r *http.Request, operator bool) []mcpTool {
-	spec := swagger.BuildSpecWithAPIBase(s.BuildURL(r, "/"), Version, s.config.APIBasePath())
+	spec := swagger.BuildSpecFromRoutes(s.BuildURL(r, "/"), Version, s.config.APIBasePath(), s.apiRoutes())
 	apiBase := s.config.APIBasePath()
 	tools := make([]mcpTool, 0)
 	for path, item := range spec.Paths {
@@ -240,7 +265,7 @@ func (s *Server) mcpTools(r *http.Request, operator bool) []mcpTool {
 		operations := []struct {
 			method string
 			op     *swagger.Operation
-		}{{http.MethodGet, item.Get}, {http.MethodPost, item.Post}, {http.MethodPut, item.Put}, {http.MethodDelete, item.Delete}}
+		}{{http.MethodGet, item.Get}, {http.MethodPost, item.Post}, {http.MethodPut, item.Put}, {http.MethodPatch, item.Patch}, {http.MethodDelete, item.Delete}}
 		for _, candidate := range operations {
 			op := candidate.op
 			if op == nil || op.OperationID == "" {

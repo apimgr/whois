@@ -1,0 +1,102 @@
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+/* ── Canonical design tokens (dark palette) ──────────────────────── */
+:root,html.theme-dark{
+  color-scheme:dark;
+  --color-bg:#282a36;--color-bg-secondary:#21222c;--color-bg-card:#2b2d3a;
+  --color-bg-hover:#343746;--color-bg-active:#44475a;--color-code-bg:rgba(255,255,255,.1);
+  --color-text:#f8f8f2;--color-muted:#939fcc;
+  --color-border:#44475a;--color-border-hover:#6272a4;
+  --color-success:#50fa7b;--color-success-bg:rgba(80,250,123,.15);
+  --color-error:#ff5555;--color-error-bg:rgba(255,85,85,.15);
+  --color-warning:#ffb86c;--color-warning-bg:rgba(255,184,108,.15);
+  --color-info:#8be9fd;--color-info-bg:rgba(139,233,253,.15);
+  --color-primary:#bd93f9;--color-primary-bg:rgba(189,147,249,.15);
+  --color-secondary:#50fa7b;--color-accent:#ff79c6;--color-on-error:#fff;
+  --font-mono:"JetBrains Mono","Fira Code","Cascadia Code",ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  --font-sans:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+  --font-serif:"Lora",Georgia,"Times New Roman",Times,serif;
+  --font-size-xs:.75rem;--font-size-sm:.875rem;--font-size-base:1rem;--font-size-lg:1.125rem;
+  --font-size-xl:1.25rem;--font-size-2xl:1.5rem;--font-size-3xl:1.875rem;--font-size-4xl:2.25rem;
+  --line-height-tight:1.25;--line-height-normal:1.5;--line-height-relaxed:1.75;
+  --font-weight-normal:400;--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;
+  --space-0:0;--space-px:1px;--space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;
+  --space-5:1.25rem;--space-6:1.5rem;--space-7:1.75rem;--space-8:2rem;--space-10:2.5rem;
+  --space-12:3rem;--space-16:4rem;--space-20:5rem;--space-24:6rem;
+  --radius-none:0;--radius-sm:.125rem;--radius-base:.25rem;--radius-md:.375rem;--radius-lg:.5rem;
+  --radius-xl:.75rem;--radius-2xl:1rem;--radius-3xl:1.5rem;--radius-full:9999px;
+  --shadow-sm:0 1px 2px 0 rgb(0 0 0/.05);
+  --shadow-base:0 1px 3px 0 rgb(0 0 0/.1),0 1px 2px -1px rgb(0 0 0/.1);
+  --shadow-md:0 4px 6px -1px rgb(0 0 0/.1),0 2px 4px -2px rgb(0 0 0/.1);
+  --shadow-lg:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);
+  --shadow-xl:0 20px 25px -5px rgb(0 0 0/.1),0 8px 10px -6px rgb(0 0 0/.1);
+  --shadow-inner:inset 0 2px 4px 0 rgb(0 0 0/.05);
+  --z-below:-1;--z-base:0;--z-raised:10;--z-dropdown:100;--z-sticky:200;
+  --z-banner:250;--z-overlay:300;--z-drawer:350;--z-modal:400;--z-toast:500;--z-tooltip:600;
+  --transition-fast:150ms ease;--transition-base:250ms ease;--transition-slow:400ms ease;
+  --transition-spring:300ms cubic-bezier(.34,1.56,.64,1);
+  --focus-ring:0 0 0 3px var(--color-primary);
+  --focus-ring-offset:0 0 0 2px var(--color-bg),0 0 0 4px var(--color-primary);
+  --bg:var(--color-bg);--bg-subtle:var(--color-bg-secondary);--bg-elevated:var(--color-bg-card);
+  --bg-overlay:var(--color-bg-hover);--bg-inset:var(--color-code-bg);
+  --fg:var(--color-text);--fg-muted:var(--color-muted);--fg-subtle:var(--color-muted);
+  --fg-disabled:var(--color-muted);--fg-on-accent:var(--color-bg);--fg-link:var(--color-info);
+  --border-subtle:var(--color-border);--border:var(--color-border);--border-strong:var(--color-border-hover);
+  --accent:var(--color-primary);--accent-hover:var(--color-primary);--accent-pressed:var(--color-primary);
+  --accent-subtle:var(--color-primary-bg);--accent-fg:var(--color-primary);
+  --color-success-fg:var(--color-success);--color-success-border:var(--color-border);
+  --color-warning-fg:var(--color-warning);--color-warning-border:var(--color-border);
+  --color-error-fg:var(--color-error);--color-error-border:var(--color-border);
+  --color-info-fg:var(--color-info);--color-info-border:var(--color-border);
+}
+
+/* ── Light theme overrides ───────────────────────────────────────── */
+html.theme-light{
+  --color-bg:#fff;--color-bg-secondary:#f6f8fa;--color-bg-card:#fff;
+  --color-bg-hover:#eff2f5;--color-bg-active:#e6eaef;--color-code-bg:rgba(0,0,0,.05);
+  --color-text:#1f2328;--color-muted:#59636e;--color-border:#d1d9e0;--color-border-hover:#818b98;
+  --color-success:#1a7f37;--color-success-bg:rgba(26,127,55,.12);
+  --color-error:#d1242f;--color-error-bg:rgba(209,36,47,.12);
+  --color-warning:#9a6700;--color-warning-bg:rgba(154,103,0,.12);
+  --color-info:#0969da;--color-info-bg:rgba(9,105,218,.12);
+  --color-primary:#0969da;--color-primary-bg:rgba(9,105,218,.12);
+  --color-secondary:#1a7f37;--color-accent:#8250df;--color-on-error:#fff;
+}
+
+@media(prefers-color-scheme:light){
+  html.theme-auto{
+    color-scheme:light;
+    --color-bg:#fff;--color-bg-secondary:#f6f8fa;--color-bg-card:#fff;
+    --color-bg-hover:#eff2f5;--color-bg-active:#e6eaef;--color-code-bg:rgba(0,0,0,.05);
+    --color-text:#1f2328;--color-muted:#59636e;--color-border:#d1d9e0;--color-border-hover:#818b98;
+    --color-success:#1a7f37;--color-success-bg:rgba(26,127,55,.12);
+    --color-error:#d1242f;--color-error-bg:rgba(209,36,47,.12);
+    --color-warning:#9a6700;--color-warning-bg:rgba(154,103,0,.12);
+    --color-info:#0969da;--color-info-bg:rgba(9,105,218,.12);
+    --color-primary:#0969da;--color-primary-bg:rgba(9,105,218,.12);
+    --color-secondary:#1a7f37;--color-accent:#8250df;--color-on-error:#fff;
+  }
+}
+html.theme-light{color-scheme:light}
+
+/* ── Base layout ─────────────────────────────────────────────────── */
+html{font-size:16px}
+:root{--toast-duration:3s;--toast-duration-warning:5s}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  background:var(--bg);color:var(--fg);line-height:1.6;
+  display:flex;flex-direction:column;min-height:100dvh;
+}
+main{flex:1}
+a{color:var(--fg-link)}
+a:hover{color:var(--accent-hover)}
+
+#toast-container{position:fixed;top:1rem;right:1rem;z-index:var(--z-toast);display:flex;flex-direction:column;gap:.5rem;max-height:calc(100dvh - 2rem);overflow:hidden;pointer-events:none}
+.toast{position:relative;display:flex;align-items:center;gap:.75rem;min-width:300px;max-width:400px;padding:.75rem 1rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated);color:var(--fg);box-shadow:0 2px 8px rgba(0,0,0,.15);pointer-events:auto;animation:toast-slide-in .3s ease-out;transition:opacity .2s,transform .2s}
+.toast.toast-dismissed{opacity:0;transform:translateX(100%)}
+.toast-message{flex:1}.toast-close{border:0;background:transparent;color:inherit;font-size:1.25rem;cursor:pointer}.toast-progress{position:absolute;bottom:0;left:0;height:3px;background:currentColor;opacity:.45;animation:toast-countdown linear forwards}
+.toast-success .toast-progress,.toast-info .toast-progress{animation-duration:var(--toast-duration,3s)}.toast-warning .toast-progress{animation-duration:var(--toast-duration-warning,5s)}
+.toast-success{border-color:var(--color-success-border)}.toast-warning{border-color:var(--color-warning-border)}.toast-error{border-color:var(--color-error-border)}.toast-info{border-color:var(--color-info-border)}
+.toast:hover .toast-progress{animation-play-state:paused}
+@keyframes toast-slide-in{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes toast-countdown{from{width:100%}to{width:0}}

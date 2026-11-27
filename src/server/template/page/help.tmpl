@@ -9,15 +9,15 @@
 <main id="main-content">
   <div class="container container-md">
     <article>
-      <header class="page-header"><h1 class="page-title">{{t .Lang "help.title"}}</h1></header>
+      <header class="page-header"><h1 class="page-title">{{t .Lang "help.title"}}</h1><p class="page-lead">{{t .Lang "help.getting_started_intro"}}</p></header>
 
       <section id="getting-started" class="section-card" aria-labelledby="getting-started-heading">
         <h2 id="getting-started-heading">{{t .Lang "help.getting_started_heading"}}</h2>
         <p>{{t .Lang "help.getting_started_intro"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/example.com</code></pre>
+        <div class="code-block" id="help-code-1"><pre><code>curl {{.APIBase}}/whois/example.com</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-1 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <p>{{t .Lang "help.getting_started_response_label"}}</p>
-        <pre><code>{
+        <div class="code-block" id="help-code-2"><pre><code>{
   "ok": true,
   "data": {
     "query": "example.com",
@@ -28,13 +28,13 @@
     "expiry": "...",
     "nameservers": ["..."]
   }
-}</code></pre>
+}</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-2 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <p>{{t .Lang "help.getting_started_ip_label"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/ip/8.8.8.8</code></pre>
+        <div class="code-block" id="help-code-3"><pre><code>curl {{.APIBase}}/whois/ip/8.8.8.8</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-3 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <p>{{t .Lang "help.getting_started_asn_label"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/asn/AS15169</code></pre>
+        <div class="code-block" id="help-code-4"><pre><code>curl {{.APIBase}}/whois/asn/AS15169</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-4 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
       </section>
 
       <section id="features" class="section-card" aria-labelledby="features-heading">
@@ -42,42 +42,42 @@
 
         <h3>{{t .Lang "help.feature_domain_title"}}</h3>
         <p>{{t .Lang "help.feature_domain_desc"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/domain/example.com</code></pre>
+        <div class="code-block" id="help-code-5"><pre><code>curl {{.APIBase}}/whois/domain/example.com</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-5 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_ip_title"}}</h3>
         <p>{{t .Lang "help.feature_ip_desc"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/ip/2001:4860:4860::8888</code></pre>
+        <div class="code-block" id="help-code-6"><pre><code>curl {{.APIBase}}/whois/ip/2001:4860:4860::8888</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-6 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_asn_title"}}</h3>
         <p>{{t .Lang "help.feature_asn_desc"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/asn/AS13335</code></pre>
+        <div class="code-block" id="help-code-7"><pre><code>curl {{.APIBase}}/whois/asn/AS13335</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-7 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_validate_title"}}</h3>
         <p>{{t .Lang "help.feature_validate_desc"}}</p>
-        <pre><code>curl {{.APIBase}}/whois/validate/example.com</code></pre>
+        <div class="code-block" id="help-code-8"><pre><code>curl {{.APIBase}}/whois/validate/example.com</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-8 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_owner_search_title"}}</h3>
         <p>{{t .Lang "help.feature_owner_search_desc"}}</p>
-        <pre><code>curl "{{.APIBase}}/whois/search?owner=Example+Org"</code></pre>
+        <div class="code-block" id="help-code-9"><pre><code>curl "{{.APIBase}}/whois/search?owner=Example+Org"</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-9 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_bulk_title"}}</h3>
         <p>{{t .Lang "help.feature_bulk_desc"}}</p>
-        <pre><code>curl -X POST -H "Authorization: Bearer &lt;server.token&gt;" \
+        <div class="code-block" id="help-code-10"><pre><code>curl -X POST -H "Authorization: Bearer &lt;server.token&gt;" \
   -d '{"queries":["example.com","8.8.8.8"]}' \
-  {{.APIBase}}/whois/bulk</code></pre>
+  {{.APIBase}}/whois/bulk</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-10 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_servers_title"}}</h3>
         <p>{{t .Lang "help.feature_servers_desc"}}</p>
-        <pre><code>curl {{.APIBase}}/whois-servers</code></pre>
+        <div class="code-block" id="help-code-11"><pre><code>curl {{.APIBase}}/whois-servers</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-11 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_stats_title"}}</h3>
         <p>{{t .Lang "help.feature_stats_desc"}}</p>
-        <pre><code>curl {{.APIBase}}/server/stats</code></pre>
+        <div class="code-block" id="help-code-12"><pre><code>curl {{.APIBase}}/server/stats</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-12 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
 
         <h3>{{t .Lang "help.feature_formats_title"}}</h3>
         <p>{{t .Lang "help.feature_formats_desc"}}</p>
-        <pre><code>curl -H "Accept: text/plain" {{.APIBase}}/whois/example.com
-curl -H "Accept: application/json" {{.APIBase}}/whois/example.com</code></pre>
+        <div class="code-block" id="help-code-13"><pre><code>curl -H "Accept: text/plain" {{.APIBase}}/whois/example.com
+curl -H "Accept: application/json" {{.APIBase}}/whois/example.com</code></pre><button type="button" class="copy-btn" data-copy-target="#help-code-13 code" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></div>
       </section>
 
       <section class="section-card api-docs" aria-labelledby="api-docs-heading">
@@ -97,7 +97,7 @@ curl -H "Accept: application/json" {{.APIBase}}/whois/example.com</code></pre>
         <h3>{{t .Lang "help.tor_address_heading"}}</h3>
         <div class="code-block">
           <code class="code-content">{{.OnionAddr}}</code>
-          <button type="button" class="copy-btn" data-copy="{{.OnionAddr}}" aria-label="{{t .Lang "help.tor_copy_label"}}">
+          <button type="button" class="copy-btn" data-copy="{{.OnionAddr}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "help.tor_copy_label"}}">
             <span class="copy-icon" aria-hidden="true">&#128203;</span>
             <span class="copy-text" aria-live="polite">{{t .Lang "help.tor_copy_text"}}</span>
           </button>
@@ -118,7 +118,13 @@ curl -H "Accept: application/json" {{.APIBase}}/whois/example.com</code></pre>
       <section id="i2p-access" class="section-card" aria-labelledby="i2p-access-heading">
         <h2 id="i2p-access-heading">{{t .Lang "help.i2p_heading"}}</h2>
         <p>{{t .Lang "help.i2p_intro"}}</p>
-        <p><code>{{.I2PAddr}}</code></p>
+        <div class="code-block">
+          <code class="code-content selectable-text">{{.I2PAddr}}</code>
+          <button type="button" class="copy-btn" data-copy="{{.I2PAddr}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}">
+            <span class="copy-icon" aria-hidden="true">&#128203;</span>
+            <span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span>
+          </button>
+        </div>
       </section>
       {{ end }}
 

@@ -63,7 +63,9 @@ const STAMP = @@STAMP@@;
 const STRINGS_CACHE = @@STRINGS@@;
 const NAV_TIMEOUT_MS = 8000;
 const PRECACHE_ASSETS = [
-  BASE_PATH + '/static/css/main.css?v=' + STAMP,
+  BASE_PATH + '/static/css/common.css?v=' + STAMP,
+  BASE_PATH + '/static/css/components.css?v=' + STAMP,
+  BASE_PATH + '/static/css/public.css?v=' + STAMP,
   BASE_PATH + '/static/js/app.js?v=' + STAMP,
   BASE_PATH + '/static/icons/icon-192.png?v=' + STAMP,
   BASE_PATH + '/static/icons/icon-512.png?v=' + STAMP
@@ -197,4 +199,33 @@ func writeVersioned(w http.ResponseWriter, r *http.Request, contentType string, 
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
+}
+
+func (s *Server) setHTMLCacheHeaders(header http.Header, r *http.Request) {
+	if !strings.HasPrefix(strings.ToLower(header.Get("Content-Type")), "text/html") {
+		return
+	}
+	stamp := Version + "-" + CommitID
+	cacheControl := "no-store"
+	if strings.Contains(strings.ToLower(header.Get("Cache-Control")), "private") {
+		cacheControl = "private, no-store"
+	}
+	header.Set("Cache-Control", cacheControl)
+	header.Set("ETag", `"`+stamp+`"`)
+	if cookie, err := r.Cookie(constants.InternalName + "_build"); err == nil && cookie.Value != stamp {
+		header.Set("Clear-Site-Data", `"cache", "storage"`)
+	}
+	cookie := (&http.Cookie{
+		Name: constants.InternalName + "_build", Value: stamp, Path: "/",
+		MaxAge: 31536000, Secure: true, SameSite: http.SameSiteLaxMode,
+	}).String()
+	cookiePrefix := constants.InternalName + "_build="
+	setCookies := header.Values("Set-Cookie")
+	header.Del("Set-Cookie")
+	for _, existing := range setCookies {
+		if !strings.HasPrefix(existing, cookiePrefix) {
+			header.Add("Set-Cookie", existing)
+		}
+	}
+	header.Add("Set-Cookie", cookie)
 }

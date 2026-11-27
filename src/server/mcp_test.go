@@ -85,6 +85,95 @@ func TestMCPToolDiscoveryUsesConfiguredAPIVersion(t *testing.T) {
 	}
 }
 
+func TestMCPReadScopeListsOnlyReadToolsAndRejectsWriteCalls(t *testing.T) {
+	s := newTestServer(t)
+	key, err := config.GenerateEncryptionKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.config.Security.EncryptionKey = key
+	handler := s.setupRoutes()
+	issue := httptest.NewRecorder()
+	issueRequest := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens/primary", nil)
+	issueRequest.Header.Set("Accept", "application/json")
+	handler.ServeHTTP(issue, issueRequest)
+	var primary struct {
+		Data struct {
+			Token string `json:"owner_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(issue.Body.Bytes(), &primary); err != nil || primary.Data.Token == "" {
+		t.Fatalf("primary token response: %v: %s", err, issue.Body.String())
+	}
+	create := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens", strings.NewReader(`{"name":"reader","scope":"read"}`))
+	create.Header.Set("Authorization", "Bearer "+primary.Data.Token)
+	create.Header.Set("Content-Type", "application/json")
+	create.Header.Set("Accept", "application/json")
+	created := httptest.NewRecorder()
+	handler.ServeHTTP(created, create)
+	var linked struct {
+		Data struct {
+			Token string `json:"linked_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &linked); err != nil || linked.Data.Token == "" {
+		t.Fatalf("linked token response: %v: %s", err, created.Body.String())
+	}
+
+	protocolMeta := `"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}`
+	listBody := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{` + protocolMeta + `}}`
+	list := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(listBody))
+	list.Header.Set("Authorization", "Bearer "+linked.Data.Token)
+	list.Header.Set("MCP-Protocol-Version", mcpProtocolVersion)
+	list.Header.Set("Mcp-Method", "tools/list")
+	listed := httptest.NewRecorder()
+	handler.ServeHTTP(listed, list)
+	if listed.Code != http.StatusOK {
+		t.Fatalf("read token tools/list status = %d: %s", listed.Code, listed.Body.String())
+	}
+	var response struct {
+		Result struct {
+			Tools []mcpTool `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(listed.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	readOnlyNames := make(map[string]bool)
+	for _, tool := range s.mcpTools(httptest.NewRequest(http.MethodGet, "http://whois.example.test/", nil), true) {
+		if tool.Method == http.MethodGet {
+			readOnlyNames[tool.Name] = true
+		}
+	}
+	for _, tool := range response.Result.Tools {
+		if !readOnlyNames[tool.Name] {
+			t.Fatalf("read token received non-GET tool %q", tool.Name)
+		}
+	}
+
+	var writeTool string
+	for _, tool := range s.mcpTools(httptest.NewRequest(http.MethodGet, "http://whois.example.test/", nil), true) {
+		if tool.Method != http.MethodGet {
+			writeTool = tool.Name
+			break
+		}
+	}
+	if writeTool == "" {
+		t.Fatal("no public write tool available to verify read-scope rejection")
+	}
+	callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"` + writeTool + `","arguments":{},` + protocolMeta + `}}`
+	call := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+	call.Header.Set("Authorization", "Bearer "+linked.Data.Token)
+	call.Header.Set("MCP-Protocol-Version", mcpProtocolVersion)
+	call.Header.Set("Mcp-Method", "tools/call")
+	call.Header.Set("Mcp-Name", writeTool)
+	called := httptest.NewRecorder()
+	handler.ServeHTTP(called, call)
+	if called.Code != http.StatusForbidden || called.Header().Get("WWW-Authenticate") != `Bearer error="insufficient_scope"` {
+		t.Fatalf("read token write call = %d, %q: %s", called.Code, called.Header().Get("WWW-Authenticate"), called.Body.String())
+	}
+}
+
 func TestMCPRejectsUnsupportedProtocolBeforeHeaderMismatch(t *testing.T) {
 	s := newTestServer(t)
 	key, err := config.GenerateEncryptionKey()

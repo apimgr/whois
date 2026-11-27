@@ -121,6 +121,27 @@ func TestNewGeoIPManager_EnabledNoDBs(t *testing.T) {
 	_ = m.Close()
 }
 
+func TestDatasetStatusTracksLoadedAndStaleDatabase(t *testing.T) {
+	dir := t.TempDir()
+	manager := &GeoIPManager{dbDir: dir, enabled: true, databases: DatabaseConfig{ASN: true}}
+	defer func() { _ = manager.Close() }()
+	if got := manager.DatasetStatus("asn"); got != "error" {
+		t.Fatalf("missing ASN database status = %q, want error", got)
+	}
+	writeMinimalMMDB(t, filepath.Join(dir, "asn.mmdb"))
+	if err := manager.loadDatabases(manager.databases); err != nil {
+		t.Fatalf("loadDatabases: %v", err)
+	}
+	manager.lastUpdate = time.Now().UTC()
+	if got := manager.DatasetStatus("asn"); got != "ok" {
+		t.Fatalf("fresh ASN database status = %q, want ok", got)
+	}
+	manager.lastUpdate = time.Now().Add(-22 * 24 * time.Hour)
+	if got := manager.DatasetStatus("asn"); got != "degraded" {
+		t.Fatalf("stale ASN database status = %q, want degraded", got)
+	}
+}
+
 // TestLookup_InvalidIP confirms an invalid IP string returns an error when the
 // manager is enabled (but has no DB readers loaded).
 func TestLookup_InvalidIP(t *testing.T) {

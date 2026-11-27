@@ -4,10 +4,13 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // sqliteHeader returns a minimal valid SQLite file (100+ bytes with correct magic).
@@ -15,6 +18,114 @@ func sqliteHeader() []byte {
 	header := []byte("SQLite format 3\x00")
 	header = append(header, make([]byte, 100)...)
 	return header
+}
+
+func TestCreateSanitizesSecretsFile(t *testing.T) {
+	root := t.TempDir()
+	configDir, dataDir := filepath.Join(root, "config"), filepath.Join(root, "data")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	makeFixtures(t, configDir, dataDir)
+	secret := "server:\n  token: operator-secret\n  backup:\n    encryption_password: backup-secret\n  unrelated: keep-me\n"
+	if err := os.WriteFile(filepath.Join(configDir, "secrets.yml"), []byte(secret), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(root, "backup.tar.gz")
+	if err := Create(&BackupOptions{ConfigDir: configDir, DataDir: dataDir, OutputFile: out}); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("close backup file: %v", err)
+		}
+	}()
+	gz, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := gz.Close(); err != nil {
+			t.Errorf("close backup gzip reader: %v", err)
+		}
+	}()
+	tr := tar.NewReader(gz)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h.Name != "secrets.yml" {
+			continue
+		}
+		var got map[string]any
+		if err := yaml.Unmarshal(mustReadAll(t, tr), &got); err != nil {
+			t.Fatal(err)
+		}
+		server := got["server"].(map[string]any)
+		if server["token"] != "" || server["unrelated"] != "keep-me" || server["backup"].(map[string]any)["encryption_password"] != "" {
+			t.Fatalf("secrets were not sanitized correctly: %#v", got)
+		}
+		return
+	}
+	t.Fatal("backup did not contain secrets.yml")
+}
+
+func TestRestoreSecretsPreservesDestinationOperatorToken(t *testing.T) {
+	dir := t.TempDir()
+	backupPath := filepath.Join(dir, "backup-secrets.yml")
+	destinationPath := filepath.Join(dir, "config", "secrets.yml")
+	if err := os.MkdirAll(filepath.Dir(destinationPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backupPath, []byte("server:\n  token: \"\"\n  unrelated: restored\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	const existingToken = "adm_destination_token"
+	if err := os.WriteFile(destinationPath, []byte("server:\n  token: "+existingToken+"\n  local: preserved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreSecretsFile(backupPath, destinationPath); err != nil {
+		t.Fatalf("restoreSecretsFile: %v", err)
+	}
+	var got map[string]any
+	data, err := os.ReadFile(destinationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	server := got["server"].(map[string]any)
+	if server["token"] != existingToken || server["unrelated"] != "restored" || server["local"] != nil {
+		t.Fatalf("restored secrets = %#v", got)
+	}
+	info, err := os.Stat(destinationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("restored secrets permissions = %v", info.Mode().Perm())
+	}
+}
+
+func mustReadAll(t *testing.T, r io.Reader) []byte {
+	t.Helper()
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 // makeFixtures creates server.yml and server.db inside configDir/dataDir and

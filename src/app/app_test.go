@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/config"
+	"github.com/apimgr/whois/src/server"
 )
 
 func TestRunStartsAndStopsWithContext(t *testing.T) {
@@ -99,6 +100,73 @@ func TestRunStartsAndStopsWithContext(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("run did not stop after context cancellation")
+	}
+}
+
+func TestDatabaseMaintenanceHandlerProvidesHealthGuidanceAndRejectsWrites(t *testing.T) {
+	cfg := config.Default()
+	state := &recoveryState{
+		interval: 30 * time.Second,
+		status: recoverySnapshot{
+			Reason: "database_connection", Message: "Database connection failed; automatic recovery is in progress",
+			Since: time.Now().UTC(), Enabled: true, Attempts: 2,
+			LastAttempt: time.Now().UTC(), NextAttempt: time.Now().Add(30 * time.Second).UTC(),
+		},
+	}
+	readOnlyHandler, closeReadOnlyHandler := server.NewMaintenanceReadOnlyHandler(cfg)
+	defer closeReadOnlyHandler()
+	handler := databaseMaintenanceHandler(cfg, state, readOnlyHandler)
+
+	healthRequest := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
+	healthResponse := httptest.NewRecorder()
+	handler.ServeHTTP(healthResponse, healthRequest)
+	if healthResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("maintenance health status = %d, want %d", healthResponse.Code, http.StatusServiceUnavailable)
+	}
+	if healthResponse.Header().Get("Retry-After") != "30" || healthResponse.Header().Get("X-Maintenance-Mode") != "true" {
+		t.Fatalf("maintenance headers = %#v", healthResponse.Header())
+	}
+	var health struct {
+		Status      string `json:"status"`
+		Maintenance struct {
+			Reason      string `json:"reason"`
+			SelfHealing struct {
+				Attempts int  `json:"attempts"`
+				Enabled  bool `json:"enabled"`
+			} `json:"self_healing"`
+		} `json:"maintenance"`
+	}
+	if err := json.Unmarshal(healthResponse.Body.Bytes(), &health); err != nil {
+		t.Fatal(err)
+	}
+	if health.Status != "maintenance" || health.Maintenance.Reason != "database_connection" || !health.Maintenance.SelfHealing.Enabled || health.Maintenance.SelfHealing.Attempts != 2 {
+		t.Fatalf("maintenance health payload = %#v", health)
+	}
+
+	pageRequest := httptest.NewRequest(http.MethodGet, "/server/about", nil)
+	pageResponse := httptest.NewRecorder()
+	handler.ServeHTTP(pageResponse, pageRequest)
+	if pageResponse.Code != http.StatusOK || !strings.Contains(pageResponse.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("database-independent page response = %d %s", pageResponse.Code, pageResponse.Header().Get("Content-Type"))
+	}
+
+	writeRequest := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader("name=test"))
+	writeResponse := httptest.NewRecorder()
+	handler.ServeHTTP(writeResponse, writeRequest)
+	if writeResponse.Code != http.StatusServiceUnavailable || !strings.Contains(writeResponse.Body.String(), `"error":"MAINTENANCE"`) {
+		t.Fatalf("maintenance write response = %d %s", writeResponse.Code, writeResponse.Body.String())
+	}
+}
+
+func TestRecoveryRetryDelayBacksOffAndCapsAtConfiguredInterval(t *testing.T) {
+	interval := 30 * time.Second
+	for attempt, want := range []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, interval} {
+		if got := recoveryRetryDelay(attempt+1, interval); got != want {
+			t.Errorf("recoveryRetryDelay(%d) = %s, want %s", attempt+1, got, want)
+		}
+	}
+	if got := recoveryRetryDelay(4, 3*time.Second); got != 3*time.Second {
+		t.Errorf("recoveryRetryDelay cap = %s, want 3s", got)
 	}
 }
 

@@ -26,7 +26,9 @@
     "details": "Dettagli",
     "settings": "Impostazioni",
     "done": "Fatto",
-    "new_lookup": "Nuova ricerca"
+    "new_lookup": "Nuova ricerca",
+    "copied": "Copiato!",
+    "response_description": "Le informazioni richieste sono riportate di seguito."
   },
   "nav": {
     "home": "Home",
@@ -51,11 +53,23 @@
     "healthy": "Operativo",
     "degraded": "Degradato",
     "unhealthy": "Non operativo",
+    "restart_required": "Riavvio richiesto",
+    "maintenance": "Manutenzione",
+    "shutting_down": "Arresto in corso",
     "version": "Versione",
     "uptime": "Tempo di attività",
     "mode": "Modalità",
     "status": "Stato",
-    "checks": "Controlli dei componenti",
+    "checks": "Controlli",
+    "check": {"unknown": "Controllo: {key}"},
+    "geoip": "GeoIP",
+    "build": "Build",
+    "go_version": "Go",
+    "checked": "Verificato",
+    "statistics": "Statistiche",
+    "requests_total": "Richieste totali",
+    "requests_24h": "Richieste (24 ore)",
+    "active_connections": "Connessioni attive",
     "database": "Database",
     "cache": "Cache",
     "disk": "Disco",
@@ -200,7 +214,8 @@
       "patching": "Correzione in corso",
       "disclosed": "Divulgato",
       "wont_fix": "Non verrà risolto"
-    }
+    },
+    "status_description": "Controlla lo stato attuale della segnalazione di sicurezza."
   },
   "about": {
     "title_prefix": "Informazioni",
@@ -372,7 +387,8 @@
     "ccpa_note": "Non vendiamo dati personali. Questo controllo viene fornito a prescindere.",
     "contact_heading": "Domande",
     "contact_intro": "Se hai domande su questa politica, per favore",
-    "contact_link": "contattaci"
+    "contact_link": "contattaci",
+    "description": "Leggi l’informativa sulla privacy e scopri come il servizio tratta i dati."
   },
   "contact": {
     "title": "Contattaci",
@@ -611,6 +627,9 @@
     "expires": "Scade",
     "name": "Nome",
     "expiry": "Scadenza",
+    "scope": "Ambito",
+    "read_only": "Sola lettura",
+    "read_write": "Lettura e scrittura",
     "days": "giorni",
     "year": "anno",
     "custom_date": "Data personalizzata",
@@ -666,7 +685,8 @@
     "import_code": "Incolla un URL, una stringa di query o un codice breve",
     "automatic": "Automatico ({language})",
     "copy": "Copia preferenze",
-    "erase": "Cancella le preferenze salvate"
+    "erase": "Cancella le preferenze salvate",
+    "description": "Gestisci aspetto, lingua, consenso e token collegati."
   },
   "plurals": {
     "duration": {

@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/apimgr/whois/src/common/i18n"
 )
@@ -25,6 +27,12 @@ var templateFuncMap = template.FuncMap{
 	"markdownToHTMLSection": markdownToHTMLSection,
 	"humanize":              humanize,
 	"path":                  func(value string) string { return value },
+	"asset":                 assetURL,
+}
+
+func assetURL(path string) string {
+	path = strings.TrimLeft(path, "/")
+	return "/static/" + path + "?v=" + url.QueryEscape(Version+"-"+CommitID)
 }
 
 // translateFormat applies literal named replacements to a translated message.
@@ -96,5 +104,20 @@ func staticFileServer() http.Handler {
 	if err != nil {
 		panic("failed to sub static embed FS: " + err.Error())
 	}
-	return http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	files := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	stamp := Version + "-" + CommitID
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		etag := `"` + stamp + `"`
+		w.Header().Set("ETag", etag)
+		if r.URL.Query().Get("v") == stamp {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		files.ServeHTTP(w, r)
+	})
 }

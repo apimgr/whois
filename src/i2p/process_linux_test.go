@@ -62,15 +62,28 @@ func TestI2PSIGKILLDoesNotOrphanManagedChild(t *testing.T) {
 	}
 	_ = helper.Wait()
 	for time.Now().Before(deadline) {
-		if syscall.Kill(childPID, 0) == syscall.ESRCH {
+		if processStopped(childPID) {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	if syscall.Kill(childPID, 0) == nil {
+	if !processStopped(childPID) {
 		if child, err := os.FindProcess(childPID); err == nil {
 			_ = child.Kill()
 		}
 	}
 	t.Fatalf("managed child %d survived parent SIGKILL", childPID)
+}
+
+func processStopped(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	if err == syscall.ESRCH {
+		return true
+	}
+	stat, readErr := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if readErr == nil {
+		fields := strings.Fields(string(stat))
+		return len(fields) > 2 && fields[2] == "Z"
+	}
+	return false
 }

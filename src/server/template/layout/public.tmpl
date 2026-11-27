@@ -2,11 +2,12 @@
 <!DOCTYPE html>
 <html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
 <head>{{template "head" .}}</head>
-<body>
+<body data-toast-duration="{{.ToastDuration}}" data-toast-warning-duration="{{.ToastWarningDuration}}">
 <a class="skip-link" href="#main-content">{{t .Lang "common.skip_to_content"}}</a>
 <a class="skip-link" href="#navigation">{{t .Lang "common.skip_to_nav"}}</a>
-{{.ConsentBannerHTML}}
+{{if ne .CurrentPath "/server/preferences"}}{{.ConsentBannerHTML}}{{end}}
 {{.AnnouncementsHTML}}
+<div id="toast-container" aria-label="Notifications" aria-live="polite"></div>
 {{template "site_header" .}}
 {{template "page_content" .}}
 {{template "public_footer" .}}

@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/apimgr/whois/src/db"
 	"github.com/apimgr/whois/src/email"
 	"github.com/apimgr/whois/src/geoip"
+	"github.com/apimgr/whois/src/health"
 	"github.com/apimgr/whois/src/i2p"
 	caslogger "github.com/apimgr/whois/src/logger"
 	"github.com/apimgr/whois/src/metrics"
@@ -33,6 +35,7 @@ import (
 	runtimeinfo "github.com/apimgr/whois/src/runtime"
 	"github.com/apimgr/whois/src/scheduler"
 	casssl "github.com/apimgr/whois/src/ssl"
+	"github.com/apimgr/whois/src/swagger"
 	castor "github.com/apimgr/whois/src/tor"
 	"github.com/apimgr/whois/src/update"
 	"github.com/apimgr/whois/src/whois"
@@ -57,6 +60,7 @@ type Server struct {
 	server             *http.Server
 	httpsServer        *http.Server
 	apiRouter          chi.Router
+	routeRegistry      *swagger.Registry
 	info               *runtimeinfo.RuntimeInfo
 	cache              cache.Cache
 	ratelimit          *ratelimit.Limiter
@@ -97,6 +101,7 @@ type Server struct {
 	// hot-reloadable settings in place, flagging restart-required ones
 	// (AI.md PART 8 — Smart Config Reload).
 	configManager *config.ConfigManager
+	shuttingDown  atomic.Bool
 }
 
 type torRequestContextKey struct{}
@@ -140,6 +145,9 @@ func ipv6Unavailable(err error) bool {
 // New creates a new Server instance.
 // lgr may be nil; logging is silently disabled in that case.
 func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Server {
+	if strings.TrimSpace(cfg.Web.UI.Accent) != "" && !accentStylesheetURL(cfg.Web.UI.Accent) {
+		log.Printf("WARN: invalid web.ui.accent; using the built-in theme palette")
+	}
 	memCache, err := cache.New(context.Background(), cache.Config{
 		Type:          cfg.Cache.Type,
 		URL:           cfg.Cache.URL,
@@ -237,6 +245,28 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 	if err != nil {
 		log.Printf("WARN: Failed to initialize GeoIP: %v", err)
 		geoipMgr = nil
+	}
+	if cfg.GeoIP.Enabled {
+		for _, database := range []struct {
+			name    string
+			enabled bool
+		}{
+			{name: "asn", enabled: cfg.GeoIP.Databases.ASN},
+			{name: "country", enabled: cfg.GeoIP.Databases.Country},
+			{name: "city_ipv4", enabled: cfg.GeoIP.Databases.City},
+			{name: "city_ipv6", enabled: cfg.GeoIP.Databases.City},
+		} {
+			if !database.enabled {
+				continue
+			}
+			name := database.name
+			health.Register("geoip_"+name, false, func() string {
+				if geoipMgr == nil {
+					return "error"
+				}
+				return geoipMgr.DatasetStatus(name)
+			})
+		}
 	}
 
 	// Initialize Metrics (PART 20)
@@ -354,7 +384,11 @@ func New(cfg *config.ServerConfig, database *db.DB, lgr *caslogger.Logger) *Serv
 				WHOIS:   cfg.GeoIP.Databases.WHOIS,
 			}
 			sched.GeoIPUpdateHook = func(ctx context.Context) error {
-				return geoipMgr.UpdateDatabases(ctx, geoCfg)
+				if err := geoipMgr.UpdateDatabases(ctx, geoCfg); err != nil {
+					return err
+				}
+				health.Refresh()
+				return nil
 			}
 		}
 		// Wire Tor health hook if Tor is running (PART 31).
@@ -789,6 +823,7 @@ func (s *Server) Run(ctx context.Context, listener net.Listener) error {
 		log.Printf("Run context canceled; shutting down gracefully...")
 	}
 	cancelRun()
+	s.shuttingDown.Store(true)
 	if configManagerDone != nil {
 		<-configManagerDone
 		configManagerDone = nil
@@ -1075,7 +1110,12 @@ func (s *Server) runI2PManager(ctx context.Context, cfg i2p.Config, handler http
 // setupRoutes configures HTTP routes using chi (PART 13 — every web page has a corresponding API endpoint).
 func (s *Server) setupRoutes() http.Handler {
 	r := chi.NewRouter()
-	r.Handle("/server/tor/*", http.HandlerFunc(s.handleTorControl))
+	s.routeRegistry = swagger.NewRegistry()
+	for _, control := range []struct {
+		method, path, operationID string
+	}{{http.MethodGet, "/server/tor/status", "torStatus"}, {http.MethodPost, "/server/tor/validate", "torValidate"}, {http.MethodPost, "/server/tor/restart", "torRestart"}, {http.MethodPost, "/server/tor/regenerate", "torRegenerate"}, {http.MethodPost, "/server/tor/vanity/start", "torVanityStart"}, {http.MethodPost, "/server/tor/vanity/stop", "torVanityStop"}, {http.MethodPost, "/server/tor/vanity/apply", "torVanityApply"}, {http.MethodPost, "/server/tor/import-keys", "torImportKeys"}} {
+		s.addAPIRoute(r, control.method, control.path, control.operationID, "Local Tor control operation", "none", false, true, http.HandlerFunc(s.handleTorControl))
+	}
 
 	// Metrics endpoint (PART 20) — internal only, token-protected
 	if s.metrics != nil && s.config.Metrics.Enabled {
@@ -1083,27 +1123,29 @@ func (s *Server) setupRoutes() http.Handler {
 		if endpoint == "" {
 			endpoint = "/metrics"
 		}
-		r.Handle(endpoint, s.handleMetrics())
+		s.addAPIRoute(r, http.MethodGet, endpoint, "metricsScrape", "Prometheus metrics scrape", "service", false, true, s.handleMetrics())
 		log.Printf("[Metrics] Endpoint enabled at %s", endpoint)
 	}
 
 	// API base path from config (AI.md PART 14 — never hardcode v1)
 	apiBase := s.config.APIBasePath()
-	r.Handle(apiBase+"/server/mcp", http.HandlerFunc(s.handleMCP))
-	r.Handle("/api/mcp", http.HandlerFunc(s.handleMCP))
-	r.Handle("/mcp", http.HandlerFunc(s.handleMCP))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/mcp", "mcpEndpoint", "Model Context Protocol endpoint", "token", false, true, http.HandlerFunc(s.handleMCP))
+	s.addAPIRoute(r, http.MethodPost, "/api/mcp", "mcpAlias", "Model Context Protocol endpoint alias", "token", false, true, http.HandlerFunc(s.handleMCP))
+	s.addAPIRoute(r, http.MethodPost, "/mcp", "mcpRootAlias", "Model Context Protocol endpoint alias", "token", false, true, http.HandlerFunc(s.handleMCP))
 
 	// Health check endpoints (PART 13)
 	r.Get("/server/healthz", s.handleHealth)
-	r.Get(apiBase+"/server/healthz", s.handleHealth)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/healthz", "getHealth", "Health check", "none", true, false, http.HandlerFunc(s.handleHealth))
 	// Unversioned API alias — always enabled, machine-friendly versionless probing (AI.md PART 13/14)
-	r.Get("/api/healthz", s.handleHealth)
+	s.addAPIRoute(r, http.MethodGet, "/api/healthz", "getHealthAlias", "Unversioned health check", "none", false, false, http.HandlerFunc(s.handleHealth))
 	// Root alias for load-balancer probes — only when server.healthz.root.enabled: true
 	if s.config.Healthz.Root.Enabled {
 		r.Get("/healthz", s.handleHealth)
 	}
 
 	// Static assets — CSS, JS (embedded at compile time, served under /static/)
+	r.Get("/static/css/accent.css", s.handleAccentCSS)
+	r.Get("/static/css/notifications.css", s.handleNotificationsCSS)
 	r.Handle("/static/*", staticFileServer())
 
 	// SEO & Security files (PART 14, PART 16) — required
@@ -1135,28 +1177,28 @@ func (s *Server) setupRoutes() http.Handler {
 	})
 	r.Get("/server/about", s.handleAboutPage)
 	r.Get("/about", s.handleAboutPage)
-	r.Get(apiBase+"/server/about", s.handleAboutAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/about", "getAbout", "About this server", "none", true, false, http.HandlerFunc(s.handleAboutAPI))
 	r.Get("/server/docs", s.handleDocsPage)
 	r.Get("/docs", s.handleDocsPage)
 
 	// Privacy, Contact, Help, Terms pages (AI.md PART 16) — dual web/API routes
 	r.Get("/server/privacy", s.handlePrivacyPage)
-	r.Get(apiBase+"/server/privacy", s.handlePrivacyAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/privacy", "getPrivacy", "Privacy policy", "none", true, false, http.HandlerFunc(s.handlePrivacyAPI))
 	r.Get("/server/contact", s.handleContactPage)
 	r.Post("/server/contact", s.requireCSRF(s.handleContactPage))
-	r.Get(apiBase+"/server/contact", s.handleContactAPI)
-	r.Post(apiBase+"/server/contact", s.handleContactAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/contact", "getContact", "Contact information", "none", true, false, http.HandlerFunc(s.handleContactAPI))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/contact", "submitContact", "Submit a contact request", "none", true, false, http.HandlerFunc(s.handleContactAPI))
 	r.Get("/server/security/report/{tracking_id}", s.handleSecurityReportStatus)
 	// Anonymous owner tokens (AI.md PART 12 — Owner Token Management).
 	r.Get("/server/preferences", s.handlePreferencesPage)
 	r.Post("/server/preferences", s.requireCSRF(s.handlePreferencesPage))
-	r.Get(apiBase+"/server/preferences", s.handlePreferencesAPI)
-	r.Post(apiBase+"/server/preferences", s.handlePreferencesAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/preferences", "getPreferences", "Read browser preferences", "none", true, false, http.HandlerFunc(s.handlePreferencesAPI))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/preferences", "updatePreferences", "Update browser preferences", "none", true, false, http.HandlerFunc(s.handlePreferencesAPI))
 	r.Get("/server/preferences/sync", s.handlePreferencesSyncPage)
 	r.Post("/server/preferences/sync", s.requireCSRF(s.handlePreferencesSyncPage))
-	r.Get(apiBase+"/server/preferences/sync", s.handlePreferencesSyncAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/preferences/sync", "getPreferenceSync", "Export browser preferences", "none", true, false, http.HandlerFunc(s.handlePreferencesSyncAPI))
 	r.Get("/server/preferences/sync/import", s.handlePreferencesSyncImportPage)
-	r.Get(apiBase+"/server/preferences/sync/import", s.handlePreferencesSyncImportAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/preferences/sync/import", "importPreferenceSync", "Import browser preferences", "none", true, false, http.HandlerFunc(s.handlePreferencesSyncImportAPI))
 	r.Method(http.MethodGet, "/server/preferences/tokens", s.refreshOwnerCookie(http.HandlerFunc(s.handleOwnerTokensPage)))
 	r.Method(http.MethodPost, "/server/preferences/token/create", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleIssuePrimaryTokenPage))))
 	r.Method(http.MethodPost, "/server/preferences/token/restore", s.refreshOwnerCookie(s.strictRateLimit(s.requireCSRF(s.handleRestoreOwnerTokenPage))))
@@ -1169,30 +1211,30 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Method(http.MethodPost, "/server/preferences/tokens/{id}/update", s.refreshOwnerCookie(s.requireCSRF(s.handleUpdateLinkedTokenPage)))
 	r.Method(http.MethodPost, "/server/preferences/tokens/{id}/revoke", s.refreshOwnerCookie(s.requireCSRF(s.handleRevokeLinkedTokenPage)))
 	r.Method(http.MethodPost, "/server/preferences/token/forget", s.refreshOwnerCookie(s.requireCSRF(s.handleForgetOwnerTokenPage)))
-	r.Get(apiBase+"/server/preferences/tokens", s.handleListOwnerTokensAPI)
-	r.Post(apiBase+"/server/preferences/tokens/primary", s.strictRateLimit(s.handleIssuePrimaryTokenAPI))
-	r.Post(apiBase+"/server/preferences/tokens/primary/reveal", s.strictRateLimit(s.handleRevealPrimaryTokenAPI))
-	r.Post(apiBase+"/server/preferences/tokens/primary/rotate", s.strictRateLimit(s.handleRotatePrimaryTokenAPI))
-	r.Delete(apiBase+"/server/preferences/tokens/primary", s.strictRateLimit(s.handleRevokePrimaryTokenAPI))
-	r.Post(apiBase+"/server/preferences/tokens", s.handleCreateLinkedTokenAPI)
-	r.Post(apiBase+"/server/preferences/tokens/{id}/reveal", s.strictRateLimit(s.handleRevealLinkedTokenAPI))
-	r.Post(apiBase+"/server/preferences/tokens/{id}/rotate", s.strictRateLimit(s.handleRotateLinkedTokenAPI))
-	r.Patch(apiBase+"/server/preferences/tokens/{id}", s.handleUpdateLinkedTokenAPI)
-	r.Delete(apiBase+"/server/preferences/tokens/{id}", s.handleRevokeLinkedTokenAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/preferences/tokens", "listOwnerTokens", "List owner tokens", "owner", true, false, http.HandlerFunc(s.handleListOwnerTokensAPI))
+	s.addAPIRouteStatus(r, http.MethodPost, apiBase+"/server/preferences/tokens/primary", "issuePrimaryToken", "Issue the primary token", "none", true, false, http.StatusCreated, s.strictRateLimit(s.handleIssuePrimaryTokenAPI))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/preferences/tokens/primary/reveal", "revealPrimaryToken", "Reveal the primary token", "owner", true, false, s.strictRateLimit(s.handleRevealPrimaryTokenAPI))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/preferences/tokens/primary/rotate", "rotatePrimaryToken", "Rotate the primary token", "owner", true, false, s.strictRateLimit(s.handleRotatePrimaryTokenAPI))
+	s.addAPIRoute(r, http.MethodDelete, apiBase+"/server/preferences/tokens/primary", "revokePrimaryToken", "Revoke the primary token", "owner", true, false, s.strictRateLimit(s.handleRevokePrimaryTokenAPI))
+	s.addAPIRouteStatus(r, http.MethodPost, apiBase+"/server/preferences/tokens", "createLinkedToken", "Create a linked token", "owner", true, false, http.StatusCreated, http.HandlerFunc(s.handleCreateLinkedTokenAPI))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/preferences/tokens/{id}/reveal", "revealLinkedToken", "Reveal a linked token", "owner", true, false, s.strictRateLimit(s.handleRevealLinkedTokenAPI))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/preferences/tokens/{id}/rotate", "rotateLinkedToken", "Rotate a linked token", "owner", true, false, s.strictRateLimit(s.handleRotateLinkedTokenAPI))
+	s.addAPIRoute(r, http.MethodPatch, apiBase+"/server/preferences/tokens/{id}", "updateLinkedToken", "Update a linked token", "owner", true, false, http.HandlerFunc(s.handleUpdateLinkedTokenAPI))
+	s.addAPIRoute(r, http.MethodDelete, apiBase+"/server/preferences/tokens/{id}", "revokeLinkedToken", "Revoke a linked token", "owner", true, false, http.HandlerFunc(s.handleRevokeLinkedTokenAPI))
 	r.Get("/server/help", s.handleHelpPage)
-	r.Get(apiBase+"/server/help", s.handleHelpAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/help", "getHelp", "Server help", "none", true, false, http.HandlerFunc(s.handleHelpAPI))
 	r.Get("/server/help/mcp", s.handleMCPHelpPage)
-	r.Get(apiBase+"/server/help/mcp", s.handleMCPHelpAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/help/mcp", "getMCPHelp", "MCP integration help", "none", true, false, http.HandlerFunc(s.handleMCPHelpAPI))
 	r.Get("/server/terms", s.handleTermsPage)
-	r.Get(apiBase+"/server/terms", s.handleTermsAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/terms", "getTerms", "Terms of service", "none", true, false, http.HandlerFunc(s.handleTermsAPI))
 	r.Get("/server/dpo", s.handleDPOPage)
-	r.Get(apiBase+"/server/dpo", s.handleDPOAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/dpo", "getDPO", "Data protection officer contact", "none", true, false, http.HandlerFunc(s.handleDPOAPI))
 	r.Get("/server/security", s.handleSecurityPage)
 	r.Get("/server/security/policy", s.handleSecurityPolicyPage)
 	r.Get("/server/security/thanks", s.handleSecurityThanksPage)
-	r.Get(apiBase+"/server/security", s.handleSecurityAPI)
-	r.Get(apiBase+"/server/security/policy", s.handleSecurityPolicyAPI)
-	r.Get(apiBase+"/server/security/thanks", s.handleSecurityThanksAPI)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/security", "getSecurity", "Security policy information", "none", true, false, http.HandlerFunc(s.handleSecurityAPI))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/security/policy", "getSecurityPolicy", "Security disclosure policy", "none", true, false, http.HandlerFunc(s.handleSecurityPolicyAPI))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/security/thanks", "getSecurityThanks", "Security acknowledgments", "none", true, false, http.HandlerFunc(s.handleSecurityThanksAPI))
 
 	// Cookie consent / CCPA opt-out (AI.md PART 16)
 	r.Post("/server/consent", s.requireCSRF(s.handleConsent))
@@ -1203,36 +1245,42 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Swagger/OpenAPI endpoints (AI.md PART 14)
 	r.Get("/server/docs/swagger", s.handleSwaggerUI)
-	r.Get("/api/swagger", s.handleSwaggerJSON)
-	r.Get(apiBase+"/server/swagger", s.handleSwaggerJSON)
+	s.addAPIRoute(r, http.MethodGet, "/api/swagger", "getOpenAPIAlias", "OpenAPI specification", "none", false, true, http.HandlerFunc(s.handleSwaggerJSON))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/swagger", "getOpenAPI", "OpenAPI specification", "none", false, true, http.HandlerFunc(s.handleSwaggerJSON))
 
 	// GraphQL endpoints (AI.md PART 14)
 	r.Get("/server/docs/graphql", s.handleGraphiQL)
 	r.Post("/server/docs/graphql", s.requireCSRF(s.handleGraphiQL))
-	r.Post("/api/graphql", s.handleGraphQL)
-	r.Post(apiBase+"/server/graphql", s.handleGraphQL)
+	s.addAPIRoute(r, http.MethodPost, "/api/graphql", "executeGraphQLAlias", "Execute a GraphQL query", "none", false, true, http.HandlerFunc(s.handleGraphQL))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/graphql", "executeGraphQL", "Execute a GraphQL query", "none", false, true, http.HandlerFunc(s.handleGraphQL))
 
 	// WHOIS lookup form-submission fallback (no-JS browsers, curl, wget)
 	r.Get("/whois", s.handleWHOISPage)
 
 	// Owner/registrant search — web and API (public, rate-limited)
 	r.Get("/whois/search", s.handleWHOISOwnerSearch)
-	r.Get(apiBase+"/whois/search", s.handleWHOISOwnerSearch)
+	s.addAPIRouteModel(r, swagger.Route{Method: http.MethodGet, Path: apiBase + "/whois/search", OperationID: "ownerSearch", Summary: "Search local lookup history by owner", Auth: "none", Listed: true, Request: struct {
+		Owner string `json:"owner"`
+		Page  int    `json:"page,omitempty"`
+		Limit int    `json:"limit,omitempty"`
+	}{}, Response: swagger.APIResponseModel{}, Handler: http.HandlerFunc(s.handleWHOISOwnerSearch)})
 
 	// API — specific typed lookups (registered before generic wildcard)
-	r.Get(apiBase+"/whois/domain/*", s.handleWHOISDomainLookup)
-	r.Get(apiBase+"/whois/ip/*", s.handleWHOISIPLookup)
-	r.Get(apiBase+"/whois/asn/*", s.handleWHOISASNLookup)
-	r.Get(apiBase+"/whois/validate/*", s.handleWHOISValidate)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/whois/domain/{domain}", "domainLookup", "Domain WHOIS lookup", "none", true, false, http.HandlerFunc(s.handleWHOISDomainLookup))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/whois/ip/{ip}", "ipLookup", "IP WHOIS lookup", "none", true, false, http.HandlerFunc(s.handleWHOISIPLookup))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/whois/asn/{asn}", "asnLookup", "ASN WHOIS lookup", "none", true, false, http.HandlerFunc(s.handleWHOISASNLookup))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/whois/validate/{query}", "validateQuery", "Validate a lookup query", "none", true, false, http.HandlerFunc(s.handleWHOISValidate))
 
 	// API — generic WHOIS lookup (catch-all, after specific routes)
-	r.Get(apiBase+"/whois/*", s.handleWHOIS)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/whois/{query}", "whoisLookup", "Automatic WHOIS lookup", "none", true, false, http.HandlerFunc(s.handleWHOIS))
 
 	// API — Bulk lookup (requires server token)
-	r.Post(apiBase+"/whois/bulk", s.requireToken(s.handleWHOISBulkLookup))
+	s.addAPIRouteModel(r, swagger.Route{Method: http.MethodPost, Path: apiBase + "/whois/bulk", OperationID: "bulkLookup", Summary: "Bulk WHOIS lookup", Auth: "operator", Listed: false, Request: struct {
+		Queries []string `json:"queries"`
+	}{}, Response: swagger.APIResponseModel{}, Handler: s.requireToken(s.handleWHOISBulkLookup)})
 
 	// Autodiscover endpoint (PART 32) — non-versioned, public
-	r.Get("/api/autodiscover", s.handleAutodiscover)
+	s.addAPIRoute(r, http.MethodGet, "/api/autodiscover", "autodiscover", "Server autodiscovery", "none", true, false, http.HandlerFunc(s.handleAutodiscover))
 
 	// CLI binary download (PART 32) — public by default; streams prebuilt binaries
 	r.Get("/cli/binaries/*", s.handleCLIBinaryDownload)
@@ -1241,14 +1289,14 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/locales/*", s.handleLocaleJSON)
 
 	// API — utility (public)
-	r.Get(apiBase+"/whois-servers", s.handleWhoisServers)
-	r.Get(apiBase+"/server/stats", s.handleStats)
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/whois-servers", "listWhoisServers", "List WHOIS servers", "none", true, false, http.HandlerFunc(s.handleWhoisServers))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/stats", "getStats", "Server statistics", "none", true, false, http.HandlerFunc(s.handleStats))
 
 	// API — server operations (requires server token)
-	r.Get(apiBase+"/server/schedulers", s.requireToken(s.handleSchedulerStatus))
-	r.Post(apiBase+"/server/schedulers/run", s.requireToken(s.handleSchedulerRun))
-	r.Get(apiBase+"/server/backups", s.requireToken(s.handleBackupStatus))
-	r.Post(apiBase+"/server/backups/run", s.requireToken(s.handleBackupRun))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/schedulers", "listSchedulerTasks", "List scheduler tasks", "operator", false, false, s.requireToken(s.handleSchedulerStatus))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/schedulers/run", "runSchedulerTask", "Run a scheduler task", "operator", false, false, s.requireToken(s.handleSchedulerRun))
+	s.addAPIRoute(r, http.MethodGet, apiBase+"/server/backups", "listBackups", "List backups", "operator", false, false, s.requireToken(s.handleBackupStatus))
+	s.addAPIRoute(r, http.MethodPost, apiBase+"/server/backups/run", "createBackup", "Create a backup", "operator", false, false, s.requireToken(s.handleBackupRun))
 
 	// Debug endpoints (PART 6) — registered only when --debug / DEBUG=true
 	s.registerDebugRoutes(r)
@@ -1260,7 +1308,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.NotFound(s.handleNotFound)
 
 	s.apiRouter = r
-	return s.offlineCacheSignal(s.baseURLRouter(apiContentNegotiation(r)))
+	return s.offlineCacheSignal(s.baseURLRouter(apiContentNegotiation(r, s.apiRoutes)))
 }
 
 // setupMiddleware configures the middleware chain per AI.md PART 5.
@@ -1497,40 +1545,31 @@ func (s *Server) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	apiBase := s.config.APIBasePath()
+	var endpoints strings.Builder
+	for _, route := range s.apiRoutes() {
+		if !route.Listed || route.Internal || route.Auth == "operator" || route.Auth == "service" || !strings.HasPrefix(route.Path, "/api/") {
+			continue
+		}
+		fmt.Fprintf(&endpoints, "- %s %s — %s\n", route.Method, route.Path, route.Summary)
+	}
 	content := fmt.Sprintf(`# caswhois
 > WHOIS lookup service with domain, IP, and ASN queries
 
 ## API
 Base URL: %s
-Authentication: Bearer token (optional for public endpoints)
+Authentication: Bearer token where an operation requires it
 Rate limit: %d requests/minute
 
 ## Endpoints
-- GET %s/server/healthz - Health check (no auth)
-- GET %s/whois/{query} - Auto-detect lookup (domain/IP/ASN)
-- GET %s/whois/domain/{domain} - Domain WHOIS lookup
-- GET %s/whois/ip/{ip} - IP WHOIS lookup
-- GET %s/whois/asn/{asn} - ASN lookup
-- GET %s/whois/validate/{query} - Validate query without lookup
-- GET %s/whois/search?owner={owner} - Search by owner/registrant
-- POST %s/whois/bulk - Bulk lookup (requires token)
-
-## Capabilities
-- Domain WHOIS lookups with parsed fields
-- IP address geolocation and WHOIS
-- ASN ownership information
-- RDAP protocol support
-- Bulk lookups for authenticated users
-- Rate limiting and caching
-
-## Output Formats
+%s
+## Output formats
 - JSON (Accept: application/json)
 - Plain text (Accept: text/plain)
 
 ## Contact
 API issues: %s
 Security: %s
-`, s.BuildURL(r, apiBase), rateLimit, apiBase, apiBase, apiBase, apiBase, apiBase, apiBase, apiBase, apiBase, securityContact, securityContact)
+`, s.BuildURL(r, apiBase), rateLimit, endpoints.String(), securityContact, securityContact)
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

@@ -11,7 +11,8 @@
     <article>
       <header class="page-header">
         <h1 class="page-title">{{t .Lang "privacy.title"}}</h1>
-        <p class="page-lead">{{t .Lang "privacy.last_updated"}}: {{.Footer.BuildDatetime}}</p>
+        <p class="page-lead">{{t .Lang "privacy.description"}}</p>
+        <p>{{t .Lang "privacy.last_updated"}}: {{.Footer.BuildDatetime}}</p>
       </header>
 
       {{ if .Content }}
@@ -21,7 +22,7 @@
       </section>
       {{ else }}
 
-      <section id="summary" class="card section-card" aria-labelledby="summary-heading">
+      <section id="summary" class="section-card" aria-labelledby="summary-heading">
         <h2 id="summary-heading">{{t .Lang "privacy.summary_heading"}}</h2>
         <div class="key-points">
           <div class="key-point">
@@ -50,7 +51,7 @@
         </div>
       </section>
 
-      <section id="cookies" class="card section-card" aria-labelledby="cookies-heading">
+      <section id="cookies" class="section-card" aria-labelledby="cookies-heading">
         <h2 id="cookies-heading">{{t .Lang "privacy.cookies_heading"}}</h2>
         <p>{{t .Lang "privacy.cookies_intro"}}</p>
 
@@ -73,22 +74,22 @@
         </div>
       </section>
 
-      <section id="data-collection" class="card section-card" aria-labelledby="data-collection-heading">
+      <section id="data-collection" class="section-card" aria-labelledby="data-collection-heading">
         <h2 id="data-collection-heading">{{t .Lang "privacy.data_collection_heading"}}</h2>
         {{ .DataCollection | markdownToHTMLSection }}
       </section>
 
-      <section id="data-usage" class="card section-card" aria-labelledby="data-usage-heading">
+      <section id="data-usage" class="section-card" aria-labelledby="data-usage-heading">
         <h2 id="data-usage-heading">{{t .Lang "privacy.data_usage_heading"}}</h2>
         {{ .DataUsage | markdownToHTMLSection }}
       </section>
 
-      <section id="data-security" class="card section-card" aria-labelledby="data-security-heading">
+      <section id="data-security" class="section-card" aria-labelledby="data-security-heading">
         <h2 id="data-security-heading">{{t .Lang "privacy.data_security_heading"}}</h2>
         {{ .DataSecurity | markdownToHTMLSection }}
       </section>
 
-      <section id="data-storage" class="card section-card" aria-labelledby="data-storage-heading">
+      <section id="data-storage" class="section-card" aria-labelledby="data-storage-heading">
         <h2 id="data-storage-heading">{{t .Lang "privacy.data_storage_heading"}}</h2>
         <p><strong>{{t .Lang "privacy.data_storage_intro"}}</strong></p>
 
@@ -112,12 +113,12 @@
         </ul>
       </section>
 
-      <section id="data-retention" class="card section-card" aria-labelledby="data-retention-heading">
+      <section id="data-retention" class="section-card" aria-labelledby="data-retention-heading">
         <h2 id="data-retention-heading">{{t .Lang "privacy.data_retention_heading"}}</h2>
         <p>{{.RetentionPeriod}}</p>
       </section>
 
-      <section id="third-parties" class="card section-card" aria-labelledby="third-parties-heading">
+      <section id="third-parties" class="section-card" aria-labelledby="third-parties-heading">
         <h2 id="third-parties-heading">{{t .Lang "privacy.third_parties_heading"}}</h2>
         {{ if .ThirdPartyServices }}
         <p>{{t .Lang "privacy.third_parties_intro"}}</p>
@@ -147,7 +148,7 @@
         {{ end }}
       </section>
 
-      <section id="your-rights" class="card section-card" aria-labelledby="your-rights-heading">
+      <section id="your-rights" class="section-card" aria-labelledby="your-rights-heading">
         <h2 id="your-rights-heading">{{t .Lang "privacy.your_rights_heading"}}</h2>
         <p>{{t .Lang "privacy.your_rights_intro"}}</p>
         <ul>
@@ -164,7 +165,7 @@
       </section>
 
       {{ if .DataSold }}
-      <section id="ccpa-opt-out" class="card section-card ccpa-section" aria-labelledby="ccpa-heading">
+      <section id="ccpa-opt-out" class="section-card ccpa-section" aria-labelledby="ccpa-heading">
         <h2 id="ccpa-heading">{{t .Lang "privacy.ccpa_heading"}}</h2>
         <p>{{t .Lang "privacy.ccpa_intro"}}</p>
         <ul>
@@ -200,7 +201,7 @@
       </section>
       {{ end }}
 
-      <section id="contact" class="card section-card" aria-labelledby="contact-heading">
+      <section id="contact" class="section-card" aria-labelledby="contact-heading">
         <h2 id="contact-heading">{{t .Lang "privacy.contact_heading"}}</h2>
         <p>{{t .Lang "privacy.contact_intro"}} <a href="{{path "/server/dpo"}}">{{t .Lang "privacy.contact_link"}}</a>.</p>
       </section>

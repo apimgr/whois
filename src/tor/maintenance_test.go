@@ -14,14 +14,17 @@ func TestMaintenanceVanityLifecycle(t *testing.T) {
 	if err := maintenance.StartVanity("A", 1); err == nil {
 		t.Fatal("uppercase prefix should be rejected")
 	}
-	if err := maintenance.StartVanity("a", 0); err != nil {
+	// Use the longest accepted prefix so this lifecycle test cannot race with
+	// successful candidate generation and persistence.
+	prefix := "aaaaaa"
+	if err := maintenance.StartVanity(prefix, 0); err != nil {
 		t.Fatalf("start vanity search: %v", err)
 	}
 	if err := maintenance.StartVanity("b", 1); err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Fatalf("second search error = %v, want already running", err)
 	}
 	status := maintenance.VanityStatus()
-	if (status.State != "running" && status.State != "found") || status.Prefix != "a" || status.Workers < 1 || status.Candidates == nil {
+	if (status.State != "running" && status.State != "found") || status.Prefix != prefix || status.Workers < 1 || status.Candidates == nil {
 		t.Fatalf("running status = %+v", status)
 	}
 	stopped, _ := maintenance.StopVanity()

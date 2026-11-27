@@ -9,7 +9,7 @@
 <main id="main-content">
   <div class="container container-md">
     <header class="page-header"><h1 class="page-title">{{t .Lang "security.title"}}</h1><p class="page-lead">{{t .Lang "security.description"}}</p></header>
-    <section class="card section-card" aria-labelledby="reporting">
+    <section class="section-card" aria-labelledby="reporting">
       <h2 id="reporting">{{t .Lang "security.report_heading"}}</h2>
       <p>{{t .Lang "security.policy_intro"}} <a href="{{path "/server/security/policy"}}">{{t .Lang "security.policy_heading"}}</a>.</p>
       <ol>
@@ -20,7 +20,7 @@
       <p><a href="{{.SecurityTxt}}">{{t .Lang "security.security_txt"}}</a> ({{t .Lang "security.expires"}} {{.Expires}}).</p>
       <p><a href="{{path "/server/security/thanks"}}">{{t .Lang "security.thanks_link"}}</a></p>
     </section>
-    <section class="card section-card" aria-labelledby="policy">
+    <section class="section-card" aria-labelledby="policy">
       <h2 id="policy">{{t .Lang "security.policy_heading"}}</h2>
       <p><a href="{{.PolicyURL}}">{{t .Lang "security.policy_url"}}</a></p>
       {{.Policy | markdownToHTMLSection}}

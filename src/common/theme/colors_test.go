@@ -29,11 +29,11 @@ func TestThemePaletteDark(t *testing.T) {
 		}
 	}
 	// Spot-check specific documented values.
-	if p.Background != "#1a1b26" {
-		t.Errorf("ThemePaletteDark.Background = %q, want \"#1a1b26\"", p.Background)
+	if p.Background != "#282a36" {
+		t.Errorf("ThemePaletteDark.Background = %q, want \"#282a36\"", p.Background)
 	}
-	if p.Primary != "#7aa2f7" {
-		t.Errorf("ThemePaletteDark.Primary = %q, want \"#7aa2f7\"", p.Primary)
+	if p.Primary != "#bd93f9" {
+		t.Errorf("ThemePaletteDark.Primary = %q, want \"#bd93f9\"", p.Primary)
 	}
 }
 
@@ -64,8 +64,8 @@ func TestThemePaletteLight(t *testing.T) {
 	if p.Background != "#ffffff" {
 		t.Errorf("ThemePaletteLight.Background = %q, want \"#ffffff\"", p.Background)
 	}
-	if p.Primary != "#2e7de9" {
-		t.Errorf("ThemePaletteLight.Primary = %q, want \"#2e7de9\"", p.Primary)
+	if p.Primary != "#0969da" {
+		t.Errorf("ThemePaletteLight.Primary = %q, want \"#0969da\"", p.Primary)
 	}
 }
 
@@ -78,10 +78,10 @@ func TestGetThemePalette_ExplicitModes(t *testing.T) {
 		wantBg      string
 		wantPalette ThemePalette
 	}{
-		{name: "dark mode", mode: "dark", wantBg: "#1a1b26", wantPalette: ThemePaletteDark},
+		{name: "dark mode", mode: "dark", wantBg: "#282a36", wantPalette: ThemePaletteDark},
 		{name: "light mode", mode: "light", wantBg: "#ffffff", wantPalette: ThemePaletteLight},
-		{name: "empty defaults to dark", mode: "", wantBg: "#1a1b26", wantPalette: ThemePaletteDark},
-		{name: "unknown defaults to dark", mode: "sepia", wantBg: "#1a1b26", wantPalette: ThemePaletteDark},
+		{name: "empty defaults to dark", mode: "", wantBg: "#282a36", wantPalette: ThemePaletteDark},
+		{name: "unknown defaults to dark", mode: "sepia", wantBg: "#282a36", wantPalette: ThemePaletteDark},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

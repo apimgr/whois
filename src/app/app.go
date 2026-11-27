@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,10 +13,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -305,22 +309,11 @@ func Run(ctx context.Context, cfg *config.ServerConfig, listeners ...net.Listene
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	started := time.Now()
 	var listener net.Listener
 	if len(listeners) > 0 {
 		listener = listeners[0]
 	}
-	database, err := initDatabase(cfg)
-	if err != nil {
-		return fmt.Errorf("initialize database: %w", err)
-	}
-	defer func() { _ = database.Close() }()
-	if err := resumeInstallationSecretRotation(ctx, database, cfg.ConfigDir); err != nil {
-		return fmt.Errorf("resume installation-secret rotation: %w", err)
-	}
-	if err := resumeEncryptionKeyRotation(ctx, database, cfg); err != nil {
-		return fmt.Errorf("resume encryption-key rotation: %w", err)
-	}
-
 	// Initialize log file infrastructure (PART 11).
 	// GetLogDir() returns the correct OS/container-specific path.
 	lgr, err := logger.Open(cfg.GetLogDir())
@@ -332,6 +325,23 @@ func Run(ctx context.Context, cfg *config.ServerConfig, listeners ...net.Listene
 		defer lgr.Close()
 	}
 
+	database, err := initializeServingDatabase(ctx, cfg)
+	if err != nil {
+		log.Printf("ERROR: database startup failed; entering maintenance mode: %v", err)
+		var closeRecoveryListener func()
+		recoveryCtx, stopRecovery := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		database, listener, closeRecoveryListener, err = recoverDatabaseWhileServing(recoveryCtx, cfg, listener, err, started)
+		stopRecovery()
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
+			return err
+		}
+		defer closeRecoveryListener()
+	}
+	defer func() { _ = database.Close() }()
+
 	// Print startup banner
 	printStartupBanner(cfg)
 
@@ -339,6 +349,408 @@ func Run(ctx context.Context, cfg *config.ServerConfig, listeners ...net.Listene
 	srv := server.New(cfg, database, lgr)
 	srv.SetPIDFilePath(cfg.PIDFilePath)
 	return srv.Run(ctx, listener)
+}
+
+// initializeServingDatabase opens the database and completes startup migrations
+// that must succeed before the application can serve normal requests.
+func initializeServingDatabase(ctx context.Context, cfg *config.ServerConfig) (*db.DB, error) {
+	database, err := initDatabase(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("initialize database: %w", err)
+	}
+	if err := resumeInstallationSecretRotation(ctx, database, cfg.ConfigDir); err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("resume installation-secret rotation: %w", err)
+	}
+	if err := resumeEncryptionKeyRotation(ctx, database, cfg); err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("resume encryption-key rotation: %w", err)
+	}
+	return database, nil
+}
+
+type recoverySnapshot struct {
+	Reason      string    `json:"reason"`
+	Message     string    `json:"message"`
+	Since       time.Time `json:"since"`
+	Enabled     bool      `json:"enabled"`
+	Exhausted   bool      `json:"exhausted"`
+	Attempts    int       `json:"attempts"`
+	LastAttempt time.Time `json:"last_attempt,omitempty"`
+	NextAttempt time.Time `json:"next_attempt,omitempty"`
+}
+
+type recoveryState struct {
+	mu       sync.RWMutex
+	started  time.Time
+	interval time.Duration
+	status   recoverySnapshot
+}
+
+func (s *recoveryState) snapshot() recoverySnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.status
+}
+
+func (s *recoveryState) recordFailure(attempt int, next time.Time, exhausted bool) {
+	s.mu.Lock()
+	s.status.Attempts = attempt
+	s.status.LastAttempt = time.Now().UTC()
+	if exhausted {
+		s.status.NextAttempt = time.Time{}
+	} else {
+		s.status.NextAttempt = next
+	}
+	s.status.Exhausted = exhausted
+	s.status.Enabled = !exhausted
+	s.mu.Unlock()
+}
+
+// listenerHandoff keeps the bound socket while replacing the temporary
+// maintenance HTTP server with the fully initialized application server.
+type listenerHandoff struct {
+	listener net.Listener
+	accepted chan net.Conn
+	done     chan struct{}
+	close    sync.Once
+	mu       sync.Mutex
+	paused   chan struct{}
+}
+
+func newListenerHandoff(listener net.Listener) *listenerHandoff {
+	handoff := &listenerHandoff{
+		listener: listener,
+		accepted: make(chan net.Conn),
+		done:     make(chan struct{}),
+	}
+	go handoff.acceptLoop()
+	return handoff
+}
+
+func (h *listenerHandoff) acceptLoop() {
+	for {
+		conn, err := h.listener.Accept()
+		if err != nil {
+			select {
+			case <-h.done:
+				return
+			default:
+			}
+			if temporary, ok := err.(net.Error); ok && temporary.Timeout() {
+				time.Sleep(25 * time.Millisecond)
+				continue
+			}
+			h.closeAll()
+			return
+		}
+		h.mu.Lock()
+		paused := h.paused
+		h.mu.Unlock()
+		select {
+		case h.accepted <- conn:
+		case <-paused:
+			_ = conn.Close()
+		case <-h.done:
+			_ = conn.Close()
+			return
+		}
+	}
+}
+
+func (h *listenerHandoff) stage() net.Listener {
+	h.mu.Lock()
+	h.paused = nil
+	h.mu.Unlock()
+	return &listenerStage{handoff: h, stopped: make(chan struct{})}
+}
+
+func (h *listenerHandoff) pause() {
+	h.mu.Lock()
+	if h.paused == nil {
+		h.paused = make(chan struct{})
+		close(h.paused)
+	}
+	h.mu.Unlock()
+}
+
+func (h *listenerHandoff) closeAll() {
+	h.close.Do(func() {
+		close(h.done)
+		_ = h.listener.Close()
+		for {
+			select {
+			case conn := <-h.accepted:
+				_ = conn.Close()
+			default:
+				return
+			}
+		}
+	})
+}
+
+type listenerStage struct {
+	handoff *listenerHandoff
+	stopped chan struct{}
+	close   sync.Once
+}
+
+func (l *listenerStage) Accept() (net.Conn, error) {
+	select {
+	case <-l.stopped:
+		return nil, net.ErrClosed
+	default:
+	}
+	select {
+	case conn := <-l.handoff.accepted:
+		return conn, nil
+	case <-l.stopped:
+		return nil, net.ErrClosed
+	case <-l.handoff.done:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *listenerStage) Close() error {
+	l.close.Do(func() { close(l.stopped) })
+	return nil
+}
+
+func (l *listenerStage) Addr() net.Addr { return l.handoff.listener.Addr() }
+
+func recoveryRetryInterval(cfg *config.ServerConfig) time.Duration {
+	if interval, err := time.ParseDuration(cfg.Maintenance.SelfHealing.RetryInterval); err == nil && interval > 0 {
+		return interval
+	}
+	return 30 * time.Second
+}
+
+func recoveryRetryDelay(failedAttempts int, interval time.Duration) time.Duration {
+	delay := time.Second
+	for n := 1; n < failedAttempts && n < 4; n++ {
+		delay *= 2
+	}
+	if failedAttempts > 3 {
+		delay = interval
+	}
+	if delay > interval {
+		return interval
+	}
+	return delay
+}
+
+func recoverDatabaseWhileServing(ctx context.Context, cfg *config.ServerConfig, listener net.Listener, initialErr error, started time.Time) (*db.DB, net.Listener, func(), error) {
+	if listener == nil {
+		address := net.JoinHostPort(strings.Trim(cfg.Address, "[]"), fmt.Sprint(cfg.Port))
+		bound, err := net.Listen("tcp", address)
+		if err != nil && strings.Trim(cfg.Address, "[]") == "::" && appIPv6Unavailable(err) {
+			bound, err = net.Listen("tcp", net.JoinHostPort("0.0.0.0", fmt.Sprint(cfg.Port)))
+		}
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("database startup failed and maintenance listener could not bind: %w", err)
+		}
+		listener = bound
+	}
+	interval := recoveryRetryInterval(cfg)
+	state := &recoveryState{
+		started:  started,
+		interval: interval,
+		status: recoverySnapshot{
+			Reason:  "database_connection",
+			Message: "Database connection failed",
+			Since:   time.Now().UTC(),
+			Enabled: true,
+		},
+	}
+	handoff := newListenerHandoff(listener)
+	readOnlyHandler, closeReadOnlyHandler := server.NewMaintenanceReadOnlyHandler(cfg)
+	cleanup := func() {
+		closeReadOnlyHandler()
+		handoff.closeAll()
+	}
+	maintenanceServer := &http.Server{Handler: databaseMaintenanceHandler(cfg, state, readOnlyHandler)}
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- maintenanceServer.Serve(handoff.stage()) }()
+
+	attempts := 1
+	next := time.Now().Add(recoveryRetryDelay(attempts, interval))
+	maxAttempts := cfg.Maintenance.SelfHealing.MaxAttempts
+	state.recordFailure(attempts, next, maxAttempts > 0 && attempts >= maxAttempts)
+	if initialErr != nil {
+		log.Printf("WARN: maintenance mode active; database recovery attempt %d failed: %v", attempts, initialErr)
+	}
+	for {
+		snapshot := state.snapshot()
+		if snapshot.Exhausted {
+			log.Printf("ERROR: database self-healing exhausted after %d failed attempts; restart the service after correcting the cause", attempts)
+			select {
+			case <-ctx.Done():
+				_ = maintenanceServer.Shutdown(context.Background())
+				if serveErr := <-serveDone; serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+					log.Printf("WARN: maintenance server shutdown: %v", serveErr)
+				}
+				cleanup()
+				return nil, nil, nil, ctx.Err()
+			case serveErr := <-serveDone:
+				if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+					cleanup()
+					return nil, nil, nil, fmt.Errorf("maintenance server: %w", serveErr)
+				}
+				cleanup()
+				return nil, nil, nil, errors.New("maintenance listener stopped before recovery")
+			}
+		}
+		timer := time.NewTimer(time.Until(snapshot.NextAttempt))
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			_ = maintenanceServer.Shutdown(context.Background())
+			if serveErr := <-serveDone; serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+				log.Printf("WARN: maintenance server shutdown: %v", serveErr)
+			}
+			cleanup()
+			return nil, nil, nil, ctx.Err()
+		case serveErr := <-serveDone:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+				cleanup()
+				return nil, nil, nil, fmt.Errorf("maintenance server: %w", serveErr)
+			}
+			cleanup()
+			return nil, nil, nil, errors.New("maintenance listener stopped before recovery")
+		case <-timer.C:
+		}
+
+		database, err := initializeServingDatabase(ctx, cfg)
+		if err == nil {
+			log.Printf("INFO: database recovery succeeded after %d failed attempts; leaving maintenance mode", attempts)
+			if shutdownErr := maintenanceServer.Shutdown(context.Background()); shutdownErr != nil {
+				_ = database.Close()
+				cleanup()
+				return nil, nil, nil, fmt.Errorf("stop maintenance server: %w", shutdownErr)
+			}
+			if serveErr := <-serveDone; serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+				_ = database.Close()
+				cleanup()
+				return nil, nil, nil, fmt.Errorf("maintenance server: %w", serveErr)
+			}
+			handoff.pause()
+			return database, handoff.stage(), cleanup, nil
+		}
+		attempts++
+		next = time.Now().Add(recoveryRetryDelay(attempts, interval))
+		state.recordFailure(attempts, next, maxAttempts > 0 && attempts >= maxAttempts)
+		log.Printf("WARN: database recovery attempt %d failed: %v", attempts, err)
+	}
+}
+
+func appIPv6Unavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "address family not supported") ||
+		strings.Contains(message, "family not supported by protocol") ||
+		strings.Contains(message, "protocol not supported")
+}
+
+func databaseMaintenanceHandler(cfg *config.ServerConfig, state *recoveryState, readOnlyHandler http.Handler) http.Handler {
+	var healthComponentsOnce sync.Once
+	var maintenanceFeatures server.FeaturesInfo
+	var maintenanceChecks server.ChecksInfo
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		snapshot := state.snapshot()
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && server.IsMaintenanceReadOnlyPath(cfg, r.URL.Path) && !strings.HasSuffix(strings.TrimRight(r.URL.Path, "/"), "/healthz") {
+			readOnlyHandler.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		retryAfter := state.interval
+		if !snapshot.NextAttempt.IsZero() {
+			retryAfter = time.Until(snapshot.NextAttempt)
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(max(1, int((retryAfter+time.Second-1)/time.Second))))
+		w.Header().Set("X-Maintenance-Mode", "true")
+		w.Header().Set("X-Maintenance-Reason", snapshot.Reason)
+		if strings.HasSuffix(strings.TrimRight(r.URL.Path, "/"), "/healthz") && r.Method == http.MethodGet {
+			projectName := strings.TrimSpace(cfg.Branding.Title)
+			if projectName == "" {
+				projectName = constants.InternalName
+			}
+			tagline := strings.TrimSpace(cfg.Branding.Tagline)
+			if tagline == "" {
+				tagline = "WHOIS Lookup Service"
+			}
+			description := strings.TrimSpace(cfg.Branding.Description)
+			if description == "" {
+				description = "Domain, IP, and ASN WHOIS lookup service"
+			}
+			var lastAttempt, nextAttempt *time.Time
+			if !snapshot.LastAttempt.IsZero() {
+				lastAttempt = &snapshot.LastAttempt
+			}
+			if !snapshot.NextAttempt.IsZero() {
+				nextAttempt = &snapshot.NextAttempt
+			}
+			healthComponentsOnce.Do(func() {
+				maintenanceFeatures, maintenanceChecks = server.MaintenanceHealthComponents(cfg)
+			})
+			response := server.HealthResponse{
+				Project: server.ProjectInfo{Name: projectName, Tagline: tagline, Description: description},
+				Status:  "maintenance", Version: server.Version, GoVersion: runtime.Version(),
+				Build:  server.BuildInfo{Commit: server.CommitID, Date: server.BuildDate},
+				Uptime: recoveryUptime(time.Since(state.started)), Mode: cfg.Mode, Timestamp: time.Now().UTC().Truncate(time.Second),
+				Features: maintenanceFeatures, Checks: maintenanceChecks,
+				Stats: server.StatsInfo{},
+				Maintenance: &server.MaintenanceInfo{
+					Reason: snapshot.Reason, Message: snapshot.Message, Since: snapshot.Since,
+					SelfHealing: server.SelfHealingInfo{
+						Enabled: snapshot.Enabled, Exhausted: snapshot.Exhausted, Attempts: snapshot.Attempts,
+						LastAttempt: lastAttempt, NextAttempt: nextAttempt,
+					},
+				},
+			}
+			server.RenderMaintenanceHealth(w, r, cfg, response)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		if r.Method == http.MethodHead {
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false, "error": "MAINTENANCE", "message": "Server is in maintenance mode due to: " + snapshot.Message,
+			"details": map[string]any{"reason": snapshot.Reason, "self_healing": snapshot.Enabled},
+		})
+	})
+}
+
+func recoveryUptime(elapsed time.Duration) string {
+	if elapsed < time.Minute {
+		return elapsed.Round(time.Second).String()
+	}
+	days := int(elapsed.Hours() / 24)
+	hours := int(elapsed.Hours()) % 24
+	minutes := int(elapsed.Minutes()) % 60
+	var parts []string
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%dd", days))
+	}
+	if hours > 0 || days > 0 {
+		parts = append(parts, fmt.Sprintf("%dh", hours))
+	}
+	parts = append(parts, fmt.Sprintf("%dm", minutes))
+	return strings.Join(parts, " ")
 }
 
 // runSubcommand dispatches a positional subcommand (serve, migrate, client, version,

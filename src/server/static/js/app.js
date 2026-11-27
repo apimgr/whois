@@ -16,27 +16,92 @@
   }
 })();
 
-// Copy preference-sync values without submitting a form.
+// Toasts provide non-blocking feedback for enhanced form and API actions.
 (function(){
-  document.querySelectorAll('.copy-token[data-copy-target]').forEach(function(button){
-    button.addEventListener('click',function(){
-      var target=document.getElementById(button.getAttribute('data-copy-target'));
-      if(!target)return;
-      var value=target.textContent||'';
-      if(navigator.clipboard&&navigator.clipboard.writeText){
-        navigator.clipboard.writeText(value).catch(function(){});
-        return;
-      }
-      var range=document.createRange();
-      range.selectNodeContents(target);
-      var selection=window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand('copy');
-      selection.removeAllRanges();
-    });
-  });
+  var container=document.getElementById('toast-container');
+  if(!container)return;
+  var body=document.body;
+  function durationSeconds(value,fallback){
+    if(value===undefined||value===null||String(value).trim()==='')return fallback;
+    var parsed=Number(value);
+    return Number.isFinite(parsed)?Math.max(0,parsed):fallback;
+  }
+  var duration=durationSeconds(body.dataset.toastDuration,3)*1000;
+  var warningDuration=durationSeconds(body.dataset.toastWarningDuration,5)*1000;
+  var sequence=0;
+  function dismissToast(id){
+    var toast=container.querySelector('[data-toast-id="'+id+'"]');
+    if(toast&&!toast.classList.contains('toast-dismissed')){toast.classList.add('toast-dismissed');window.setTimeout(function(){toast.remove();showQueued();},200);}
+  }
+  function showQueued(){
+    var visible=container.querySelectorAll('.toast').length;
+    while(visible<5&&container._toastQueue&&container._toastQueue.length){
+      var queued=container._toastQueue.shift();container.appendChild(queued);visible++;if(queued._startToastTimer)queued._startToastTimer();
+    }
+  }
+  function showToast(message,type){
+    type=['success','error','warning','info'].indexOf(type)>=0?type:'info';
+    var toast=document.createElement('div');toast.className='toast toast-'+type;toast.setAttribute('role','alert');toast.setAttribute('aria-live','polite');
+    var icon=document.createElement('span');icon.className='toast-icon';icon.textContent={success:'✓',error:'✗',warning:'⚠',info:'ℹ'}[type];
+    var text=document.createElement('span');text.className='toast-message';text.textContent=String(message);
+    var close=document.createElement('button');close.type='button';close.className='toast-close';close.setAttribute('aria-label','Dismiss');close.textContent='×';
+    var id=String(++sequence);toast.dataset.toastId=id;toast.append(icon,text,close);
+    close.addEventListener('click',function(){dismissToast(id);});toast.addEventListener('click',function(){dismissToast(id);});
+    var wait=type==='error'?0:(type==='warning'?warningDuration:duration);
+    if(wait>0){var progress=document.createElement('div');progress.className='toast-progress';toast.appendChild(progress);}
+    if(wait>0){var timer,startedAt,remaining=wait;function start(){if(!toast.isConnected||remaining<=0)return;startedAt=Date.now();timer=window.setTimeout(function(){dismissToast(id);},remaining);}function stop(){if(!timer)return;window.clearTimeout(timer);timer=null;remaining=Math.max(0,remaining-(Date.now()-startedAt));}toast._startToastTimer=start;toast.addEventListener('mouseenter',stop);toast.addEventListener('mouseleave',start);}
+    container._toastQueue=container._toastQueue||[];
+    if(container.querySelectorAll('.toast').length<5){container.prepend(toast);if(toast._startToastTimer)toast._startToastTimer();}else container._toastQueue.push(toast);
+    return id;
+  }
+  function dismissAllToasts(){container.innerHTML='';container._toastQueue=[];}
+  document.addEventListener('keydown',function(event){if(event.key==='Escape'){var toast=container.querySelector('.toast');if(toast)dismissToast(toast.dataset.toastId);}});
+  window.showToast=showToast;window.dismissToast=dismissToast;window.dismissAllToasts=dismissAllToasts;
 })();
+
+// Copy values from buttons or selectable multiline code blocks and announce success.
+function copyToClipboard(value){
+  if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(value);
+  var field=document.createElement('textarea');
+  field.className='sr-only';
+  field.value=value;
+  field.setAttribute('readonly','');
+  document.body.appendChild(field);
+  field.select();
+  var copied=document.execCommand('copy');
+  field.remove();
+  return copied?Promise.resolve():Promise.reject(new Error('Clipboard unavailable'));
+}
+
+function showCopySuccess(button){
+  var icon=button.querySelector('.copy-icon');
+  var label=button.querySelector('.copy-text');
+  var copied=button.dataset.copiedLabel||'Copied!';
+  var restore=[];
+  if(icon){restore.push([icon,icon.textContent]);icon.textContent='✓';}
+  if(label){restore.push([label,label.textContent]);label.textContent=copied;}
+  if(!icon&&!label){restore.push([button,button.textContent]);button.textContent='✓ '+copied;button.setAttribute('aria-live','polite');}
+  button.classList.add('copied');
+  if(button._copyFeedbackTimer)window.clearTimeout(button._copyFeedbackTimer);
+  button._copyFeedbackTimer=window.setTimeout(function(){
+    restore.forEach(function(item){item[0].textContent=item[1];});
+    button.classList.remove('copied');
+    button._copyFeedbackTimer=null;
+  },2000);
+}
+
+document.addEventListener('click',function(event){
+  var button=event.target.closest('.copy-btn');
+  if(!button)return;
+  var value=button.getAttribute('data-copy');
+  if(value===null){
+    var targetId=button.getAttribute('data-copy-target');
+    var target=targetId?document.getElementById(targetId):button.previousElementSibling;
+    value=target?target.textContent:'';
+  }
+  if(!value)return;
+  copyToClipboard(value).then(function(){showCopySuccess(button);}).catch(function(){});
+});
 
 (function(){
   var form=document.getElementById('whois-form');

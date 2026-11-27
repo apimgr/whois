@@ -32,7 +32,9 @@
     "details": "Details",
     "settings": "Einstellungen",
     "done": "Fertig",
-    "new_lookup": "Neue Suche"
+    "new_lookup": "Neue Suche",
+    "copied": "Kopiert!",
+    "response_description": "Die angeforderten Informationen werden unten angezeigt."
   },
   "nav": {
     "home": "Startseite",
@@ -57,11 +59,23 @@
     "healthy": "Gesund",
     "degraded": "Beeinträchtigt",
     "unhealthy": "Fehlerhaft",
+    "restart_required": "Neustart erforderlich",
+    "maintenance": "Wartungsmodus",
+    "shutting_down": "Wird heruntergefahren",
     "version": "Version",
     "uptime": "Betriebszeit",
     "mode": "Modus",
     "status": "Status",
-    "checks": "Komponentenprüfungen",
+    "checks": "Prüfungen",
+    "check": {"unknown": "Prüfung: {key}"},
+    "geoip": "GeoIP",
+    "build": "Build",
+    "go_version": "Go",
+    "checked": "Geprüft",
+    "statistics": "Statistik",
+    "requests_total": "Anfragen gesamt",
+    "requests_24h": "Anfragen (24 Stunden)",
+    "active_connections": "Aktive Verbindungen",
     "database": "Datenbank",
     "cache": "Cache",
     "disk": "Speicherplatz",
@@ -332,7 +346,8 @@
     "ccpa_note": "Wir verkaufen keine personenbezogenen Daten. Diese Kontrolle wird dennoch bereitgestellt.",
     "contact_heading": "Fragen",
     "contact_intro": "Wenn Sie Fragen zu dieser Richtlinie haben,",
-    "contact_link": "kontaktieren Sie uns bitte"
+    "contact_link": "kontaktieren Sie uns bitte",
+    "description": "Lesen Sie die Datenschutzerklärung und erfahren Sie, wie der Dienst mit Daten umgeht."
   },
   "contact": {
     "title": "Kontakt",
@@ -571,6 +586,9 @@
     "expires": "Läuft ab",
     "name": "Name",
     "expiry": "Ablauf",
+    "scope": "Berechtigung",
+    "read_only": "Nur lesen",
+    "read_write": "Lesen und schreiben",
     "days": "Tage",
     "year": "Jahr",
     "custom_date": "Benutzerdefiniertes Datum",
@@ -626,7 +644,8 @@
     "import_code": "URL, Abfragezeichenfolge oder Kurzcode einfügen",
     "automatic": "Automatisch ({language})",
     "copy": "Einstellungen kopieren",
-    "erase": "Gespeicherte Einstellungen löschen"
+    "erase": "Gespeicherte Einstellungen löschen",
+    "description": "Erscheinungsbild, Sprache, Einwilligung und verknüpfte Tokens verwalten."
   },
   "security": {
     "thanks_description": "Sicherheitsforscher-Anerkennungen",
@@ -672,7 +691,8 @@
       "patching": "Fix in Bearbeitung",
       "disclosed": "Offengelegt",
       "wont_fix": "Wird nicht behoben"
-    }
+    },
+    "status_description": "Den aktuellen Status Ihres Sicherheitsberichts prüfen."
   },
   "plurals": {
     "duration": {

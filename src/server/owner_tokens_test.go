@@ -122,7 +122,7 @@ func TestOwnerTokenPageUsesCookieAndCSRF(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("page status = %d", response.Code)
 	}
-	if !strings.Contains(response.Body.String(), "Primary token") || !strings.Contains(response.Body.String(), "csrf_token") {
+	if !strings.Contains(response.Body.String(), "Primary token") || !strings.Contains(response.Body.String(), `name="scope"`) || !strings.Contains(response.Body.String(), "csrf_token") {
 		t.Fatal("owner token page omitted primary token controls or CSRF fields")
 	}
 	if strings.Contains(response.Body.String(), raw) {
@@ -151,7 +151,7 @@ func TestLinkedTokenAPILifecycle(t *testing.T) {
 		t.Fatalf("decode primary token response: %v: %s", err, issue.Body.String())
 	}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens", bytes.NewBufferString(`{"name":"automation","expires":"7d"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens", bytes.NewBufferString(`{"name":"automation","scope":"read","expires":"7d"}`))
 	createReq.Header.Set("Authorization", "Bearer "+issued.Data.OwnerToken)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Accept", "application/json")
@@ -164,12 +164,29 @@ func TestLinkedTokenAPILifecycle(t *testing.T) {
 		Data struct {
 			ID          string `json:"id"`
 			LinkedToken string `json:"linked_token"`
+			Scope       string `json:"scope"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(created.Body.Bytes(), &linked); err != nil || linked.Data.ID == "" || linked.Data.LinkedToken == "" {
+	if err := json.Unmarshal(created.Body.Bytes(), &linked); err != nil || linked.Data.ID == "" || linked.Data.LinkedToken == "" || linked.Data.Scope != "read" {
 		t.Fatalf("decode linked token response: %v: %s", err, created.Body.String())
 	}
 	base := "/api/v1/server/preferences/tokens/" + linked.Data.ID
+	linkedRecord, lookupErr := s.lookupOwnerToken(context.Background(), linked.Data.LinkedToken)
+	if lookupErr != nil {
+		t.Fatalf("lookup linked token: %v", lookupErr)
+	}
+	if linkedRecord.Scope != "read" {
+		t.Fatalf("linked token scope = %q, want read", linkedRecord.Scope)
+	}
+
+	linkedManage := httptest.NewRecorder()
+	linkedManageRequest := httptest.NewRequest(http.MethodGet, "/api/v1/server/preferences/tokens", nil)
+	linkedManageRequest.Header.Set("Authorization", "Bearer "+linked.Data.LinkedToken)
+	linkedManageRequest.Header.Set("Accept", "application/json")
+	handler.ServeHTTP(linkedManage, linkedManageRequest)
+	if linkedManage.Code != http.StatusForbidden || linkedManage.Header().Get("WWW-Authenticate") != `Bearer error="insufficient_scope"` {
+		t.Fatalf("linked token management status/header = %d/%q, want 403/insufficient_scope", linkedManage.Code, linkedManage.Header().Get("WWW-Authenticate"))
+	}
 
 	rotateReq := httptest.NewRequest(http.MethodPost, base+"/rotate", nil)
 	rotateReq.Header.Set("Authorization", "Bearer "+issued.Data.OwnerToken)

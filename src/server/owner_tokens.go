@@ -61,6 +61,7 @@ type ownerTokenRecord struct {
 	ID           string
 	OwnerID      string
 	Kind         string
+	Scope        string
 	Name         sql.NullString
 	Prefix       string
 	Last4        string
@@ -128,8 +129,8 @@ func (s *Server) issuePrimaryToken(ctx context.Context, actorIP string) (string,
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO api_tokens
-		(id, owner_id, kind, token_hash, token_prefix, token_last4, token_enc)
-		VALUES (?, ?, 'primary', ?, ?, ?, ?)`,
+		(id, owner_id, kind, scope, token_hash, token_prefix, token_last4, token_enc)
+		VALUES (?, ?, 'primary', 'global', ?, ?, ?, ?)`,
 			tokenID.String(), ownerID.String(), hex.EncodeToString(tokenHash[:]),
 			raw[:12], raw[len(raw)-4:], encrypted); err != nil {
 			return err
@@ -156,10 +157,10 @@ func (s *Server) lookupOwnerToken(ctx context.Context, token string) (*ownerToke
 	}
 	hash := sha256.Sum256([]byte(token))
 	record := &ownerTokenRecord{}
-	err := s.database.Read().QueryRowContext(ctx, `SELECT id, owner_id, kind, name, token_prefix,
+	err := s.database.Read().QueryRowContext(ctx, `SELECT id, owner_id, kind, scope, name, token_prefix,
 		token_last4, token_enc, created_at, expires_at, last_used_at, revoked_at
 		FROM api_tokens WHERE token_hash = ?`, hex.EncodeToString(hash[:])).Scan(
-		&record.ID, &record.OwnerID, &record.Kind, &record.Name, &record.Prefix,
+		&record.ID, &record.OwnerID, &record.Kind, &record.Scope, &record.Name, &record.Prefix,
 		&record.Last4, &record.Encrypted, &record.CreatedAt, &record.ExpiresAt,
 		&record.LastUsed, &record.RevokedAt)
 	if err != nil {
@@ -293,7 +294,7 @@ func (s *Server) handleCreateLinkedTokenPage(w http.ResponseWriter, r *http.Requ
 		writeRequestError(w, r, http.StatusForbidden)
 		return
 	}
-	body, _ := json.Marshal(linkedTokenRequest{Name: r.FormValue("name"), Expires: r.FormValue("expires"), ExpiresOn: r.FormValue("expires_on")})
+	body, _ := json.Marshal(linkedTokenRequest{Name: r.FormValue("name"), Scope: r.FormValue("scope"), Expires: r.FormValue("expires"), ExpiresOn: r.FormValue("expires_on")})
 	request := s.ownerAPIRequest(r, record, http.MethodPost, "/tokens", body)
 	response := httptest.NewRecorder()
 	s.handleCreateLinkedTokenAPI(response, request)
@@ -586,7 +587,7 @@ func (s *Server) handleListOwnerTokensAPI(w http.ResponseWriter, r *http.Request
 	if record == nil {
 		return
 	}
-	rows, err := s.database.Read().QueryContext(r.Context(), `SELECT id, kind, name, token_prefix, token_last4,
+	rows, err := s.database.Read().QueryContext(r.Context(), `SELECT id, kind, scope, name, token_prefix, token_last4,
 		created_at, last_used_at, expires_at, revoked_at FROM api_tokens WHERE owner_id = ? ORDER BY created_at`, record.OwnerID)
 	if err != nil {
 		SendError(w, ErrServerError, "Could not list tokens")
@@ -595,11 +596,11 @@ func (s *Server) handleListOwnerTokensAPI(w http.ResponseWriter, r *http.Request
 	defer func() { _ = rows.Close() }()
 	tokens := make([]map[string]any, 0)
 	for rows.Next() {
-		var id, kind, prefix, last4 string
+		var id, kind, scope, prefix, last4 string
 		var name sql.NullString
 		var created int64
 		var used, expires, revoked sql.NullInt64
-		if err := rows.Scan(&id, &kind, &name, &prefix, &last4, &created, &used, &expires, &revoked); err != nil {
+		if err := rows.Scan(&id, &kind, &scope, &name, &prefix, &last4, &created, &used, &expires, &revoked); err != nil {
 			SendError(w, ErrServerError, "Could not list tokens")
 			return
 		}
@@ -609,7 +610,7 @@ func (s *Server) handleListOwnerTokensAPI(w http.ResponseWriter, r *http.Request
 		} else if expires.Valid && expires.Int64 <= time.Now().Unix() {
 			status = "expired"
 		}
-		tokens = append(tokens, map[string]any{"id": id, "kind": kind, "name": name.String,
+		tokens = append(tokens, map[string]any{"id": id, "kind": kind, "scope": scope, "name": name.String,
 			"token_masked": maskedOwnerToken(last4), "created_at": time.Unix(created, 0).UTC().Format(time.RFC3339),
 			"last_used_at": nullableTime(used), "expires_at": nullableTime(expires), "status": status})
 	}
@@ -645,7 +646,8 @@ func (s *Server) requirePrimaryTokenAPI(w http.ResponseWriter, r *http.Request) 
 		SendError(w, ErrUnauthorized, "Primary token required")
 		return nil
 	}
-	if record.Kind != "primary" {
+	if record.Kind != "primary" || record.Scope != "global" {
+		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
 		SendError(w, ErrForbidden, "Primary token required")
 		return nil
 	}
@@ -654,6 +656,7 @@ func (s *Server) requirePrimaryTokenAPI(w http.ResponseWriter, r *http.Request) 
 
 type linkedTokenRequest struct {
 	Name      string `json:"name"`
+	Scope     string `json:"scope"`
 	Expires   string `json:"expires"`
 	ExpiresOn string `json:"expires_on"`
 }
@@ -712,6 +715,14 @@ func (s *Server) handleCreateLinkedTokenAPI(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	name := strings.TrimSpace(request.Name)
+	scope := request.Scope
+	if scope == "" {
+		scope = "read-write"
+	}
+	if scope != "read" && scope != "read-write" {
+		SendError(w, ErrValidationFailed, "Scope must be read or read-write")
+		return
+	}
 	expires, err := parseTokenExpiry(request.Expires, request.ExpiresOn, time.Now())
 	if err != nil {
 		SendError(w, ErrValidationFailed, err.Error())
@@ -775,8 +786,8 @@ func (s *Server) handleCreateLinkedTokenAPI(w http.ResponseWriter, r *http.Reque
 				return conflict
 			}
 			_, err = tx.ExecContext(r.Context(), `INSERT INTO api_tokens
-				(id, owner_id, kind, name, token_hash, token_prefix, token_last4, token_enc, expires_at)
-				VALUES (?, ?, 'linked', ?, ?, ?, ?, ?, ?)`, id.String(), primary.OwnerID, name, hex.EncodeToString(hash[:]), raw[:12], raw[len(raw)-4:], encrypted, expires)
+				(id, owner_id, kind, scope, name, token_hash, token_prefix, token_last4, token_enc, expires_at)
+				VALUES (?, ?, 'linked', ?, ?, ?, ?, ?, ?, ?)`, id.String(), primary.OwnerID, scope, name, hex.EncodeToString(hash[:]), raw[:12], raw[len(raw)-4:], encrypted, expires)
 			return err
 		})
 		if err == nil || errors.Is(err, errLinkedTokenNameConflict) || errors.Is(err, errLinkedTokenLimitConflict) || !isOwnerTokenWriteConflict(err) || r.Context().Err() != nil {
@@ -800,7 +811,7 @@ func (s *Server) handleCreateLinkedTokenAPI(w http.ResponseWriter, r *http.Reque
 		SendError(w, ErrServerError, "Could not create linked token")
 		return
 	}
-	linked := &ownerTokenRecord{ID: id.String(), OwnerID: primary.OwnerID, Kind: "linked", Name: sql.NullString{String: name, Valid: true}, Prefix: raw[:12], Last4: raw[len(raw)-4:], Encrypted: encrypted, CreatedAt: createdAt}
+	linked := &ownerTokenRecord{ID: id.String(), OwnerID: primary.OwnerID, Kind: "linked", Scope: scope, Name: sql.NullString{String: name, Valid: true}, Prefix: raw[:12], Last4: raw[len(raw)-4:], Encrypted: encrypted, CreatedAt: createdAt}
 	if expires != nil {
 		linked.ExpiresAt = sql.NullInt64{Int64: *expires, Valid: true}
 	}
@@ -815,7 +826,7 @@ func (s *Server) handleCreateLinkedTokenAPI(w http.ResponseWriter, r *http.Reque
 
 func ownerTokenPublicView(record *ownerTokenRecord) map[string]any {
 	status := ownerTokenStatus(record)
-	return map[string]any{"id": record.ID, "name": record.Name.String, "kind": record.Kind,
+	return map[string]any{"id": record.ID, "name": record.Name.String, "kind": record.Kind, "scope": record.Scope,
 		"token_masked": maskedOwnerToken(record.Last4),
 		"created_at":   time.Unix(record.CreatedAt, 0).UTC().Format(time.RFC3339),
 		"last_used_at": nullableTime(record.LastUsed), "expires_at": nullableTime(record.ExpiresAt), "status": status}
@@ -848,8 +859,8 @@ func prepareOwnerTokenPageRecord(record *ownerTokenRecord) {
 
 func (s *Server) getOwnedLinkedToken(ctx context.Context, ownerID, id string) (*ownerTokenRecord, error) {
 	record := &ownerTokenRecord{}
-	err := s.database.Read().QueryRowContext(ctx, `SELECT id, owner_id, kind, name, token_prefix, token_last4, token_enc, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE id = ? AND owner_id = ? AND kind = 'linked'`, id, ownerID).Scan(
-		&record.ID, &record.OwnerID, &record.Kind, &record.Name, &record.Prefix, &record.Last4, &record.Encrypted, &record.CreatedAt, &record.ExpiresAt, &record.LastUsed, &record.RevokedAt)
+	err := s.database.Read().QueryRowContext(ctx, `SELECT id, owner_id, kind, scope, name, token_prefix, token_last4, token_enc, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE id = ? AND owner_id = ? AND kind = 'linked'`, id, ownerID).Scan(
+		&record.ID, &record.OwnerID, &record.Kind, &record.Scope, &record.Name, &record.Prefix, &record.Last4, &record.Encrypted, &record.CreatedAt, &record.ExpiresAt, &record.LastUsed, &record.RevokedAt)
 	return record, err
 }
 
@@ -1132,12 +1143,12 @@ func (s *Server) handleOwnerTokensPage(w http.ResponseWriter, r *http.Request) {
 		page.HasOwner = true
 		page.Primary = record
 		prepareOwnerTokenPageRecord(record)
-		rows, queryErr := s.database.Read().QueryContext(r.Context(), `SELECT id, owner_id, kind, name, token_prefix, token_last4, token_enc, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE owner_id = ? AND kind = 'linked' ORDER BY created_at`, record.OwnerID)
+		rows, queryErr := s.database.Read().QueryContext(r.Context(), `SELECT id, owner_id, kind, scope, name, token_prefix, token_last4, token_enc, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE owner_id = ? AND kind = 'linked' ORDER BY created_at`, record.OwnerID)
 		if queryErr == nil {
 			defer func() { _ = rows.Close() }()
 			for rows.Next() {
 				linked := &ownerTokenRecord{}
-				if rows.Scan(&linked.ID, &linked.OwnerID, &linked.Kind, &linked.Name, &linked.Prefix, &linked.Last4, &linked.Encrypted, &linked.CreatedAt, &linked.ExpiresAt, &linked.LastUsed, &linked.RevokedAt) == nil {
+				if rows.Scan(&linked.ID, &linked.OwnerID, &linked.Kind, &linked.Scope, &linked.Name, &linked.Prefix, &linked.Last4, &linked.Encrypted, &linked.CreatedAt, &linked.ExpiresAt, &linked.LastUsed, &linked.RevokedAt) == nil {
 					prepareOwnerTokenPageRecord(linked)
 					page.Linked = append(page.Linked, linked)
 				}

@@ -4,12 +4,12 @@
 
 {{define "page_content"}}
 <main id="main-content" class="container container-sm">
-    <header class="page-header"><h1 class="page-title">{{t .Lang "preferences.title"}}</h1></header>
+    <header class="page-header"><h1 class="page-title">{{t .Lang "preferences.title"}}</h1><p class="page-lead">{{t .Lang "preferences.description"}}</p></header>
     {{if .ConsentRequired}}<p role="status"><a href="#privacy">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
     <form method="post" action="{{path "/server/preferences"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="consent_form" value="1">
-      <section class="card section-card" aria-labelledby="appearance-heading">
+      <section class="section-card" aria-labelledby="appearance-heading">
         <h2 id="appearance-heading">{{t .Lang "preferences.appearance"}}</h2>
         <fieldset><legend>{{t .Lang "preferences.theme"}}</legend>
           <label><input type="radio" name="theme" value="dark" {{if eq .Theme "dark"}}checked{{end}}> {{t .Lang "preferences.dark"}}</label>
@@ -17,7 +17,7 @@
           <label><input type="radio" name="theme" value="auto" {{if eq .Theme "auto"}}checked{{end}}> {{t .Lang "preferences.auto"}}</label>
         </fieldset>
       </section>
-      <section class="card section-card" id="language" aria-labelledby="language-heading">
+      <section class="section-card" id="language" aria-labelledby="language-heading">
         <h2 id="language-heading">{{t .Lang "preferences.language"}}</h2>
         <label for="preference-language">{{t .Lang "preferences.language"}}</label>
         <select id="preference-language" name="lang" aria-label="{{t .Lang "preferences.language"}}">
@@ -25,7 +25,7 @@
           {{range .Languages}}<option lang="{{.Code}}" value="{{.Code}}" {{if and $.LanguageOverride (eq .Code $.Language)}}selected{{end}}>{{.NativeName}}</option>{{end}}
         </select>
       </section>
-      <section class="card section-card" id="privacy" aria-labelledby="privacy-heading">
+      <section class="section-card" id="privacy" aria-labelledby="privacy-heading">
         <h2 id="privacy-heading">{{t .Lang "preferences.privacy"}}</h2>
         <label><input type="checkbox" checked disabled> {{t .Lang "preferences.essential"}}</label>
         <label><input type="checkbox" name="consent_preferences" {{if .Consent.Preferences}}checked{{end}}> {{t .Lang "preferences.preference_cookies"}}</label>
@@ -37,14 +37,14 @@
         <a class="btn-secondary" href="{{.CancelURL}}">{{t .Lang "preferences.cancel"}}</a>
         <button class="btn-secondary" type="button" popovertarget="reset-confirmation">{{t .Lang "preferences.reset"}}</button>
       </div>
-      <section id="reset-confirmation" class="card section-card" aria-labelledby="reset-confirmation-heading" popover>
+      <section id="reset-confirmation" class="section-card" aria-labelledby="reset-confirmation-heading" popover>
         <h2 id="reset-confirmation-heading">{{t .Lang "preferences.reset_warning_title"}}</h2>
         <p>{{t .Lang "preferences.reset_warning"}}</p>
         <button class="btn-secondary" type="button" popovertarget="reset-confirmation" popovertargetaction="hide">{{t .Lang "preferences.keep"}}</button>
         <button class="btn-danger" type="submit" name="action" value="reset">{{t .Lang "preferences.erase"}}</button>
       </section>
     </form>
-    <section class="card section-card" aria-labelledby="more-preferences-heading">
+    <section class="section-card" aria-labelledby="more-preferences-heading">
       <h2 id="more-preferences-heading">{{t .Lang "preferences.more"}}</h2>
       <ul class="hub-list" role="list">
         {{range .MorePages}}<li class="hub-item"><a class="hub-link" href="{{path .Path}}"><span class="hub-title">{{t $.Lang .TitleKey}}</span><span class="hub-desc">{{t $.Lang .Description}}</span></a></li>{{end}}

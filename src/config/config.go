@@ -370,8 +370,6 @@ type UpdateConfig struct {
 // MaintenanceSelfHealingConfig controls automatic recovery from critical
 // errors (DB connection loss, disk write failures) — AI.md PART 5.
 type MaintenanceSelfHealingConfig struct {
-	// Enabled turns on automatic retry/recovery attempts.
-	Enabled bool `yaml:"enabled"`
 	// RetryInterval is the delay between recovery attempts (Go duration string).
 	RetryInterval string `yaml:"retry_interval"`
 	// MaxAttempts caps recovery attempts before giving up (0 = unlimited).
@@ -855,7 +853,8 @@ type WebUINotificationsConfig struct {
 	// Position is the on-screen placement: top-right, top-left, bottom-right, bottom-left.
 	Position string `yaml:"position"`
 	// Duration is how long a notification stays visible, in seconds.
-	Duration int `yaml:"duration"`
+	Duration        int `yaml:"duration"`
+	WarningDuration int `yaml:"warning_duration"`
 }
 
 // NotificationsConfig holds all notification channel settings (AI.md PART 17).
@@ -1216,7 +1215,6 @@ func Default() *ServerConfig {
 		},
 		Maintenance: MaintenanceConfig{
 			SelfHealing: MaintenanceSelfHealingConfig{
-				Enabled:       true,
 				RetryInterval: "30s",
 				MaxAttempts:   0,
 			},
@@ -1332,8 +1330,9 @@ func Default() *ServerConfig {
 		},
 		Notifications: NotificationsConfig{
 			WebUI: WebUINotificationsConfig{
-				Position: "top-right",
-				Duration: 5,
+				Position:        "top-right",
+				Duration:        3,
+				WarningDuration: 5,
 			},
 			Email: EmailNotificationsConfig{
 				SMTP: SMTPConfig{
@@ -1714,7 +1713,7 @@ func (c *ServerConfig) GetDatabaseDir() string {
 	switch runtime.GOOS {
 	case "windows":
 		if os.Getuid() == 0 {
-			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName, "db")
+			return filepath.Join(windowsProgramData(), constants.InternalOrg, constants.InternalName, "data", "db")
 		}
 		return filepath.Join(windowsLocalAppData(), constants.InternalOrg, constants.InternalName, "db")
 	case "darwin":

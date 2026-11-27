@@ -69,6 +69,7 @@ func (s *Server) renderStatusError(w http.ResponseWriter, r *http.Request, statu
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	s.setHTMLCacheHeaders(w.Header(), r)
 	w.WriteHeader(status)
 	_, _ = w.Write(rendered)
 }
@@ -76,6 +77,8 @@ func (s *Server) renderStatusError(w http.ResponseWriter, r *http.Request, statu
 type bufferedErrorWriter struct {
 	dst       http.ResponseWriter
 	header    http.Header
+	server    *Server
+	request   *http.Request
 	status    int
 	body      bytes.Buffer
 	committed bool
@@ -83,8 +86,8 @@ type bufferedErrorWriter struct {
 
 const errorResponseBufferLimit = 64 * 1024
 
-func newBufferedErrorWriter(dst http.ResponseWriter) *bufferedErrorWriter {
-	return &bufferedErrorWriter{dst: dst, header: make(http.Header)}
+func newBufferedErrorWriter(dst http.ResponseWriter, server *Server, request *http.Request) *bufferedErrorWriter {
+	return &bufferedErrorWriter{dst: dst, header: make(http.Header), server: server, request: request}
 }
 
 func (w *bufferedErrorWriter) Header() http.Header { return w.header }
@@ -95,6 +98,9 @@ func (w *bufferedErrorWriter) WriteHeader(status int) {
 }
 func (w *bufferedErrorWriter) Write(body []byte) (int, error) {
 	if w.committed {
+		if w.status == http.StatusNotModified {
+			return len(body), nil
+		}
 		return w.dst.Write(body)
 	}
 	if w.status == 0 {
@@ -117,9 +123,11 @@ func (w *bufferedErrorWriter) commit() error {
 	if status == 0 {
 		status = http.StatusOK
 	}
+	w.server.setHTMLCacheHeaders(w.dst.Header(), w.request)
 	w.dst.WriteHeader(status)
 	w.committed = true
 	if w.body.Len() == 0 {
+		w.body.Reset()
 		return nil
 	}
 	_, err := w.dst.Write(w.body.Bytes())
@@ -137,7 +145,7 @@ func (w *bufferedErrorWriter) Flush() {
 
 func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		buffer := newBufferedErrorWriter(w)
+		buffer := newBufferedErrorWriter(w, s, r)
 		panicked := false
 		func() {
 			defer func() {
@@ -183,6 +191,7 @@ func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		copyResponseHeaders(w.Header(), buffer.header)
+		s.setHTMLCacheHeaders(w.Header(), r)
 		w.WriteHeader(status)
 		_, _ = w.Write(buffer.body.Bytes())
 	})
@@ -236,6 +245,7 @@ func writeErrorFallback(s *Server, w http.ResponseWriter, r *http.Request, statu
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	s.setHTMLCacheHeaders(w.Header(), r)
 	w.WriteHeader(status)
 	_, _ = fmt.Fprintf(w, "<!doctype html><html lang=\"%s\" dir=\"%s\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%s</title></head><body><main><h1>%s</h1><p>%s</p><p><a href=\"/\">%s</a></p><p><a href=\"/server/help\">%s</a></p></main></body></html>",
 		html.EscapeString(lang), html.EscapeString(i18n.Dir(lang)), html.EscapeString(translateKey(lang, titleKey)),

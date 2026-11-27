@@ -32,7 +32,9 @@
     "details": "Détails",
     "settings": "Paramètres",
     "done": "Terminé",
-    "new_lookup": "Nouvelle recherche"
+    "new_lookup": "Nouvelle recherche",
+    "copied": "Copié !",
+    "response_description": "Les informations demandées sont affichées ci-dessous."
   },
   "nav": {
     "home": "Accueil",
@@ -57,11 +59,23 @@
     "healthy": "En bonne santé",
     "degraded": "Dégradé",
     "unhealthy": "Défaillant",
+    "restart_required": "Redémarrage requis",
+    "maintenance": "Maintenance",
+    "shutting_down": "Arrêt en cours",
     "version": "Version",
     "uptime": "Disponibilité",
     "mode": "Mode",
     "status": "Statut",
-    "checks": "Vérifications des composants",
+    "checks": "Vérifications",
+    "check": {"unknown": "Vérification : {key}"},
+    "geoip": "GéoIP",
+    "build": "Build",
+    "go_version": "Go",
+    "checked": "Vérifié",
+    "statistics": "Statistiques",
+    "requests_total": "Requêtes totales",
+    "requests_24h": "Requêtes (24 heures)",
+    "active_connections": "Connexions actives",
     "database": "Base de données",
     "cache": "Cache",
     "disk": "Disque",
@@ -332,7 +346,8 @@
     "ccpa_note": "Nous ne vendons pas de données personnelles. Ce contrôle est fourni malgré tout.",
     "contact_heading": "Questions",
     "contact_intro": "Si vous avez des questions concernant cette politique, veuillez",
-    "contact_link": "nous contacter"
+    "contact_link": "nous contacter",
+    "description": "Consultez la politique de confidentialité et le traitement des données par le service."
   },
   "contact": {
     "title": "Contactez-nous",
@@ -571,6 +586,9 @@
     "expires": "Expire",
     "name": "Nom",
     "expiry": "Expiration",
+    "scope": "Portée",
+    "read_only": "Lecture seule",
+    "read_write": "Lecture et écriture",
     "days": "jours",
     "year": "an",
     "custom_date": "Date personnalisée",
@@ -626,7 +644,8 @@
     "import_code": "Collez une URL, une requête ou un code court",
     "automatic": "Automatique ({language})",
     "copy": "Copier les préférences",
-    "erase": "Effacer les préférences enregistrées"
+    "erase": "Effacer les préférences enregistrées",
+    "description": "Gérez l’apparence, la langue, le consentement et les jetons associés."
   },
   "security": {
     "thanks_description": "Remerciements aux chercheurs en sécurité",
@@ -672,7 +691,8 @@
       "patching": "Correction en cours",
       "disclosed": "Divulgué",
       "wont_fix": "Ne réparera pas"
-    }
+    },
+    "status_description": "Consultez l’état actuel de votre signalement de sécurité."
   },
   "plurals": {
     "duration": {

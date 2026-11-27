@@ -19,6 +19,7 @@ permissions:
 env:
   PROJECT_NAME: caswhois
   INTERNAL_NAME: caswhois
+  GOFLAGS: "-buildvcs=false -mod=mod"
 
 jobs:
   # Compute VERSION once — matrix legs must never each compute their own value.
@@ -165,7 +166,7 @@ jobs:
       # SBOM tooling lives in the build image — never install it on the runner
       - name: Generate SBOM (CycloneDX)
         run: |
-          docker run --rm -v "$PWD":/app -w /app -e GOFLAGS=-buildvcs=false casjaysdev/go:latest \
+          docker run --rm -v "$PWD":/app -w /app -e "GOFLAGS=-buildvcs=false -mod=mod" casjaysdev/go:latest \
             cyclonedx-gomod mod -json -output "binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-sbom.cdx.json"
 
       - name: Generate checksums

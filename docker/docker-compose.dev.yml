@@ -23,8 +23,8 @@ services:
       MODE: dev
       TZ: ${TZ:-America/New_York}
     volumes:
-      - './volumes/config:/config:z'
-      - './volumes/data:/data:z'
+      - './volumes/config:/config'
+      - './volumes/data:/data'
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:

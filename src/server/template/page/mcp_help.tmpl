@@ -8,6 +8,7 @@
   <header class="page-header">
     <nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{path "/server/help"}}">{{t .Lang "mcp.back_help"}}</a></nav>
     <h1 class="page-title">{{t .Lang "mcp.title"}}</h1>
+    <p class="page-lead">{{.Name}} {{t .Lang "mcp.overview_text"}}</p>
   </header>
   <section class="section-card" id="overview" aria-labelledby="mcp-overview">
     <h2 id="mcp-overview">{{t .Lang "mcp.overview_title"}}</h2>
@@ -15,10 +16,10 @@
   </section>
   <section class="section-card" id="endpoint" aria-labelledby="mcp-endpoint">
     <h2 id="mcp-endpoint">{{t .Lang "mcp.endpoint_title"}}</h2>
-    <p class="code-block"><code class="selectable">{{.URL}}</code> <button class="copy-btn" type="button" data-copy="{{.URL}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}">{{t .Lang "preferences.copy"}}</button></p>
+    <p class="code-block"><code class="selectable-text">{{.URL}}</code> <button class="copy-btn" type="button" data-copy="{{.URL}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></p>
     <p>{{t .Lang "mcp.aliases"}}</p>
-    <p class="code-block"><a class="selectable" href="{{.APIAlias}}">{{.APIAlias}}</a> <button class="copy-btn" type="button" data-copy="{{.APIAlias}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}">{{t .Lang "preferences.copy"}}</button></p>
-    <p class="code-block"><a class="selectable" href="{{.RootAlias}}">{{.RootAlias}}</a> <button class="copy-btn" type="button" data-copy="{{.RootAlias}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}">{{t .Lang "preferences.copy"}}</button></p>
+    <p class="code-block"><a class="selectable-text" href="{{.APIAlias}}">{{.APIAlias}}</a> <button class="copy-btn" type="button" data-copy="{{.APIAlias}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></p>
+    <p class="code-block"><a class="selectable-text" href="{{.RootAlias}}">{{.RootAlias}}</a> <button class="copy-btn" type="button" data-copy="{{.RootAlias}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "mcp.copy_endpoint"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></p>
   </section>
   <section class="section-card" id="authentication" aria-labelledby="mcp-authentication">
     <h2 id="mcp-authentication">{{t .Lang "mcp.auth_title"}}</h2>
@@ -27,11 +28,11 @@
   <section class="section-card" id="connect" aria-labelledby="mcp-connect">
     <h2 id="mcp-connect">{{t .Lang "mcp.connect_title"}}</h2>
     <h3>{{t .Lang "mcp.claude_title"}}</h3>
-    <pre class="code-block"><code>{{.ClaudeCommand}}</code> <button class="copy-btn" type="button" data-copy="{{.ClaudeCommand}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></pre>
+    <pre class="code-block"><code>{{.ClaudeCommand}}</code> <button class="copy-btn" type="button" data-copy="{{.ClaudeCommand}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></pre>
     <h3>{{t .Lang "mcp.generic_title"}}</h3>
-    <pre class="code-block"><code>{{.ClientConfig}}</code> <button class="copy-btn" type="button" data-copy="{{.ClientConfig}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></pre>
+    <pre class="code-block"><code>{{.ClientConfig}}</code> <button class="copy-btn" type="button" data-copy="{{.ClientConfig}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></pre>
     <h3>{{t .Lang "mcp.verify_title"}}</h3>
-    <pre class="code-block"><code>{{.VerifyCommand}}</code> <button class="copy-btn" type="button" data-copy="{{.VerifyCommand}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></pre>
+    <pre class="code-block"><code>{{.VerifyCommand}}</code> <button class="copy-btn" type="button" data-copy="{{.VerifyCommand}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "preferences.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "preferences.copy"}}</span></button></pre>
   </section>
   <section class="section-card" id="tools" aria-labelledby="mcp-tools">
     <h2 id="mcp-tools">{{t .Lang "mcp.tools_title"}}</h2>

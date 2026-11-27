@@ -7,18 +7,19 @@
     <header class="page-header">
       <nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{path "/server/preferences"}}">{{t .Lang "owner_tokens.back_preferences"}}</a></nav>
       <h1 class="page-title">{{t .Lang "preferences.sync"}}</h1>
+      <p class="page-lead">{{t .Lang "preferences.sync_help"}}</p>
     </header>
     {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
-    <section class="card section-card" aria-labelledby="export-heading">
+    <section class="section-card" aria-labelledby="export-heading">
       <h2 id="export-heading">{{t .Lang "preferences.export"}}</h2>
-      <label for="sync-url">{{t .Lang "preferences.export_url"}}</label>
+      <p><strong>{{t .Lang "preferences.export_url"}}</strong></p>
       <p id="sync-url" class="copy-value selectable-text">{{.PreferencesURL}}</p>
-      <button class="btn-secondary copy-token" type="button" data-copy-target="sync-url">{{t .Lang "owner_tokens.copy"}}</button>
-      <label for="sync-code">{{t .Lang "preferences.export_code"}}</label>
+      <button class="copy-btn" type="button" data-copy="{{.PreferencesURL}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "owner_tokens.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "owner_tokens.copy"}}</span></button>
+      <p><strong>{{t .Lang "preferences.export_code"}}</strong></p>
       <p id="sync-code" class="copy-value selectable-text">{{.PreferencesCode}}</p>
-      <button class="btn-secondary copy-token" type="button" data-copy-target="sync-code">{{t .Lang "owner_tokens.copy"}}</button>
+      <button class="copy-btn" type="button" data-copy="{{.PreferencesCode}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "owner_tokens.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "owner_tokens.copy"}}</span></button>
     </section>
-    <form class="card section-card" aria-labelledby="import-heading" method="post" action="{{path "/server/preferences/sync"}}">
+    <form class="section-card" aria-labelledby="import-heading" method="post" action="{{path "/server/preferences/sync"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <h2 id="import-heading">{{t .Lang "preferences.import"}}</h2>
       <label for="sync-input">{{t .Lang "preferences.import_code"}}</label>

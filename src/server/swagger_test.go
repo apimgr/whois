@@ -88,7 +88,14 @@ func TestHandleSwaggerUI(t *testing.T) {
 
 // TestBuildOpenAPISpec verifies the spec structure.
 func TestBuildOpenAPISpec(t *testing.T) {
-	spec := swagger.BuildSpec("http://localhost:8080", Version)
+	s := newTestServer(t)
+	_ = s.setupRoutes()
+	recorder := httptest.NewRecorder()
+	s.handleSwaggerJSON(recorder, httptest.NewRequest(http.MethodGet, "/api/swagger", nil))
+	var spec swagger.OpenAPISpec
+	if err := json.Unmarshal(recorder.Body.Bytes(), &spec); err != nil {
+		t.Fatal(err)
+	}
 
 	// Check required endpoints exist
 	requiredPaths := []string{
@@ -97,7 +104,6 @@ func TestBuildOpenAPISpec(t *testing.T) {
 		"/api/v1/whois/domain/{domain}",
 		"/api/v1/whois/ip/{ip}",
 		"/api/v1/whois/asn/{asn}",
-		"/api/v1/whois/bulk",
 	}
 
 	for _, path := range requiredPaths {
@@ -111,11 +117,7 @@ func TestBuildOpenAPISpec(t *testing.T) {
 		t.Error("missing bearerAuth security scheme")
 	}
 
-	// Check schemas
-	requiredSchemas := []string{"HealthResponse", "WhoisResponse", "WhoisRecord", "BulkRequest"}
-	for _, schema := range requiredSchemas {
-		if _, ok := spec.Components.Schemas[schema]; !ok {
-			t.Errorf("missing schema: %s", schema)
-		}
+	if _, ok := spec.Paths["/api/v1/server/schedulers"]; ok {
+		t.Error("operator-only routes must not appear in public OpenAPI")
 	}
 }

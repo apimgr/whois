@@ -23,6 +23,7 @@ type translatablePageData struct {
 	// The server renders class="theme-{{.Theme}}" on <html> so the page renders
 	// correctly without JS (AI.md PART 16 Themes — NON-NEGOTIABLE).
 	Theme           string
+	AccentCSS       bool
 	ConsentRequired bool
 	// Footer holds the values needed to render the shared application footer
 	// via {{footer .Footer}} (AI.md PART 16 — Footer Customization).
@@ -40,7 +41,9 @@ type translatablePageData struct {
 	// non-dismissed announcements, or empty when there are none (AI.md
 	// PART 16 — Site Banner, Placement: "Immediately after <body>, before
 	// <main>").
-	AnnouncementsHTML template.HTML
+	AnnouncementsHTML    template.HTML
+	ToastDuration        int
+	ToastWarningDuration int
 }
 
 // themeFromRequest reads the theme cookie and returns the active theme.
@@ -70,17 +73,20 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request) translatabl
 		headerHTML = SanitizeFooterHTML(s.config.Branding.Content.Header)
 	}
 	return translatablePageData{
-		AppName:           s.brandName(),
-		CurrentPath:       r.URL.Path,
-		Lang:              lang,
-		Dir:               i18n.Dir(lang),
-		Theme:             themeFromRequest(r),
-		ConsentRequired:   r.URL.Query().Get("consent_required") == "1",
-		Footer:            s.footerData(lang),
-		HeaderHTML:        template.HTML(headerHTML),
-		CSRFToken:         csrfToken,
-		ConsentBannerHTML: s.consentBannerHTML(w, r, lang),
-		AnnouncementsHTML: s.announcementsHTML(w, r),
+		AppName:              s.brandName(),
+		CurrentPath:          r.URL.Path,
+		Lang:                 lang,
+		Dir:                  i18n.Dir(lang),
+		Theme:                themeFromRequest(r),
+		AccentCSS:            accentStylesheetURL(s.config.Web.UI.Accent),
+		ConsentRequired:      r.URL.Query().Get("consent_required") == "1",
+		Footer:               s.footerData(lang),
+		HeaderHTML:           template.HTML(headerHTML),
+		CSRFToken:            csrfToken,
+		ConsentBannerHTML:    s.consentBannerHTML(w, r, lang),
+		AnnouncementsHTML:    s.announcementsHTML(w, r),
+		ToastDuration:        s.config.Notifications.WebUI.Duration,
+		ToastWarningDuration: s.config.Notifications.WebUI.WarningDuration,
 	}
 }
 
@@ -160,6 +166,14 @@ func (s *Server) renderTemplate(tmpl *template.Template, w http.ResponseWriter, 
 			result += separator + "v=" + stamp
 		}
 		return result
+	}
+	funcs["asset"] = func(assetPath string) string {
+		result := s.withBaseURL(r, "/static/"+strings.TrimLeft(assetPath, "/"))
+		separator := "?"
+		if strings.Contains(result, "?") {
+			separator = "&"
+		}
+		return result + separator + "v=" + url.QueryEscape(Version+"-"+CommitID)
 	}
 	return tmpl.Funcs(funcs).ExecuteTemplate(w, "public.tmpl", data)
 }

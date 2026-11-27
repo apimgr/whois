@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/argon2"
+	"gopkg.in/yaml.v3"
 )
 
 // Manifest represents the backup manifest (AI.md PART 21)
@@ -128,6 +129,35 @@ func buildContentArchive(opts *BackupOptions, manifest *Manifest) ([]byte, error
 	// Add server.yml (always included)
 	if err := addPathToTar(tw, opts.ConfigDir, "server.yml", &manifest.Contents); err != nil {
 		return nil, err
+	}
+
+	// Include a sanitized copy of secrets.yml when it exists.
+	secretsPath := filepath.Join(opts.ConfigDir, "secrets.yml")
+	if fileExists(secretsPath) {
+		data, err := os.ReadFile(secretsPath)
+		if err != nil {
+			return nil, fmt.Errorf("read secrets.yml: %w", err)
+		}
+		var secrets map[string]any
+		if err := yaml.Unmarshal(data, &secrets); err != nil {
+			return nil, fmt.Errorf("parse secrets.yml: %w", err)
+		}
+		server, _ := secrets["server"].(map[string]any)
+		if server != nil {
+			server["token"] = ""
+			backup, _ := server["backup"].(map[string]any)
+			if backup != nil {
+				backup["encryption_password"] = ""
+			}
+		}
+		sanitized, err := yaml.Marshal(secrets)
+		if err != nil {
+			return nil, fmt.Errorf("sanitize secrets.yml: %w", err)
+		}
+		if err := addFileToTar(tw, "secrets.yml", sanitized); err != nil {
+			return nil, err
+		}
+		manifest.Contents = append(manifest.Contents, "secrets.yml")
 	}
 
 	// Add server.db (always included)

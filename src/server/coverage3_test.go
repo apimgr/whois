@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/apimgr/whois/src/cache"
+	"github.com/apimgr/whois/src/common/constants"
 	"github.com/apimgr/whois/src/metrics"
 	"github.com/apimgr/whois/src/ratelimit"
 	"github.com/apimgr/whois/src/scheduler"
@@ -112,6 +113,62 @@ func TestStaticFileServerRoot(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if rr.Code == 0 {
 		t.Error("static file server returned no status code")
+	}
+}
+
+func TestStaticFileServerBuildStampControlsCaching(t *testing.T) {
+	h := staticFileServer()
+	stamp := Version + "-" + CommitID
+	for _, test := range []struct {
+		name, query, wantCache string
+	}{
+		{name: "matching", query: "?v=" + stamp, wantCache: "public, max-age=31536000, immutable"},
+		{name: "missing", wantCache: "no-cache"},
+		{name: "mismatched", query: "?v=old", wantCache: "no-cache"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/static/css/common.css"+test.query, nil)
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+			if rr.Code != http.StatusOK || rr.Header().Get("Cache-Control") != test.wantCache {
+				t.Fatalf("status/cache = %d/%q, want 200/%q", rr.Code, rr.Header().Get("Cache-Control"), test.wantCache)
+			}
+			if rr.Header().Get("ETag") == "" {
+				t.Fatal("static response is missing build-stamp ETag")
+			}
+		})
+	}
+}
+
+func TestHTMLPagesUseBuildStampCachingAndPurge(t *testing.T) {
+	s := newTestServer(t)
+	handler := s.setupMiddleware(s.setupRoutes())
+	request := httptest.NewRequest(http.MethodGet, "/about", nil)
+	request.Header.Set("Accept", "text/html")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	stamp := Version + "-" + CommitID
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || response.Header().Get("ETag") != `"`+stamp+`"` {
+		t.Fatalf("HTML status/cache/etag = %d/%q/%q", response.Code, response.Header().Get("Cache-Control"), response.Header().Get("ETag"))
+	}
+	var buildCookie *http.Cookie
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == constants.InternalName+"_build" {
+			buildCookie = cookie
+		}
+	}
+	if buildCookie == nil || !buildCookie.Secure || buildCookie.Path != "/" || buildCookie.Value != stamp {
+		t.Fatalf("build stamp cookie = %#v", buildCookie)
+	}
+
+	conditional := httptest.NewRequest(http.MethodGet, "/about", nil)
+	conditional.Header.Set("Accept", "text/html")
+	conditional.Header.Set("If-None-Match", `"`+stamp+`"`)
+	conditional.AddCookie(&http.Cookie{Name: constants.InternalName + "_build", Value: "old-build"})
+	conditionalResponse := httptest.NewRecorder()
+	handler.ServeHTTP(conditionalResponse, conditional)
+	if conditionalResponse.Code != http.StatusOK || conditionalResponse.Body.Len() == 0 || conditionalResponse.Header().Get("Clear-Site-Data") != `"cache", "storage"` {
+		t.Fatalf("stale HTML response = %d Clear-Site-Data=%q", conditionalResponse.Code, conditionalResponse.Header().Get("Clear-Site-Data"))
 	}
 }
 
@@ -809,10 +866,13 @@ func TestRenderHealthTextOutput(t *testing.T) {
 		t.Errorf("handleHealth(text): status = %d, want 200", rr.Code)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"status:", "version:", "uptime:", "checks.database:"} {
+	for _, want := range []string{"Status:", "Version:", "Uptime:", "Checks", "Database:"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("plain-text health missing field %q", want)
 		}
+	}
+	if strings.Contains(body, "project.name:") || !strings.Contains(rr.Header().Get("Content-Type"), "text/plain") {
+		t.Errorf("frontend text format is wrong: content-type=%q body:\n%s", rr.Header().Get("Content-Type"), body)
 	}
 }
 
@@ -980,6 +1040,7 @@ func TestSetupRoutesAPIUnknownReturnsJSON(t *testing.T) {
 	handler := s.setupRoutes()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/nonexistent", nil)
+	req.Header.Set("Accept", "application/json")
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {

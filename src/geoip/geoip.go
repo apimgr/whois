@@ -19,6 +19,7 @@ type GeoIPManager struct {
 	mu           sync.RWMutex
 	dbDir        string
 	enabled      bool
+	databases    DatabaseConfig
 	userAgent    string
 	asnDB        *maxminddb.Reader
 	countryDB    *maxminddb.Reader
@@ -94,6 +95,7 @@ func NewGeoIPManager(cfg GeoIPConfig) (*GeoIPManager, error) {
 		dbDir:        cfg.Dir,
 		enabled:      cfg.Enabled,
 		userAgent:    cfg.UserAgent,
+		databases:    cfg.Databases,
 		whoisEnabled: cfg.Databases.WHOIS,
 	}
 
@@ -106,6 +108,7 @@ func NewGeoIPManager(cfg GeoIPConfig) (*GeoIPManager, error) {
 	if err := os.MkdirAll(cfg.Dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create GeoIP directory: %w", err)
 	}
+	m.lastUpdate = geoIPLastUpdate(cfg.Dir)
 
 	// Download databases if they don't exist
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -120,6 +123,12 @@ func NewGeoIPManager(cfg GeoIPConfig) (*GeoIPManager, error) {
 	if err := m.loadDatabases(cfg.Databases); err != nil {
 		log.Printf("[GeoIP] Warning: failed to load databases: %v", err)
 		// Continue - databases may not exist yet
+	}
+	if m.lastUpdate.IsZero() {
+		m.lastUpdate = latestDatabaseModTime(cfg.Dir, cfg.Databases)
+		if !m.lastUpdate.IsZero() {
+			_ = m.writeLastUpdate(m.lastUpdate)
+		}
 	}
 
 	log.Printf("[GeoIP] Initialized (dir: %s)", cfg.Dir)
@@ -342,15 +351,93 @@ func (m *GeoIPManager) UpdateDatabases(ctx context.Context, cfg DatabaseConfig) 
 		errors = append(errors, fmt.Errorf("reload: %w", err))
 	}
 
-	m.mu.Lock()
-	m.lastUpdate = time.Now()
-	m.mu.Unlock()
-
 	if len(errors) > 0 {
 		return fmt.Errorf("failed to update some databases: %v", errors)
 	}
+	updated := time.Now().UTC()
+	if err := m.writeLastUpdate(updated); err != nil {
+		return fmt.Errorf("record GeoIP update time: %w", err)
+	}
+	m.mu.Lock()
+	m.lastUpdate = updated
+	m.mu.Unlock()
 
 	log.Println("[GeoIP] Update complete")
+	return nil
+}
+
+// DatasetStatus reports a public-safe cached-check value for one configured
+// GeoIP database. The filesystem and reader state are inspected only by the
+// health registry's background refresh, never by a health request.
+func (m *GeoIPManager) DatasetStatus(database string) string {
+	if !m.enabled {
+		return "error"
+	}
+	m.mu.RLock()
+	loaded := false
+	switch database {
+	case "asn":
+		loaded = !m.databases.ASN || m.asnDB != nil
+	case "country":
+		loaded = !m.databases.Country || m.countryDB != nil
+	case "city_ipv4":
+		loaded = !m.databases.City || m.cityDBv4 != nil
+	case "city_ipv6":
+		loaded = !m.databases.City || m.cityDBv6 != nil
+	default:
+		m.mu.RUnlock()
+		return "error"
+	}
+	lastUpdate := m.lastUpdate
+	m.mu.RUnlock()
+	if !loaded {
+		return "error"
+	}
+	if lastUpdate.IsZero() {
+		return "degraded"
+	}
+	if time.Since(lastUpdate) > 21*24*time.Hour {
+		return "degraded"
+	}
+	return "ok"
+}
+
+func geoIPLastUpdate(directory string) time.Time {
+	data, err := os.ReadFile(filepath.Join(directory, ".last_updated"))
+	if err != nil {
+		return time.Time{}
+	}
+	updated, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
+	if err != nil {
+		return time.Time{}
+	}
+	return updated.UTC()
+}
+
+func latestDatabaseModTime(directory string, cfg DatabaseConfig) time.Time {
+	var latest time.Time
+	for _, item := range geoipDownloadList(cfg) {
+		if !item.enabled {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(directory, item.filename))
+		if err == nil && info.ModTime().After(latest) {
+			latest = info.ModTime()
+		}
+	}
+	return latest.UTC()
+}
+
+func (m *GeoIPManager) writeLastUpdate(updated time.Time) error {
+	tmp := filepath.Join(m.dbDir, ".last_updated.tmp")
+	path := filepath.Join(m.dbDir, ".last_updated")
+	if err := os.WriteFile(tmp, []byte(updated.UTC().Format(time.RFC3339Nano)+"\n"), 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
 	return nil
 }
 

@@ -16,8 +16,10 @@ image_check() {
     local image_ref port elapsed tor_status outbound
     image_ref="${1:?Usage: tests/docker.sh --image-check IMAGE}"
     CONTAINER_NAME="${PROJECT_NAME}-image-check-$(date +%s%N | sha256sum | cut -c1-8)"
-    docker run --rm --entrypoint sh "$image_ref" -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'
-    docker run -d --name "$CONTAINER_NAME" -p 127.0.0.1::80 "$image_ref" >/dev/null
+    docker run --rm --no-healthcheck --name "${PROJECT_NAME}-image-contract-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" --entrypoint sh "$image_ref" -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'
+    docker run -d --no-healthcheck --name "$CONTAINER_NAME" \
+        --tmpfs /config:rw,mode=1777 --tmpfs /data:rw,mode=1777 \
+        -p 127.0.0.1::80 "$image_ref" >/dev/null
     port="$(docker port "$CONTAINER_NAME" 80/tcp | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n1)"
     if [ -z "$port" ]; then
         echo "ERROR: unable to determine mapped health port for $image_ref" >&2
@@ -27,7 +29,7 @@ image_check() {
     elapsed=0
     tor_status=""
     while [ "$elapsed" -lt "${TOR_BOOTSTRAP_TIMEOUT:-180}" ]; do
-        tor_status="$(curl -q -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$port/server/healthz" 2>/dev/null | sed -n '/"tor": {/,/}/p' | sed -n 's/.*"status":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
+        tor_status="$(curl -q -sS --connect-timeout 2 --max-time 5 -H 'Accept: application/json' "http://127.0.0.1:$port/api/v1/server/healthz" 2>/dev/null | sed -n '/"tor": {/,/}/p' | sed -n 's/.*"status":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
         if [ "$tor_status" = healthy ]; then
             echo "PASS image contract and Tor health: $image_ref"
             return 0

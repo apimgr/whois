@@ -117,17 +117,11 @@ func TestHandleHealth(t *testing.T) {
 		wantDataStatus string
 	}{
 		{
-			name:           "default JSON response",
-			acceptHeader:   "",
+			name:           "JSON response",
+			acceptHeader:   "application/json",
 			wantStatus:     http.StatusOK,
 			wantOK:         true,
 			wantDataStatus: "healthy",
-		},
-		{
-			name:         "explicit JSON accept",
-			acceptHeader: "application/json",
-			wantStatus:   http.StatusOK,
-			wantOK:       true,
 		},
 	}
 
@@ -165,11 +159,46 @@ func TestHandleHealth(t *testing.T) {
 	}
 }
 
-// TestHandleHealthTextFormat verifies the text/plain path returns 200 with key:value lines.
+func TestHandleHealthCurlGetsHumanReadableFrontendText(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
+	req.Header.Set("User-Agent", "curl/8.0")
+	response := httptest.NewRecorder()
+	s.handleHealth(response, req)
+	if response.Code != http.StatusOK || !strings.Contains(response.Header().Get("Content-Type"), "text/plain") {
+		t.Fatalf("curl health response = %d %q", response.Code, response.Header().Get("Content-Type"))
+	}
+	for _, want := range []string{"Status:", "Features", "Checks", "Statistics"} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Errorf("human health text missing %q: %s", want, response.Body.String())
+		}
+	}
+	if strings.Contains(response.Body.String(), "project.name:") {
+		t.Fatal("frontend text response used API dotted keys")
+	}
+}
+
+func TestHandleHealthUnhealthyUsesServiceUnavailableForEveryFormat(t *testing.T) {
+	s := newTestServer(t)
+	s.database = nil
+	for _, accept := range []string{"application/json", "text/plain", "text/html"} {
+		t.Run(accept, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
+			req.Header.Set("Accept", accept)
+			rr := httptest.NewRecorder()
+			s.handleHealth(rr, req)
+			if rr.Code != http.StatusServiceUnavailable {
+				t.Fatalf("health status for %s = %d, want %d", accept, rr.Code, http.StatusServiceUnavailable)
+			}
+		})
+	}
+}
+
+// TestHandleHealthTextFormat verifies API text uses the dotted key format.
 func TestHandleHealthTextFormat(t *testing.T) {
 	s := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
 	// Accept: text/plain triggers the text branch via content negotiation (AI.md PART 14).
 	req.Header.Set("Accept", "text/plain")
 
@@ -179,8 +208,8 @@ func TestHandleHealthTextFormat(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "status:") {
-		t.Errorf("text response missing 'status:' line, body:\n%s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "status:") || !strings.Contains(rr.Body.String(), "checks.database:") {
+		t.Errorf("API text response missing dotted fields, body:\n%s", rr.Body.String())
 	}
 }
 

@@ -32,7 +32,9 @@
     "details": "Detalles",
     "settings": "Configuración",
     "done": "Hecho",
-    "new_lookup": "Nueva búsqueda"
+    "new_lookup": "Nueva búsqueda",
+    "copied": "¡Copiado!",
+    "response_description": "La información solicitada se muestra a continuación."
   },
   "nav": {
     "home": "Inicio",
@@ -57,11 +59,23 @@
     "healthy": "Saludable",
     "degraded": "Degradado",
     "unhealthy": "No saludable",
+    "restart_required": "Se requiere reiniciar",
+    "maintenance": "Mantenimiento",
+    "shutting_down": "Apagando",
     "version": "Versión",
     "uptime": "Tiempo activo",
     "mode": "Modo",
     "status": "Estado",
-    "checks": "Comprobaciones de componentes",
+    "checks": "Comprobaciones",
+    "check": {"unknown": "Comprobación: {key}"},
+    "geoip": "GeoIP",
+    "build": "Compilación",
+    "go_version": "Go",
+    "checked": "Comprobado",
+    "statistics": "Estadísticas",
+    "requests_total": "Solicitudes totales",
+    "requests_24h": "Solicitudes (24 horas)",
+    "active_connections": "Conexiones activas",
     "database": "Base de datos",
     "cache": "Caché",
     "disk": "Disco",
@@ -332,7 +346,8 @@
     "ccpa_note": "No vendemos datos personales. Este control se proporciona de todos modos.",
     "contact_heading": "Preguntas",
     "contact_intro": "Si tiene preguntas sobre esta política, por favor",
-    "contact_link": "contáctenos"
+    "contact_link": "contáctenos",
+    "description": "Lee la política de privacidad y consulta cómo el servicio trata los datos."
   },
   "contact": {
     "title": "Contáctenos",
@@ -571,6 +586,9 @@
     "expires": "Caduca",
     "name": "Nombre",
     "expiry": "Caducidad",
+    "scope": "Permisos",
+    "read_only": "Solo lectura",
+    "read_write": "Lectura y escritura",
     "days": "días",
     "year": "año",
     "custom_date": "Fecha personalizada",
@@ -626,7 +644,8 @@
     "import_code": "Pega una URL, cadena de consulta o código corto",
     "automatic": "Automático ({language})",
     "copy": "Copiar preferencias",
-    "erase": "Borrar preferencias guardadas"
+    "erase": "Borrar preferencias guardadas",
+    "description": "Gestiona la apariencia, el idioma, el consentimiento y los tokens vinculados."
   },
   "security": {
     "thanks_description": "Reconocimientos a investigadores de seguridad",
@@ -672,7 +691,8 @@
       "patching": "Solución en progreso",
       "disclosed": "Divulgado",
       "wont_fix": "no arreglará"
-    }
+    },
+    "status_description": "Consulta el estado actual de tu informe de seguridad."
   },
   "plurals": {
     "duration": {

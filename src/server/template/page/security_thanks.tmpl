@@ -9,11 +9,11 @@
 <main id="main-content">
   <div class="container container-md">
     <header class="page-header"><h1 class="page-title">{{t .Lang "security.thanks_title"}}</h1><p class="page-lead">{{t .Lang "security.thanks_description"}}</p></header>
-    <section class="card section-card" aria-labelledby="security-thanks-heading">
+    <section class="section-card" aria-labelledby="security-thanks-heading">
       <h2 id="security-thanks-heading">{{t .Lang "security.thanks_heading"}}</h2>
       {{if .Entries}}
       <div class="table-wrapper" role="region" aria-label="{{t .Lang "security.thanks_table_label"}}" tabindex="0">
-        <table>
+        <table class="data-table">
           <thead><tr><th scope="col">{{t .Lang "security.thanks_credit"}}</th><th scope="col">{{t .Lang "security.thanks_year"}}</th><th scope="col">{{t .Lang "security.thanks_severity"}}</th></tr></thead>
           <tbody>{{range .Entries}}<tr><td>{{.Credit}}</td><td>{{.Year}}</td><td>{{t $.Lang (printf "security.severity.%s" .Severity)}}</td></tr>{{end}}</tbody>
         </table>

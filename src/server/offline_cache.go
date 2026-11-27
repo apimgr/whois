@@ -3,18 +3,29 @@ package server
 import (
 	"net/http"
 	"strings"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 // offlineCacheSignal marks only shared, form-free HTML pages as eligible for a
 // service-worker offline copy. Requests with any cookie are visitor-specific.
 func (s *Server) offlineCacheSignal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || len(r.Cookies()) != 0 || !isOfflinePublicPage(s.GetBaseURL(r), r.URL.Path) {
+		if r.Method != http.MethodGet || hasVisitorCookie(r) || !isOfflinePublicPage(s.GetBaseURL(r), r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
 		next.ServeHTTP(&offlineSignalWriter{ResponseWriter: w}, r)
 	})
+}
+
+func hasVisitorCookie(r *http.Request) bool {
+	for _, cookie := range r.Cookies() {
+		if cookie.Name != constants.InternalName+"_build" {
+			return true
+		}
+	}
+	return false
 }
 
 func isOfflinePublicPage(base, requestPath string) bool {

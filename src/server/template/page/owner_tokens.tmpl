@@ -9,17 +9,17 @@
     <header class="page-header">
       <nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{path "/server/preferences"}}">{{t .Lang "owner_tokens.back_preferences"}}</a></nav>
       <h1 class="page-title">{{t .Lang "owner_tokens.title"}}</h1>
-      <p>{{t .Lang "owner_tokens.description"}}</p>
+      <p class="page-lead">{{t .Lang "owner_tokens.description"}}</p>
     </header>
     {{if .HasOwner}}
-      <section class="card section-card" id="primary" aria-labelledby="primary-heading">
+      <section class="section-card" id="primary" aria-labelledby="primary-heading">
         <h2 id="primary-heading">{{t .Lang "owner_tokens.primary"}}</h2>
         <p class="status-badge">{{t .Lang "owner_tokens.active"}}</p>
         <p>{{t .Lang "owner_tokens.primary_help"}}</p>
         {{if .RevealedToken}}
           {{if eq .RevealedID "primary"}}
             <p class="copy-value" id="primary-copy" tabindex="0">{{.RevealedToken}}</p>
-            <button class="btn-secondary copy-token" type="button" data-copy-target="primary-copy">{{t .Lang "owner_tokens.copy"}}</button>
+            <button class="copy-btn" type="button" data-copy="{{.RevealedToken}}" data-copied-label="{{t .Lang "common.copied"}}" aria-label="{{t .Lang "owner_tokens.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t .Lang "owner_tokens.copy"}}</span></button>
             <p>{{t .Lang "owner_tokens.shown_once"}}</p>
           {{else}}
             <p class="copy-value">{{.Primary.Masked}}</p>
@@ -42,7 +42,7 @@
           </form>
         </div>
       </section>
-      <section class="card section-card" aria-labelledby="linked-heading">
+      <section class="section-card" aria-labelledby="linked-heading">
         <h2 id="linked-heading">{{t .Lang "owner_tokens.linked"}} ({{len .Linked}})</h2>
         {{if .Linked}}
           <ul>
@@ -50,7 +50,8 @@
               <li id="token-{{.ID}}">
                 <h3>{{.Name.String}}</h3>
                 <p class="status-badge">{{t $.Lang (printf "owner_tokens.%s" .Status)}}</p>
-                {{if and $.RevealedToken (eq $.RevealedID .ID)}}<p class="copy-value" id="copy-{{.ID}}" tabindex="0">{{$.RevealedToken}}</p><button class="btn-secondary copy-token" type="button" data-copy-target="copy-{{.ID}}">{{t $.Lang "owner_tokens.copy"}}</button><p>{{t $.Lang "owner_tokens.shown_once"}}</p>{{else}}<p class="copy-value">{{.Masked}}</p>{{end}}
+                <p>{{t $.Lang "owner_tokens.scope"}}: {{t $.Lang (printf "owner_tokens.%s" .Scope)}}</p>
+                {{if and $.RevealedToken (eq $.RevealedID .ID)}}<p class="copy-value" id="copy-{{.ID}}" tabindex="0">{{$.RevealedToken}}</p><button class="copy-btn" type="button" data-copy="{{$.RevealedToken}}" data-copied-label="{{t $.Lang "common.copied"}}" aria-label="{{t $.Lang "owner_tokens.copy"}}"><span class="copy-icon" aria-hidden="true">&#128203;</span><span class="copy-text" aria-live="polite">{{t $.Lang "owner_tokens.copy"}}</span></button><p>{{t $.Lang "owner_tokens.shown_once"}}</p>{{else}}<p class="copy-value">{{.Masked}}</p>{{end}}
                 <dl><dt>{{t $.Lang "owner_tokens.created"}}</dt><dd>{{.CreatedText}}</dd><dt>{{t $.Lang "owner_tokens.last_used"}}</dt><dd>{{if .LastUsedText}}{{.LastUsedText}}{{else}}{{t $.Lang "owner_tokens.never"}}{{end}}</dd><dt>{{t $.Lang "owner_tokens.expires"}}</dt><dd>{{if .ExpiresText}}{{.ExpiresText}}{{else}}{{t $.Lang "owner_tokens.never"}}{{end}}</dd></dl>
                 <form method="post" action="{{path (printf "/server/preferences/tokens/%s/reveal" .ID)}}"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="btn-secondary" type="submit">{{t $.Lang "owner_tokens.reveal"}}</button></form>
                 <button class="btn-secondary" type="button" popovertarget="rotate-{{.ID}}">{{t $.Lang "owner_tokens.rotate"}}</button><div id="rotate-{{.ID}}" popover><p>{{t $.Lang "owner_tokens.confirm_rotate"}}</p><form method="post" action="{{path (printf "/server/preferences/tokens/%s/rotate" .ID)}}"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="btn-secondary" type="submit">{{t $.Lang "owner_tokens.rotate"}}</button><button class="btn-secondary" type="button" popovertarget="rotate-{{.ID}}" popovertargetaction="hide">{{t $.Lang "preferences.keep"}}</button></form></div>
@@ -63,25 +64,27 @@
           <p>{{t .Lang "owner_tokens.no_linked"}}</p>
         {{end}}
       </section>
-      <section class="card section-card" aria-labelledby="create-linked-heading">
+      <section class="section-card" aria-labelledby="create-linked-heading">
         <h2 id="create-linked-heading">{{t .Lang "owner_tokens.create_linked"}}</h2>
         <form method="post" action="{{path "/server/preferences/tokens"}}">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <label for="linked-name">{{t .Lang "owner_tokens.name"}}<input id="linked-name" name="name" maxlength="64" required></label>
+          <label for="linked-scope">{{t .Lang "owner_tokens.scope"}}</label>
+          <select id="linked-scope" name="scope"><option value="read">{{t .Lang "owner_tokens.read_only"}}</option><option value="read-write" selected>{{t .Lang "owner_tokens.read_write"}}</option></select>
           <label for="linked-expiry">{{t .Lang "owner_tokens.expiry"}}</label>
           <select id="linked-expiry" name="expires"><option value="never">{{t .Lang "owner_tokens.never"}}</option><option value="7d">7 {{t .Lang "owner_tokens.days"}}</option><option value="30d">30 {{t .Lang "owner_tokens.days"}}</option><option value="90d">90 {{t .Lang "owner_tokens.days"}}</option><option value="1y">1 {{t .Lang "owner_tokens.year"}}</option><option value="">{{t .Lang "owner_tokens.custom_date"}}</option></select>
           <details><summary>{{t .Lang "owner_tokens.custom_date"}}</summary><label for="expires-on">{{t .Lang "owner_tokens.expires_on"}}</label><input id="expires-on" name="expires_on" type="date"></details>
           <button class="btn-primary" type="submit">{{t .Lang "owner_tokens.create"}}</button>
         </form>
       </section>
-      <section class="card section-card" aria-labelledby="browser-heading">
+      <section class="section-card" aria-labelledby="browser-heading">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <h2 id="browser-heading">{{t .Lang "owner_tokens.this_browser"}}</h2>
         <p>{{t .Lang "owner_tokens.forget_blurb"}}</p>
         <button class="btn-secondary" type="button" popovertarget="forget-confirm">{{t .Lang "owner_tokens.forget"}}</button>
         <div id="forget-confirm" popover><p>{{t .Lang "owner_tokens.confirm_forget"}}</p><form method="post" action="{{path "/server/preferences/token/forget"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="btn-danger" type="submit">{{t .Lang "owner_tokens.forget"}}</button><button class="btn-secondary" type="button" popovertarget="forget-confirm" popovertargetaction="hide">{{t .Lang "preferences.keep"}}</button></form></div>
       </section>
-      <section class="card section-card" aria-labelledby="revoke-primary-heading">
+      <section class="section-card" aria-labelledby="revoke-primary-heading">
         <h2 id="revoke-primary-heading">{{t .Lang "owner_tokens.revoke_primary"}}</h2>
         <p>{{tf .Lang "owner_tokens.revoke_summary" "linked" (len .Linked) "items" 0}}</p>
         <button class="btn-danger" type="button" popovertarget="revoke-primary-confirm">{{t .Lang "owner_tokens.revoke_primary"}}</button>
@@ -96,14 +99,14 @@
         </div>
       </section>
     {{else}}
-      <section class="card section-card" aria-labelledby="new-token-heading">
+      <section class="section-card" aria-labelledby="new-token-heading">
         <h2 id="new-token-heading">{{t .Lang "owner_tokens.new"}}</h2>
         <form method="post" action="{{path "/server/preferences/token/create"}}">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button class="btn-primary" type="submit">{{t .Lang "owner_tokens.create"}}</button>
         </form>
       </section>
-      <section class="card section-card" aria-labelledby="restore-token-heading">
+      <section class="section-card" aria-labelledby="restore-token-heading">
         <h2 id="restore-token-heading">{{t .Lang "owner_tokens.restore_existing"}}</h2>
         <form method="post" action="{{path "/server/preferences/token/restore"}}">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

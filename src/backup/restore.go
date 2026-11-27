@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/argon2"
+	"gopkg.in/yaml.v3"
 )
 
 // RestoreOptions configures restore behavior
@@ -260,6 +261,15 @@ func performRestore(backupDir string, manifest *Manifest, opts *RestoreOptions) 
 		}
 	}
 
+	// Restore sanitized secrets while retaining the destination's operator token.
+	secretsFile := filepath.Join(backupDir, "secrets.yml")
+	if fileExists(secretsFile) {
+		destPath := filepath.Join(opts.ConfigDir, "secrets.yml")
+		if err := restoreSecretsFile(secretsFile, destPath); err != nil {
+			return fmt.Errorf("restore secrets.yml: %w", err)
+		}
+	}
+
 	// Restore server.db
 	serverDB := filepath.Join(backupDir, "server.db")
 	if fileExists(serverDB) {
@@ -314,6 +324,53 @@ func performRestore(backupDir string, manifest *Manifest, opts *RestoreOptions) 
 	}
 
 	return nil
+}
+
+func restoreSecretsFile(backupPath, destinationPath string) error {
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		return err
+	}
+	var restored map[string]any
+	if err := yaml.Unmarshal(backupData, &restored); err != nil {
+		return fmt.Errorf("parse backup secrets: %w", err)
+	}
+	if restored == nil {
+		restored = make(map[string]any)
+	}
+
+	if destinationData, readErr := os.ReadFile(destinationPath); readErr == nil {
+		var current struct {
+			Server struct {
+				Token string `yaml:"token"`
+			} `yaml:"server"`
+		}
+		if err := yaml.Unmarshal(destinationData, &current); err != nil {
+			return fmt.Errorf("parse destination secrets: %w", err)
+		}
+		if current.Server.Token != "" {
+			server, ok := restored["server"].(map[string]any)
+			if !ok {
+				server = make(map[string]any)
+				restored["server"] = server
+			}
+			server["token"] = current.Server.Token
+		}
+	} else if !os.IsNotExist(readErr) {
+		return fmt.Errorf("read destination secrets: %w", readErr)
+	}
+
+	data, err := yaml.Marshal(restored)
+	if err != nil {
+		return fmt.Errorf("encode restored secrets: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(destinationPath), 0700); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
+	if err := os.WriteFile(destinationPath, data, 0600); err != nil {
+		return err
+	}
+	return os.Chmod(destinationPath, 0600)
 }
 
 // Helper functions

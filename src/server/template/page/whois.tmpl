@@ -7,7 +7,7 @@
 {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
 
 <main id="main-content">
-  <div class="container section-pad container-md">
+  <div class="container container-md">
     <header class="page-header"><h1 class="page-title">{{t .Lang "whois.title"}}: {{.Query}}</h1></header>
 
     <form id="whois-form" class="search-form-wrap mb-lg" action="{{path "/whois"}}" method="GET" novalidate data-api-base="{{.APIBase}}">
@@ -29,7 +29,7 @@
     {{if .Err}}
     <div class="state-box state-error" role="alert">{{.Err}}</div>
     {{else if .Result}}
-    <section class="card section-card" aria-labelledby="whois-result-heading">
+    <section class="section-card" aria-labelledby="whois-result-heading">
       <h2 id="whois-result-heading">{{t .Lang "common.details"}}</h2>
       <div class="result-meta mb-md">
         <div class="meta-item">

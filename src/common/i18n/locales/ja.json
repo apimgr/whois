@@ -32,7 +32,9 @@
     "details": "詳細",
     "settings": "設定",
     "done": "完了",
-    "new_lookup": "新しい検索"
+    "new_lookup": "新しい検索",
+    "copied": "コピーしました",
+    "response_description": "リクエストされた情報を以下に表示します。"
   },
   "nav": {
     "home": "ホーム",
@@ -57,11 +59,23 @@
     "healthy": "正常",
     "degraded": "低下",
     "unhealthy": "異常",
+    "restart_required": "再起動が必要です",
+    "maintenance": "メンテナンス中",
+    "shutting_down": "シャットダウン中",
     "version": "バージョン",
     "uptime": "稼働時間",
     "mode": "モード",
     "status": "ステータス",
-    "checks": "コンポーネントの確認",
+    "checks": "確認項目",
+    "check": {"unknown": "チェック: {key}"},
+    "geoip": "GeoIP",
+    "build": "ビルド",
+    "go_version": "Go",
+    "checked": "確認時刻",
+    "statistics": "統計",
+    "requests_total": "総リクエスト数",
+    "requests_24h": "リクエスト数（24時間）",
+    "active_connections": "アクティブ接続数",
     "database": "データベース",
     "cache": "キャッシュ",
     "disk": "ディスク",
@@ -332,7 +346,8 @@
     "ccpa_note": "当社は個人データを販売していませんが、この制御機能は提供されています。",
     "contact_heading": "ご質問",
     "contact_intro": "このポリシーについてご質問がある場合は、",
-    "contact_link": "お問い合わせください"
+    "contact_link": "お問い合わせください",
+    "description": "プライバシーポリシーとサービスによるデータの取り扱いを確認します。"
   },
   "contact": {
     "title": "お問い合わせ",
@@ -571,6 +586,9 @@
     "expires": "有効期限",
     "name": "名前",
     "expiry": "期限",
+    "scope": "権限",
+    "read_only": "読み取り専用",
+    "read_write": "読み取りと書き込み",
     "days": "日",
     "year": "年",
     "custom_date": "日付を指定",
@@ -626,7 +644,8 @@
     "import_code": "URL、クエリ文字列、または短縮コードを貼り付け",
     "automatic": "自動 ({language})",
     "copy": "設定をコピーする",
-    "erase": "保存された設定を消去する"
+    "erase": "保存された設定を消去する",
+    "description": "外観、言語、同意、リンク済みトークンを管理します。"
   },
   "security": {
     "thanks_description": "セキュリティ研究者への謝辞",
@@ -672,7 +691,8 @@
       "patching": "修正中です",
       "disclosed": "開示済み",
       "wont_fix": "直らない"
-    }
+    },
+    "status_description": "セキュリティ報告の現在の状況を確認します。"
   },
   "plurals": {
     "duration": {

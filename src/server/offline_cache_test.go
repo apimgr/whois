@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/apimgr/whois/src/common/constants"
 )
 
 func TestOfflineCacheSignalOnlyMarksSharedHTML(t *testing.T) {
@@ -20,6 +22,14 @@ func TestOfflineCacheSignalOnlyMarksSharedHTML(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if got := response.Header().Get("X-Offline-Cache"); got != "public" {
 		t.Fatalf("public HTML signal = %q, want public", got)
+	}
+
+	buildCookieRequest := httptest.NewRequest(http.MethodGet, "/server/about", nil)
+	buildCookieRequest.AddCookie(&http.Cookie{Name: constants.InternalName + "_build", Value: "build"})
+	buildCookieResponse := httptest.NewRecorder()
+	handler.ServeHTTP(buildCookieResponse, buildCookieRequest)
+	if got := buildCookieResponse.Header().Get("X-Offline-Cache"); got != "public" {
+		t.Fatalf("build-cookie HTML signal = %q, want public", got)
 	}
 
 	for _, tc := range []struct {

@@ -18,7 +18,7 @@ var swaggerTmpl = mustParseTemplate("swagger", "page/swagger.tmpl")
 // handleSwaggerJSON serves the OpenAPI specification as JSON.
 // Routes: /api/swagger, /api/{api_version}/server/swagger (AI.md PART 14)
 func (s *Server) handleSwaggerJSON(w http.ResponseWriter, r *http.Request) {
-	swagger.WriteJSONWithAPIBase(w, s.swaggerBaseURL(r), Version, s.config.APIBasePath())
+	swagger.WriteJSONFromRoutes(w, s.swaggerBaseURL(r), Version, s.config.APIBasePath(), s.apiRoutes())
 }
 
 // handleSwaggerUI serves the Swagger UI HTML page.

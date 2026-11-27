@@ -32,7 +32,9 @@
     "details": "Details",
     "settings": "Settings",
     "done": "Done",
-    "new_lookup": "New lookup"
+    "new_lookup": "New lookup",
+    "copied": "Copied!",
+    "response_description": "The requested information is shown below."
   },
   "nav": {
     "home": "Home",
@@ -57,11 +59,23 @@
     "healthy": "Healthy",
     "degraded": "Degraded",
     "unhealthy": "Unhealthy",
+    "restart_required": "Restart required",
+    "maintenance": "Maintenance",
+    "shutting_down": "Shutting down",
     "version": "Version",
     "uptime": "Uptime",
     "mode": "Mode",
     "status": "Status",
-    "checks": "Component checks",
+    "checks": "Checks",
+    "check": {"unknown": "Check: {key}"},
+    "geoip": "GeoIP",
+    "build": "Build",
+    "go_version": "Go",
+    "checked": "Checked",
+    "statistics": "Statistics",
+    "requests_total": "Total requests",
+    "requests_24h": "Requests (24 hours)",
+    "active_connections": "Active connections",
     "database": "Database",
     "cache": "Cache",
     "disk": "Disk",
@@ -206,7 +220,8 @@
       "patching": "Fix in progress",
       "disclosed": "Disclosed",
       "wont_fix": "Will not fix"
-    }
+    },
+    "status_description": "Check the current status of your security report."
   },
   "about": {
     "title_prefix": "About",
@@ -378,7 +393,8 @@
     "ccpa_note": "We do not sell personal data. This control is provided regardless.",
     "contact_heading": "Questions",
     "contact_intro": "If you have questions about this policy, please",
-    "contact_link": "contact us"
+    "contact_link": "contact us",
+    "description": "Read the privacy policy and review how the service handles data."
   },
   "contact": {
     "title": "Contact Us",
@@ -617,6 +633,9 @@
     "expires": "Expires",
     "name": "Name",
     "expiry": "Expiry",
+    "scope": "Scope",
+    "read_only": "Read only",
+    "read_write": "Read and write",
     "days": "days",
     "year": "year",
     "custom_date": "Custom date",
@@ -672,7 +691,8 @@
     "import_code": "Paste a URL, query string, or short code",
     "automatic": "Automatic ({language})",
     "copy": "Copy preferences",
-    "erase": "Erase saved preferences"
+    "erase": "Erase saved preferences",
+    "description": "Manage appearance, language, consent, and linked tokens."
   },
   "plurals": {
     "duration": {

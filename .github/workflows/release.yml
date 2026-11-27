@@ -16,6 +16,7 @@ permissions:
 
 env:
   PROJECTNAME: caswhois
+  GOFLAGS: "-buildvcs=false -mod=mod"
 
 jobs:
   build:
@@ -135,7 +136,7 @@ jobs:
 
       - name: Generate SBOM (CycloneDX)
         run: |
-          docker run --rm -v "$PWD":/app -w /app -e GOFLAGS=-buildvcs=false casjaysdev/go:latest \
+          docker run --rm -v "$PWD":/app -w /app -e "GOFLAGS=-buildvcs=false -mod=mod" casjaysdev/go:latest \
             cyclonedx-gomod mod -json -output "binaries/${{ env.PROJECTNAME }}-${{ env.VERSION }}-sbom.cdx.json"
 
       - name: Create checksums

@@ -5,6 +5,7 @@ variables:
   PROJECT_NAME: "caswhois"
   PROJECT_ORG: "apimgr"
   CGO_ENABLED: "0"
+  GOFLAGS: "-buildvcs=false -mod=mod"
   GOOS: linux
   GOARCH: amd64
   GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
@@ -97,7 +98,7 @@ vuln-scan:
   stage: security
   image: $BUILD_IMAGE
   variables:
-    GOFLAGS: -buildvcs=false
+    GOFLAGS: "-buildvcs=false -mod=mod"
   script:
     - govulncheck ./...
   rules:

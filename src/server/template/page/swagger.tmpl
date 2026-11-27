@@ -2,14 +2,14 @@
 <meta name="description" content="{{t .Lang "swagger.subtitle"}}">
 <title>{{t .Lang "swagger.title"}} — {{.Name}}</title>
 
-<link rel="stylesheet" href="{{path "/static/vendor/swagger-ui/swagger-ui.css"}}">
+<link rel="stylesheet" href="{{asset "vendor/swagger-ui/swagger-ui.css"}}">
 {{end}}
 
 {{define "page_content"}}
 {{if .ConsentRequired}}<p role="status"><a href="{{path "/server/preferences#privacy"}}">{{t .Lang "preferences.consent_required"}}</a></p>{{end}}
 
 <main id="main-content">
-  <div class="container section-pad container-md">
+  <div class="container container-md">
     <header class="page-header">
       <h1 class="page-title">{{t .Lang "swagger.title"}}</h1>
       <p class="page-lead">{{t .Lang "swagger.subtitle"}}</p>
@@ -27,8 +27,8 @@
 {{end}}
 
 {{define "page_scripts"}}
-<script defer src="{{path "/static/vendor/swagger-ui/swagger-ui-bundle.js"}}"></script>
-<script defer src="{{path "/static/vendor/swagger-ui/swagger-ui-standalone-preset.js"}}"></script>
+<script defer src="{{asset "vendor/swagger-ui/swagger-ui-bundle.js"}}"></script>
+<script defer src="{{asset "vendor/swagger-ui/swagger-ui-standalone-preset.js"}}"></script>
 {{end}}
 
 {{template "public.tmpl" .}}

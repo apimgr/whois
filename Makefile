@@ -35,7 +35,7 @@ LDFLAGS := -s -w -X 'main.Version=$(VERSION)' -X 'main.CommitID=$(COMMIT_ID)' -X
 GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthcheck \
 	--name $(PROJECT_NAME)-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) \
 	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=$(DOCKER_CPU_SHARES) \
-	-v "$(PWD)":/app -v "$(BINDIR)":/output -v "$(GO_CACHE)":/usr/local/share/go/pkg/mod \
+	-v "$(PWD)":/app -v "$(abspath $(BINDIR))":/output -v "$(GO_CACHE)":/usr/local/share/go/pkg/mod \
 	-v "$(GO_BUILD)":/usr/local/share/go/cache -w /app \
 	-e CGO_ENABLED=0 -e "GOFLAGS=-buildvcs=false -mod=mod"
 GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
@@ -78,11 +78,12 @@ beta:
 
 docker:
 	@docker buildx version >/dev/null 2>&1 || { echo "docker buildx is required" >&2; exit 1; }
-	@docker buildx build --platform linux/amd64,linux/arm64 --file docker/Dockerfile \
+	@docker buildx create --name multiarch-builder --use 2>/dev/null || docker buildx use multiarch-builder
+	@docker buildx build --file docker/Dockerfile \
 	  --build-arg VERSION="$(VERSION)" --build-arg BUILD_DATE="$(BUILD_DATE)" \
 	  --build-arg BUILD_EPOCH="$(BUILD_EPOCH)" --build-arg COMMIT_ID="$(COMMIT_ID)" \
 	  --build-arg OFFICIAL_SITE="$(OFFICIAL_SITE)" --tag "$(REGISTRY):$(VERSION)" \
-	  --tag "$(REGISTRY):latest" --push .
+	  --tag "$(REGISTRY):latest" --load .
 	@bash tests/docker.sh --image-check "$(REGISTRY):$(VERSION)"
 
 test:
