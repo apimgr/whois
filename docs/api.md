@@ -41,6 +41,8 @@ WHOIS retrieval prefers RDAP and falls back to WHOIS. Successful normalized reco
 
 ## Server endpoints
 
+`GET /api/autodiscover` is a public, unversioned discovery endpoint. It returns the server's configured API version and supported versions; clients use that value to build versioned request paths.
+
 | Method | Path | Access | Purpose |
 |--------|------|--------|---------|
 | GET | `https://caswhois.apimgr.dev/api/v1/server/healthz` | Public | Health and build information |

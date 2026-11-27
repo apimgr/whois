@@ -135,6 +135,8 @@ To print the shell's initialization command instead, use `caswhois --shell init 
 
 `caswhois-cli` supports `domain`, `ip`, `asn`, `lookup`, and `validate` commands, or a query directly for automatic type detection. `--server URL` selects the server; `--token` or `--token-file` supplies an API token when an endpoint requires one. Output formats are `json`, `table`, and `plain`. See `caswhois-cli --help` for the flags and environment variables accepted by the installed version.
 
+The client reads the server's API version from `/api/autodiscover` on its first lookup or validation request, then uses that version for the lifetime of the client process.
+
 ## Version Output
 
 ```
