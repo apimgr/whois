@@ -199,7 +199,7 @@ jobs:
       - name: Set build info
         run: |
           PROJECT_NAME=$(awk '$1 == "project_name:" {print $2; exit}' IDEA.md)
-          COMMIT_ID=$(git rev-parse --short=7 HEAD)
+          COMMIT_ID=$(printf '%.7s' '${{ github.sha }}')
           BUILD_EPOCH=$(date -u +%s)
           echo "PROJECT_NAME=$PROJECT_NAME" >> "$FORGEJO_ENV"
           echo "VERSION=$COMMIT_ID" >> "$FORGEJO_ENV"
